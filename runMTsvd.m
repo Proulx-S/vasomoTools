@@ -1,4 +1,4 @@
-function [sv,sp] = runMTsvd(funTs,fpass,W)
+function funTs = runMTsvd(funTs,fpass,W)
 % Similar to Mitra 1997. A single svd is run on data tapered for
 % sensitivity over user-defined frequency band (fpass).
 
@@ -17,6 +17,7 @@ funTs.vec = zscore(funTs.vec,[],1);
 param.tapers = [];
 param.Fs = 1/tr;
 if exist('W','var') && ~isempty(W)
+    flag = 'svdKlein';
     T = tr.*funTs.nframes;
     TW = T*W;
     K = round(TW*2-1);
@@ -32,6 +33,7 @@ if exist('W','var') && ~isempty(W)
     display(['tw (time-halfwidth) used  : ' num2str(TW)])
     display(['k  (number of tapers) used: ' num2str(K)])
 else
+    flag = 'svdMitra';
     %%% Dummy mtspec just to get f
     param.tapers = 1.5; param.tapers(2) = param.tapers(1)*2-1;
     [~,f] = mtspectrumc(funTs.vec(:,1), param);
@@ -51,7 +53,14 @@ else
 end
 
 %% Run the decomposition
-[sv,sp,~] = spsvd(funTs.vec,param);
+[sv,sp,fm] = spsvd(funTs.vec,param);
+
+%% Output
+funTs.(flag).sv = sv;
+funTs.(flag).sp = sp;
+funTs.(flag).fm = fm;
+funTs.(flag).param = param;
+
 % 
 % %% Visualize
 % figure('WindowStyle','docked');
