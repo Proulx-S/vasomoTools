@@ -1,6 +1,20 @@
-function viewPSD(funPsd,f0,mask,id,slc)
-if ~exist('f0','var') || isempty(f0)
-    f0 = 0.1;
+function viewPSD(funPsd,f0,mask,fpass,id,slc,brain)
+normMethod = 'psdAv'; % 'smoothPsdAv' or 'psdAv'
+fwhm = 5;
+if ischar(f0)
+    switch f0
+        case 'all'
+            freeviewFlag = 1;
+        otherwise
+            error('f0 can only be numeric of ''all''')
+    end
+    f0 = [];
+else
+    if isempty(f0)
+        freeviewFlag = 0;
+    else
+        freeviewFlag = 1;
+    end
 end
 if ~exist('id','var') || isempty(id)
     id = '';
@@ -16,26 +30,81 @@ end
 f = funPsd.psd.f;
 w = funPsd.psd.w;
 
-%% Apply spatial normalization
+%% Perform spatial normalization
+switch normMethod
+    case 'psdAv'
+        if isempty(funPsd.vec)
+            funPsd = vol2vec(funPsd);
+        end
+        normFact0 = exp( mean(log(funPsd.vec),1) );
+        normFact = normFact0;
+    case 'smoothPsdAv'
+        %%% Compute average power and write to disk
+        funNorm = funPsd;
+        if isempty(funNorm.vol)
+            funNorm.vec = mean(log(funNorm.vec),1);
+            funNorm.nframes = 1;
+            normFact0 = exp(funNorm.vec);
+            funNorm = vec2vol(funNorm);
+        else
+            funNorm.vol = mean(log(funNorm.vol),4);
+            funNorm.nframes = 1;
+            tmp = vol2vec(funNorm);
+            normFact0 = exp(tmp.vec); clear tmp
+        end
+        funNormTmpName = [tempname '.nii.gz'];
+        MRIwrite(funNorm,funNormTmpName);
+        
+
+        %%% Define mask for smoothing and write to disk
+        funMask = funNorm;
+        funMask.vol = ~isnan(funMask.vol);
+        funMaskTmpName = [tempname '.nii.gz'];
+        MRIwrite(funMask,funMaskTmpName);
+
+        %%% Apply smoothing (mri_fwhm) to normalization map
+        cmd = {'source /usr/local/freesurfer/fs-dev-env-autoselect'};
+        cmd{end+1} = ['mri_fwhm'...
+            ' --i ' funNormTmpName...
+            ' --o ' funNormTmpName...
+            ' --smooth-only'...
+            ' --mask ' funMaskTmpName...
+            ' --fwhm ' num2str(fwhm)];
+        [status,cmdout] = system(strjoin(cmd,'; '));
+
+        % funNormSm = MRIread(funNormTmpName);
+        % figure('WindowStyle','docked');
+        % imagesc(exp(funNorm.vol(:,:,46)));
+        % ax = gca; ax.ColorScale = 'log';
+        % cLim = clim;
+        % figure('WindowStyle','docked');
+        % imagesc(exp(funNormSm.vol(:,:,46)));
+        % ax = gca; ax.ColorScale = 'log';
+        % clim(cLim);
+
+        funNorm = MRIread(funNormTmpName);
+        funNorm = vol2vec(funNorm,funPsd.vol2vec);
+        normFact = exp(funNorm.vec); clear funNorm
+    otherwise
+        error('')
+end
+
+%%% Apply normalization
 if isempty(funPsd.vec)
     funPsd = vol2vec(funPsd);
 end
-normFact = exp( mean(log(funPsd.vec),1) - mean(log(funPsd.vec(:))));
 funPsdNorm = funPsd;
-funPsdNorm.vec = funPsd.vec./normFact;
+funPsdNorm.vec = funPsd.vec./normFact .* exp(mean(log(normFact)));
 
 %% Compute summary statistics for later
-psdSpecNormAv = exp(mean(log(funPsdNorm.vec),2));
-psdSpecNormEr = exp(prctile(log(funPsdNorm.vec),[2.7 97.5],2));
-psdSpecNormEr(:,1) = psdSpecNormEr(:,1) - psdSpecNormAv; psdSpecNormEr(:,2) = psdSpecNormAv - psdSpecNormEr(:,2);
+tmpMask = logical(mask(funPsdNorm.vol2vec));
+psdSpecNormAv = exp(mean(log(funPsdNorm.vec(:,tmpMask)),2));
+% psdSpecNormEr = exp(prctile(log(funPsdNorm.vec(:,mask(funPsdNorm.vol2vec))),[2.7 97.5],2));
+% psdSpecNormEr(:,1) = psdSpecNormEr(:,1) - psdSpecNormAv; psdSpecNormEr(:,2) = psdSpecNormAv - psdSpecNormEr(:,2);
 
-%% Plot spatial pattern before and after normalization
-funPsd = vec2vol(funPsd);
-funPsdNorm = vec2vol(funPsdNorm);
-maskC = getMaskOutline(mask(:,:,slc),5);
-
+%% Prepare for ploting
 figure('WindowStyle','docked');
-tl = tiledlayout(3,3); tl.TileSpacing = "tight"; tl.Padding = "tight";
+tl = tiledlayout(3,4); tl.TileSpacing = "tight"; tl.Padding = "tight";
 tl.TileIndexing = 'rowmajor';
 % Title
 if exist('id','var') && ischar(id) && ~isempty(id)
@@ -44,55 +113,114 @@ else
     titleStr = {''};
 end
 titleStr{end+1} = ['tw=' num2str(funPsd.psd.tw)];
-titleStr{end+1} = ['w=' num2str(w)];
+titleStr{end+1} = ['w=' num2str(w) 'Hz'];
+switch normMethod
+    case 'smoothPsdAv'
+        titleStr{end+1} = ['fwhm=' num2str(fwhm) 'mm'];
+end
 [~,b,c] = fileparts(funPsd.fspec);
 titleStr{end+1} = [b c];
-titleStr = [strjoin(titleStr(1:3),'; ') titleStr(4)];
+titleStr = [strjoin(titleStr(1:end-1),'; ') titleStr(end)];
 tlTitle = title(tl,titleStr,'interpreter','none');
 
+maskC = getMaskOutline(mask(:,:,slc),5);
 
-titleStr = {['f0=' num2str(f0) 'Hz']};
-titleStr{end+1} = ['slc' num2str(slc)];
-% Before spatial normalization
-[~,f0Ind] = min(abs(f-f0));
-nexttile
-imagesc(squeeze(funPsd.vol(:,:,slc,f0Ind)));
-ylabel(colorbar,['psd @ f0=' num2str(f0) 'Hz'])
-ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
-cLim = ax.CLim;
-xlabel({strjoin(titleStr,'; ') 'before spatial norm'})
-hold on; plot(maskC,'FaceColor','none')
+if ~isempty(f0)
+    %% Plot spatial pattern before and after normalization
+    funPsd = vec2vol(funPsd);
+    funPsdNorm = vec2vol(funPsdNorm);
+    
+    titleStr = {['f0=' num2str(f0) 'Hz']};
+    titleStr{end+1} = ['slc' num2str(slc)];
+    % Before spatial normalization
+    [~,f0Ind] = min(abs(f-f0));
+    nexttile
+    imagesc(squeeze(funPsd.vol(:,:,slc,f0Ind)));
+    ylabel(colorbar,['psd @ f0=' num2str(f0) 'Hz'])
+    ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+    ax.Colormap = jet;
+    cLim = ax.CLim;
+    xlabel({strjoin(titleStr,'; ') 'before spatial norm'})
+    hold on; plot(maskC,'FaceColor','none')
 
-% After spatial normalization (same scale)
-nexttile
-imagesc(squeeze(funPsdNorm.vol(:,:,slc,f0Ind)));
-ylabel(colorbar,['psd @ f0=' num2str(f0) 'Hz'])
-ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
-ax.CLim = cLim;
-xlabel({strjoin(titleStr,'; ') 'after spatial norm' '(same scale)'})
-hold on; plot(maskC,'FaceColor','none')
+    % Average power
+    nexttile
+    tmp = funPsdNorm; tmp.vec = normFact0; tmp.nframes = 1; tmp = vec2vol(tmp);
+    imagesc(squeeze(tmp.vol(:,:,slc))); clear tmp;
+    ylabel(colorbar,'full spectrum psd')
+    ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+    ax.Colormap = jet;
+    ax.CLim = cLim;
+    xlabel('full spectrum psd')
+    hold on; plot(maskC,'FaceColor','none')
 
-% After spatial normalization (auto scale)
-nexttile
-imagesc(squeeze(funPsdNorm.vol(:,:,slc,f0Ind)));
-ylabel(colorbar,['psd @ f0=' num2str(f0) 'Hz'])
-ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
-xlabel({strjoin(titleStr,'; ') 'after spatial norm' 'auto scale'})
-hold on; plot(maskC,'FaceColor','none')
+    % Normalization factor
+    nexttile
+    tmp = funPsdNorm; tmp.vec = normFact; tmp.nframes = 1; tmp = vec2vol(tmp);
+    imagesc(squeeze(tmp.vol(:,:,slc))); clear tmp;
+    ylabel(colorbar,'full spectrum psd')
+    ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+    ax.Colormap = jet;
+    ax.CLim = cLim;
+    xlabel('normalization factor')
+    hold on; plot(maskC,'FaceColor','none')
 
+%     % After spatial normalization (same scale)
+%     nexttile
+%     imagesc(squeeze(funPsdNorm.vol(:,:,slc,f0Ind)));
+%     ylabel(colorbar,['psd @ f0=' num2str(f0) 'Hz'])
+%     ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+%     ax.CLim = cLim;
+%     xlabel({strjoin(titleStr,'; ') 'after spatial norm' '(same scale)'})
+%     hold on; plot(maskC,'FaceColor','none')
+
+    % After spatial normalization (auto scale)
+    nexttile
+    imagesc(squeeze(funPsdNorm.vol(:,:,slc,f0Ind)));
+    ylabel(colorbar,['psd @ f0=' num2str(f0) 'Hz'])
+    ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+    ax.Colormap = jet;
+    xlabel({strjoin(titleStr,'; ') 'after spatial norm'})
+    hold on; plot(maskC,'FaceColor','none')
+    cLim = ax.CLim;
+else
+    %% Plot brain and mask
+    titleStr = {['slc' num2str(slc)]};
+    
+    nexttile
+    imagesc(brain.vol(:,:,slc))
+    ax = gca; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+    ax.Colormap = gray;
+    xlabel({strjoin(titleStr,'; ') 'after spatial norm' 'auto scale'})
+    hold on; plot(maskC,'FaceColor','none')
+    xlabel({'mean brain' strjoin(titleStr,'; ')});
+
+    nexttile
+    % eventually put std here
+    ax = gca; ax.Visible = 'off';
+
+    nexttile
+    % eventually put std normalization factor here
+    ax = gca; ax.Visible = 'off';
+
+end
 
 %% Plot average spectra on loglog plot
-nexttile(4,[1 3])
+nexttile(5,[1 4])
 plot(f,psdSpecNormAv,'k'); hold on
 ax = gca; ax.YScale = 'log';
 ax.XScale = 'log';
 ax.YAxisLocation = 'right';
 xlabel('Hz'); ylabel('psd averaged within mask');
 grid on
-xlim tight
+if exist('fpass','var') && ~isempty(fpass)
+    xlim(fpass)
+else
+    xlim tight
+end
+ylim tight
 
-plot([1 1].*f(f0Ind),ylim,':r');
-
+%%% Add w references
 f0w = exp(linspace(log(f(2)),log(f(end)),6)); f0w([1 end]) = [];
 yLim = ylim;
 y = yLim(1).*[1 1];
@@ -103,39 +231,74 @@ for ii = 1:length(f0w)
     end
 end
 
-x = f(f0Ind)+[-1 1].*w;
-yLim = ylim;
-y = yLim(2).*[1 1];
-plot(x,y,'g','LineWidth',3)
+%%% Add f0 reference
+if ~isempty(f0)
+    plot([1 1].*f(f0Ind),ylim,':r');
+    x = f(f0Ind)+[-1 1].*w;
+    yLim = ylim;
+    y = yLim(2).*[1 1];
+    plot(x,y,'g','LineWidth',3)
+end
 
 %% Plot average spectra on semilog plot
-nexttile(7,[1 3])
+nexttile(9,[1 4])
 plot(f,psdSpecNormAv,'k'); hold on
 ax = gca; ax.YScale = 'log';
 ax.YAxisLocation = 'right';
 xlabel('Hz'); ylabel('psd averaged within mask');
 grid on
 grid minor
-xlim tight
+if exist('fpass','var') && ~isempty(fpass)
+    xlim(fpass)
+else
+    xlim tight
+end
+ylim tight
 
-plot([1 1].*f(f0Ind),ylim,':r');
-
-x = f(f0Ind)+[-1 1].*w;
-yLim = ylim;
-y = yLim(2).*[1 1];
-plot(x,y,'g','LineWidth',3)
-legend({'psd' 'f0' '2*w'},'box','off','Location','southeast')
+%%% Add f0 (if provided) and w references
+if ~isempty(f0)
+    plot([1 1].*f(f0Ind),ylim,':r');
+    x = f(f0Ind)+[-1 1].*w;
+    yLim = ylim;
+    y = yLim(2).*[1 1];
+    plot(x,y,'-g','LineWidth',3)
+    legend({'psd' 'f0' '2*w'},'box','off','Location','southeast')
+else
+%     x = f(round(end/2))+[-1 1].*w;
+    x = mean(fpass)+[-1 1].*w;
+    
+    yLim = ylim;
+    y = yLim(1).*[1 1];
+    plot(x,y,'-g','LineWidth',3)
+    legend({'psd' '2*w'},'box','off','Location','northeast')
+end
+drawnow
 
 %% Launch 3D viewer
-f0IndExc = true(size(f));
-f0IndExc(f0Ind) = false;
-funPsdNorm.vol(:,:,:,f0IndExc) = [];
-funPsdNorm.vol = log(funPsdNorm.vol);
-funPsdNorm.vol(isnan(funPsdNorm.vol)) = 0;
-funPsdNorm.nframes = 1;
-funTmpName = [tempname '.nii.gz'];
-MRIwrite(funPsdNorm,funTmpName);
-display('******************')
-display(['To view 3D volume of log(psd) @' num2str(f(f0Ind),'%0.3f') 'Hz :'])
-display(['freeview ' funTmpName ':colormap=jet'])
-display('******************')
+if freeviewFlag
+    if isempty(funPsdNorm.vol)
+        funPsdNorm = vec2vol(funPsdNorm);
+    end
+    if ~isempty(f0)
+        f0IndExc = true(size(f));
+        f0IndExc(f0Ind) = false;
+        funPsdNorm.vol(:,:,:,f0IndExc) = [];
+        funPsdNorm.nframes = nnz(~f0IndExc);
+    end
+    funPsdNorm.vol = log(funPsdNorm.vol);
+    funPsdNorm.vol(isnan(funPsdNorm.vol)) = 0;
+    funTmpName = [tempname '.nii.gz'];
+    display('******************')
+    display('Writing log(psd) volumes to disk...')
+    MRIwrite(funPsdNorm,funTmpName);
+    if ~isempty(f0)
+        display(['To view 3D volume of log(psd) :'])
+    else
+        display(['To view 3D volume of log(psd) @' num2str(f(f0Ind),'%0.4f') 'Hz :'])
+    end
+    display(['freeview ' funTmpName ':colormap=turbo'])
+    if ~isempty(f0)
+        display(['recommended window: ' num2str(log(cLim(1))) ' to ' num2str(log(cLim(2)))])
+    end
+    display('******************')
+end
