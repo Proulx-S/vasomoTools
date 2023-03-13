@@ -88,7 +88,7 @@ switch anaType
         
 
 
-    case 'svdKlein' | 'svdProulx'
+    case 'svdKlein'
         % if exist('W','var') && ~isempty(W)
         %     anaType = 'svdKlein';
         T = tr.*funTs.nframes;
