@@ -1,7 +1,10 @@
 function viewMTsvd(anaType,funTs,fpass,id,f0,mask,kInd)
 
-if ~exist('f0','var') || isempty(f0)
-    f0 = 0.1;
+% if ~exist('f0','var') || isempty(f0)
+%     f0 = 0.1;
+% end
+if ~exist('f0','var')% || isempty(f0)
+    f0 = [];
 end
 if ~exist('id','var') || isempty(id)
     id = '';
@@ -100,27 +103,41 @@ switch anaType
         funTs.vol(isnan(funTs.vol)) = 0;
         funTmpName = [tempname '.nii.gz'];
         MRIwrite(funTs,funTmpName);
+        anatTmpName = strsplit(funTs.fspec,'/'); anatTmpName = strjoin(anatTmpName(1:11),'/');
+        cmd = {'freeview'};
+        cmd{end+1} = fullfile(anatTmpName,'T1w_restore.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'T1w_restore.2.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'T2w_restore.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'T2w_restore.2.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
+        cmd{end+1} = [funTmpName ':colormap=turbo'];
+        
         display('******************')
         display(['To view 3D volume of the first ' num2str(kInd) ' spatial modes :'])
-        display(['freeview ' funTmpName ':colormap=turbo'])
+        display(strjoin(cmd,' '))
+%         display(['freeview ' fullfile(anatTmpName,'T1w_restore.nii.gz') ' ' fullfile(anatTmpName,'T2w_restore.nii.gz') ' ' funTmpName ':colormap=turbo'])
         display('******************')
 
 
     case 'svdKlein'
-        funTs = vol2vec(funTs,mask);
+        if ~isempty(f0)
+            funTs = vol2vec(funTs,mask);
+            [~,f0Ind] = min(abs(f-f0));
+            funTs.vec = funTs.svdKlein.sp(:,f0Ind,1)';
+            funTs.nframes = 1;
+            funTs = vec2vol(funTs);
 
-        [~,f0Ind] = min(abs(f-f0));
-        funTs.vec = funTs.svdKlein.sp(:,f0Ind,1)';
-        funTs.nframes = 1;
-        funTs = vec2vol(funTs);
+            [a,b] = max(abs(funTs.vol(:)));
+            [x,y,slc] = ind2sub(size(funTs.vol),b);
+            slc = [-1 0 1]+slc;
 
-        [a,b] = max(abs(funTs.vol(:)));
-        disp(a)
-        [x,y,slc] = ind2sub(size(funTs.vol),b);
-        slc = [-1 0 1]+slc;
-        spTmp = funTs.vol(:,:,slc);
-        cLim = [min(min(min(abs(spTmp(~isnan(spTmp)))))) max(max(max(abs(spTmp(~isnan(spTmp))))))];
-        clear spTmp
+            spTmp = funTs.vol(:,:,slc);
+            cLim = [min(min(min(abs(spTmp(~isnan(spTmp)))))) max(max(max(abs(spTmp(~isnan(spTmp))))))];
+            clear spTmp
+        else
+            slc = nan(1,3);
+        end
 
         figure('WindowStyle','docked');
         tl = tiledlayout(3,3); tl.TileSpacing = "tight"; tl.Padding = "tight";
@@ -140,28 +157,33 @@ switch anaType
 
 
         for slcInd = 1:length(slc)
-            maskC = getMaskOutline(mask(:,:,slc(slcInd)),5);
-            titleStr2 = {['f0=' num2str(f(f0Ind),'%0.4f') 'Hz']};
-            titleStr2{end+1} = ['slc' num2str(slc(slcInd))];
-
             nexttile
-            imagesc(abs(funTs.vol(:,:,slc(slcInd))),cLim)
-            ylabel(colorbar,['singular vector weight @ f0=' num2str(f(f0Ind),'%0.4f') 'Hz'])
-            ax = gca;
-            %             ax.ColorScale = 'log';
-            ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
-            xlabel(strjoin(titleStr2,'; '))
-            hold on; plot(maskC,'FaceColor','none')
+            if ~isempty(f0)
+                maskC = getMaskOutline(mask(:,:,slc(slcInd)),5);
+                titleStr2 = {['f0=' num2str(f(f0Ind),'%0.4f') 'Hz']};
+                titleStr2{end+1} = ['slc' num2str(slc(slcInd))];
 
-            plot([1 1].*y,ylim,':w','LineWidth',0.1)
-            plot(xlim,[1 1].*x,':w','LineWidth',0.1)
+                imagesc(abs(funTs.vol(:,:,slc(slcInd))),cLim)
+                ylabel(colorbar,['singular vector weight @ f0=' num2str(f(f0Ind),'%0.4f') 'Hz'])
+                ax = gca;
+                %             ax.ColorScale = 'log';
+                ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
+                xlabel(strjoin(titleStr2,'; '))
+                hold on; plot(maskC,'FaceColor','none')
+
+                plot([1 1].*y,ylim,':w','LineWidth',0.1)
+                plot(xlim,[1 1].*x,':w','LineWidth',0.1)
+            else
+                ax = gca; ax.Visible = 'off';
+            end
         end
+end
 
 
 
 
         nexttile(4,[2 3])
-        plot(f,coh,'-k')
+        hCoh = plot(f,coh,'-k');
         xlabel('Hz'); ylabel('spatial coherence');
         grid on
         xlim tight
@@ -170,7 +192,7 @@ switch anaType
         end
         hold on
         K = size(funTs.svdKlein.sv,3);
-        plot(xlim,[1 1].*1/K,'--r')
+        hCohLB = plot(xlim,[1 1].*1/K,'--r');
 
         % plot([1 1].*f(f0Ind),ylim,':r');
 
@@ -180,7 +202,7 @@ switch anaType
         for ii = 1:length(f0w)
             x = f0w(ii)+[-1 1].*w;
             if x(1)>f(1) && x(2)<f(end)
-                plot(x,y,'-g','LineWidth',8)
+                hW = plot(x,y,'-g','LineWidth',8);
             end
         end
         ylim tight
@@ -193,7 +215,7 @@ switch anaType
         if isfield(funTs,'psd') && isfield(funTs.psd,'psd')
             yyaxis right
             psd = exp(mean(log(funTs.psd.psd),1));
-            plot(funTs.psd.f,psd,'-')
+            hPsd = plot(funTs.psd.f,psd,'-');
             ylim tight
             %     if exist('fpass','var') && ~isempty(fpass)
             %         [~,bMin] = min(abs(funTs.psd.f-fpass(1)));
@@ -212,12 +234,16 @@ switch anaType
 
         ylabel('psd averaged within mask');
 
-        plot([1 1].*f(f0Ind),ylim,':r')
-        x = f(f0Ind)+[-1 1].*w;
-        yLim = ylim;
-        y = yLim(2).*[1 1];
-        plot(x,y,'-g','LineWidth',8)
-        legend({'coherence' 'f0' '2*w'},'box','off','Location','northeast')
+        if ~isempty(f0)
+            hf0 = plot([1 1].*f(f0Ind),ylim,':r');
+            x = f(f0Ind)+[-1 1].*w;
+            yLim = ylim;
+            y = yLim(2).*[1 1];
+            plot(x,y,'-g','LineWidth',8)
+            legend([hCoh hCohLB hW hf0],{'coherence' 'coherence LB' '2*w' 'f0'},'box','off','Location','northeast')
+        else
+            legend([hCoh hCohLB hW],{'coherence' 'coherence LB' '2*w'},'box','off','Location','northeast')
+        end
 
         
         
@@ -236,16 +262,38 @@ switch anaType
 
         drawnow
         %% Launch 3D viewer
-        funTs = vol2vec(funTs);
-        funTs.vec = abs(funTs.svdKlein.sp(:,f0Ind,1)');
+        disp('******************')
+        disp('Writing to disk')
+
+        funTs = vol2vec(funTs,mask);
+        if ~isempty(f0)
+            funTs.vec = abs(funTs.svdKlein.sp(:,f0Ind,1)');
+        else
+            funTs.vec = abs(funTs.svdKlein.sp(:,:,1)');
+        end
         funTs.nframes = size(funTs.vec,1);
-        funTs.tr = 1000;
+        funTs.tr = mode(diff(f))*1000;
         funTs = vec2vol(funTs);
         funTs.vol(isnan(funTs.vol)) = 0;
         funTmpName = [tempname '.nii.gz'];
         MRIwrite(funTs,funTmpName);
-        display('******************')
-        display(['To view 3D volume of the first spatial singular vector @ ' num2str(f(f0Ind)) 'Hz :'])
-        display(['freeview ' funTmpName ':colormap=turbo'])
-        display('******************')
+        
+        anatTmpName = strsplit(funTs.fspec,'/'); anatTmpName = strjoin(anatTmpName(1:11),'/');
+        cmd = {'freeview'};
+        cmd{end+1} = fullfile(anatTmpName,'T1w_restore.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'T1w_restore.2.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'T2w_restore.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'T2w_restore.2.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
+        cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
+        cmd{end+1} = [funTmpName ':colormap=turbo'];
+        
+        if ~isempty(f0)
+            disp(['To view 3D volume of the first spatial singular vector @ ' num2str(f(f0Ind)) 'Hz :'])
+        else
+            disp(['To view 3D volume of the first spatial singular vector across freq :'])
+        end
+        disp(strjoin(cmd,' '))
+%         disp(['freeview ' funTmpName ':colormap=turbo'])
+        disp('******************')
 end
