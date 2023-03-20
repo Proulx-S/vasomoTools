@@ -1,9 +1,15 @@
 function viewMTsg(funTs,anaType,coord,f0,id)
+%% Some parameters
+%%% For spectrum
+SscalePSD = 'log';
 wS = 0.005;
+%%% For spectrogram
+SGscalePSD = 'log';
 wSG = 0.01;
 winSz = 200;
-SGscalePSD = 'log';
-SscalePSD = 'log';
+%%% For image
+plane = 'coronal'; % 'axial' 'sagital' or 'coronal'
+%%% Others
 scaleF = 'log';
 fLow = 0.01;
 
@@ -40,6 +46,7 @@ else
 end
 % titleStr{end+1} = ['tw=' num2str(funPsd.psd.tw)];
 % titleStr{end+1} = ['w=' num2str(w)];
+titleStr{end+1} = ['xyz=[' strjoin(cellstr(num2str(coord'))',',') ']'];
 [~,b,c] = fileparts(funTs.fspec);
 titleStr{end+1} = [b c];
 titleStr = [strjoin(titleStr(1:end-1),'; ') titleStr(end)];
@@ -72,20 +79,57 @@ switch anaType
         tl.Padding = 'none';
         tl.TileSpacing = 'none';
         tlTitle = title(tl,titleStr,'interpreter','none');
+        ax = {};
+        %% Show voxel
+        nexttile(13,[1,1])
+        if isfield(funTs,'funBrain')
+            funMean = funTs.funBrain.vol;
+        else
+            funMean = mean(funTs.vol,4);
+        end
+        switch plane
+            case 'axial'
+                imagesc(funMean(:,:,coord(3)));
+                hold on
+                plot([1 1].*coord(1),ylim,':r')
+                plot(xlim,[1 1].*coord(2),':r')
+                xlabel('x'); ylabel('y');
+            case 'sagital'
+                imagesc(squeeze(funMean(:,coord(1),:)));
+                hold on
+                plot([1 1].*coord(3),ylim,':r')
+                plot(xlim,[1 1].*coord(2),':r')
+                xlabel('z'); ylabel('y');
+            case 'coronal'
+                imagesc(squeeze(funMean(coord(2),:,:)));
+                hold on
+                plot([1 1].*coord(3),ylim,':r')
+                plot(xlim,[1 1].*coord(1),':r')
+                xlabel('y'); ylabel('x');
+            otherwise
+                error('variable plane should be either ''axial'', ''sagital'' or ''coronal''')
+        end
+        ax{end+1} = gca;
+        ax{end}.Colormap = gray;
+        ax{end}.YDir = 'normal';
+        ax{end}.PlotBoxAspectRatio = [1 1 1]; ax{end}.DataAspectRatio = [1 1 1];
+        ax{end}.XTick = []; ax{end}.YTick = [];
+%         ax{end}.XAxis.Visible = 'off'; ax{end}.YAxis.Visible = 'off';
+        
         %% Define timeseries and plot
         mask = false(funTs.volsize);
         mask(coord(2),coord(1),coord(3)) = true; % flip x and y to match matlab imagesc
 %         mask(coord(1),coord(2),coord(3)) = true; % flip x and y to match matlab imagesc
         funTs = vol2vec(funTs,mask);
         
-        ax = {};
         nexttile(1,[3,1])
 %         subplot(4,4,[1 5 9])
         plot(funTs.vec,t,'k'); ylim([0 t(end)])
         ylabel('time (s)')
-        xlabel('0-mean BOLD')
+        xlabel('BOLD')
         ax{end+1} = gca;
         ax{end}.YDir = 'reverse';
+        ax{end}.XAxisLocation = 'top';
         box off
         grid on
         yLim = ylim;
