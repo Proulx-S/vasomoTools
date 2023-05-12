@@ -8,7 +8,7 @@ SGscalePSD = 'log';
 wSG = 0.01;
 winSz = 200;
 %%% For image
-plane = 'coronal'; % 'axial' 'sagital' or 'coronal'
+plane = 'sagital'; % 'axial' 'sagital' or 'coronal'
 %%% Others
 scaleF = 'log';
 fLow = 0.01;
@@ -56,21 +56,43 @@ switch anaType
         %% Make sure coord are matching
         if ~isempty(coord)
             figure('WindowStyle','docked');
+            tlSpace = tiledlayout(1,3);
+            tlSpace.Padding = 'none';
+            tlSpace.TileSpacing = 'tight';
+            title(tlSpace,titleStr,'interpreter','none');
+            axSpace = {};
             if isfield(funTs,'funBrain')
                 funMean = funTs.funBrain.vol;
             else
                 funMean = mean(funTs.vol,4);
             end
+            %%% Axial
+            nexttile
             imagesc(funMean(:,:,coord(3)));
-            ax = gca;
-            ax.Colormap = gray;
-            ax.YDir = 'normal';
-            ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
-            ax.XAxis.Visible = 'off'; ax.YAxis.Visible = 'off';
             hold on
             plot([1 1].*coord(1),ylim,':r')
             plot(xlim,[1 1].*coord(2),':r')
-            title(titleStr,'interpreter','none');
+            xlabel('x'); ylabel('y');
+            axSpace{end+1} = gca;
+            %%% Sagital
+            nexttile
+            imagesc(squeeze(funMean(:,coord(1),:)));
+            hold on
+            plot([1 1].*coord(3),ylim,':r')
+            plot(xlim,[1 1].*coord(2),':r')
+            xlabel('z'); ylabel('y');
+            axSpace{end+1} = gca;
+            %%% Coronal
+            nexttile
+            imagesc(squeeze(funMean(coord(2),:,:)));
+            hold on
+            plot([1 1].*coord(3),ylim,':r')
+            plot(xlim,[1 1].*coord(1),':r')
+            xlabel('y'); ylabel('x');
+            axSpace{end+1} = gca;
+
+            set([axSpace{:}],'Colormap',gray,'YDir','normal','PlotBoxAspectRatio',[1 1 1],'DataAspectRatio',[1 1 1]);
+            set([axSpace{:}],'XTick',[],'YTick',[])
         end
 
         %% Initiate figure

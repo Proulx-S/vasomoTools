@@ -192,7 +192,7 @@ else
     ax = gca; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
     ax.Colormap = gray;
     xlabel({strjoin(titleStr,'; ') 'after spatial norm' 'auto scale'})
-    hold on; plot(maskC,'FaceColor','none')
+    hold on; plot(maskC,'FaceColor','none','EdgeColor','w','LineWidth',0.2)
     xlabel({'mean brain' strjoin(titleStr,'; ')});
 
     nexttile
@@ -291,12 +291,25 @@ if freeviewFlag
     display('******************')
     display('Writing log(psd) volumes to disk...')
     MRIwrite(funPsdNorm,funTmpName);
-    if ~isempty(f0)
+
+    %%% Print command to view
+    anatTmpName = strsplit(funPsdNorm.fspec,'/'); anatTmpName = strjoin(anatTmpName(1:11),'/');
+    cmd = {'freeview'};
+    cmd{end+1} = fullfile(anatTmpName,'T1w_restore.nii.gz');
+    cmd{end+1} = fullfile(anatTmpName,'T1w_restore.2.nii.gz');
+    cmd{end+1} = fullfile(anatTmpName,'T2w_restore.nii.gz');
+    cmd{end+1} = fullfile(anatTmpName,'T2w_restore.2.nii.gz');
+    cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
+    cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
+    cmd{end+1} = [funTmpName ':colormap=turbo'];
+
+    if isempty(f0)
         display(['To view 3D volume of log(psd) :'])
     else
         display(['To view 3D volume of log(psd) @' num2str(f(f0Ind),'%0.4f') 'Hz :'])
     end
-    display(['freeview ' funTmpName ':colormap=turbo'])
+    display(strjoin(cmd,' '))
+%     display(['freeview ' funTmpName ':colormap=turbo'])
     if ~isempty(f0)
         display(['recommended window: ' num2str(log(cLim(1))) ' to ' num2str(log(cLim(2)))])
     end

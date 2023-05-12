@@ -50,7 +50,7 @@ switch anaType
         hPsd = plot(f,psd,'k'); hold on
         ax = gca; ax.YScale = 'log';
         ax.XScale = 'log';
-%         ax.YAxisLocation = 'right';
+        %         ax.YAxisLocation = 'right';
         xlabel('Hz'); ylabel({'psd averaged within mask' 'same as for svd'});
         grid on
         if exist('fpass','var') && ~isempty(fpass)
@@ -66,7 +66,7 @@ switch anaType
         for ii = 1:length(f0w)
             x = f0w(ii)+[-1 1].*funTs.psd.w;
             if x(1)>f(1) && x(2)<f(end)
-                hW = plot(x,y,'g','LineWidth',3)
+                hW = plot(x,y,'g','LineWidth',3);
             end
         end
 
@@ -74,7 +74,7 @@ switch anaType
         yLim = ylim;
         hfpass = patch(fpassSVD([1 2 2 1 1]),yLim([1 1 2 2 1]),'r','LineStyle','none','FaceAlpha',0.1);
         uistack(hfpass,'bottom')
-        
+
         legend([hPsd hW hfpass],{'psd averaged over mask' '2*w' 'frequency range for svd'},'box','off')
 
 
@@ -91,8 +91,8 @@ switch anaType
         end
         plot([1 1].*kInd+0.5,ylim,'-r')
         text(kInd+1,funTs.svdMitra.sv(kInd),['keeping ' num2str(kInd) ' modes'])
-        
-        
+
+
 
         %% Launch 3D viewer
         funTs = vol2vec(funTs,mask);
@@ -112,11 +112,11 @@ switch anaType
         cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
         cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
         cmd{end+1} = [funTmpName ':colormap=turbo'];
-        
+
         display('******************')
         display(['To view 3D volume of the first ' num2str(kInd) ' spatial modes :'])
         display(strjoin(cmd,' '))
-%         display(['freeview ' fullfile(anatTmpName,'T1w_restore.nii.gz') ' ' fullfile(anatTmpName,'T2w_restore.nii.gz') ' ' funTmpName ':colormap=turbo'])
+        %         display(['freeview ' fullfile(anatTmpName,'T1w_restore.nii.gz') ' ' fullfile(anatTmpName,'T2w_restore.nii.gz') ' ' funTmpName ':colormap=turbo'])
         display('******************')
 
 
@@ -143,16 +143,16 @@ switch anaType
         tl = tiledlayout(3,3); tl.TileSpacing = "tight"; tl.Padding = "tight";
         tl.TileIndexing = 'rowmajor';
         % Title
-        if exist('id','var') && ischar(id) && ~isempty(id)
-            titleStr     = {['subj' id]};
-        else
-            titleStr = {''};
-        end
-        titleStr{end+1} = ['tw=' num2str(funTs.psd.tw)];
-        titleStr{end+1} = ['w=' num2str(w)];
-        [~,b,c] = fileparts(funTs.fspec);
-        titleStr{end+1} = [b c];
-        titleStr = [strjoin(titleStr(1:3),'; ') titleStr(4)];
+        %         if exist('id','var') && ischar(id) && ~isempty(id)
+        %             titleStr     = {['subj' id]};
+        %         else
+        %             titleStr = {''};
+        %         end
+        %         titleStr{end+1} = ['tw=' num2str(funTs.psd.tw)];
+        %         titleStr{end+1} = ['w=' num2str(w)];
+        %         [~,b,c] = fileparts(funTs.fspec);
+        %         titleStr{end+1} = [b c];
+        %         titleStr = [strjoin(titleStr(1:3),'; ') titleStr(4)];
         tlTitle = title(tl,titleStr,'interpreter','none');
 
 
@@ -177,9 +177,6 @@ switch anaType
                 ax = gca; ax.Visible = 'off';
             end
         end
-end
-
-
 
 
         nexttile(4,[2 3])
@@ -232,7 +229,6 @@ end
         drawnow
         set(ax.YAxis,'LimitsMode','manual')
 
-        ylabel('psd averaged within mask');
 
         if ~isempty(f0)
             hf0 = plot([1 1].*f(f0Ind),ylim,':r');
@@ -245,8 +241,8 @@ end
             legend([hCoh hCohLB hW],{'coherence' 'coherence LB' '2*w'},'box','off','Location','northeast')
         end
 
-        
-        
+
+
         figure('WindowStyle','docked');
         rho = corr(funTs.svdKlein.sp(:,:,1));
         imagesc(funTs.svdKlein.f(2:end),funTs.svdKlein.f(2:end),abs(rho(2:end,2:end)))
@@ -265,11 +261,12 @@ end
         disp('******************')
         disp('Writing to disk')
 
-        funTs = vol2vec(funTs,mask);
+        funTs.vol2vec = funTs.(anaType).mask;
+        funTs = vol2vec(funTs);
         if ~isempty(f0)
-            funTs.vec = abs(funTs.svdKlein.sp(:,f0Ind,1)');
+            funTs.vec = abs(funTs.(anaType).sp(:,f0Ind,1)');
         else
-            funTs.vec = abs(funTs.svdKlein.sp(:,:,1)');
+            funTs.vec = abs(funTs.(anaType).sp(:,:,1)');
         end
         funTs.nframes = size(funTs.vec,1);
         funTs.tr = mode(diff(f))*1000;
@@ -277,7 +274,7 @@ end
         funTs.vol(isnan(funTs.vol)) = 0;
         funTmpName = [tempname '.nii.gz'];
         MRIwrite(funTs,funTmpName);
-        
+
         anatTmpName = strsplit(funTs.fspec,'/'); anatTmpName = strjoin(anatTmpName(1:11),'/');
         cmd = {'freeview'};
         cmd{end+1} = fullfile(anatTmpName,'T1w_restore.nii.gz');
@@ -287,13 +284,13 @@ end
         cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
         cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
         cmd{end+1} = [funTmpName ':colormap=turbo'];
-        
+
         if ~isempty(f0)
             disp(['To view 3D volume of the first spatial singular vector @ ' num2str(f(f0Ind)) 'Hz :'])
         else
             disp(['To view 3D volume of the first spatial singular vector across freq :'])
         end
         disp(strjoin(cmd,' '))
-%         disp(['freeview ' funTmpName ':colormap=turbo'])
+        %         disp(['freeview ' funTmpName ':colormap=turbo'])
         disp('******************')
 end
