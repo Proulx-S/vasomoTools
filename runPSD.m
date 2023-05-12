@@ -52,10 +52,11 @@ funPsd.psd.f = f;
 funPsd.psd.w = Wreal;
 funPsd.psd.tw = TW;
 funPsd.psd.mask = funTs.vol2vec;
+funPsd.psd.maskLabel = funPsd.vol2vecFlag;
 funPsd.psd.param = param;
 
 if nargout>1
     psdStruct = funPsd.psd;
     psdStruct.psd = funPsd.vec';
-    psdStruct = orderfields(psdStruct,[5 1 7 2 3 4 6]);
+    psdStruct = setNiceFieldOrder(psdStruct,{'dim' 'psd' 'f'});
 end
