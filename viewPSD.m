@@ -1,5 +1,5 @@
 function viewPSD(funPsd,f0,mask,fpass,id,slc,brain)
-normMethod = 'psdAv'; % 'smoothPsdAv' or 'psdAv'
+normMethod = 'psdAv'; % 'smoothPsdAv', 'psdAv' or 'none'
 fwhm = 5;
 if ischar(f0)
     switch f0
@@ -23,6 +23,14 @@ elseif isnumeric(id)
 end
 if ~exist('mask','var') || isempty(mask)
     mask = funPsd.vol2vec;
+    switch funPsd.vol2vecFlag
+        case 'allInclusiveMask'
+            doMaskOutline = false;
+        case 'customMask'
+            doMaskOutline = true;
+        otherwise
+            error('X')
+    end
 end
 if ~exist('slc','var') || isempty(slc)
     slc = round(funPsd.depth*0.5);
@@ -85,6 +93,10 @@ switch normMethod
         funNorm = MRIread(funNormTmpName);
         funNorm = vol2vec(funNorm,funPsd.vol2vec);
         normFact = exp(funNorm.vec); clear funNorm
+    case 'none'
+        sz = size(funPsd.vec);
+        normFact = ones([1 sz(2)]);
+        normFact0 = ones([1 sz(2)]);
     otherwise
         error('')
 end
@@ -98,6 +110,10 @@ funPsdNorm.vec = funPsd.vec./normFact .* exp(mean(log(normFact)));
 
 %% Compute summary statistics for later
 tmpMask = logical(mask(funPsdNorm.vol2vec));
+if any(all(funPsdNorm.vec==0,1))
+    warning('some voxels are all zeros. fixing it but expect wierd stuff')
+end
+tmpMask(all(funPsdNorm.vec==0,1)) = false;
 psdSpecNormAv = exp(mean(log(funPsdNorm.vec(:,tmpMask)),2));
 % psdSpecNormEr = exp(prctile(log(funPsdNorm.vec(:,mask(funPsdNorm.vol2vec))),[2.7 97.5],2));
 % psdSpecNormEr(:,1) = psdSpecNormEr(:,1) - psdSpecNormAv; psdSpecNormEr(:,2) = psdSpecNormAv - psdSpecNormEr(:,2);
@@ -123,7 +139,9 @@ titleStr{end+1} = [b c];
 titleStr = [strjoin(titleStr(1:end-1),'; ') titleStr(end)];
 tlTitle = title(tl,titleStr,'interpreter','none');
 
-maskC = getMaskOutline(mask(:,:,slc),5);
+if doMaskOutline
+    maskC = getMaskOutline(mask(:,:,slc),5);
+end
 
 if ~isempty(f0)
     %% Plot spatial pattern before and after normalization
@@ -141,7 +159,8 @@ if ~isempty(f0)
     ax.Colormap = jet;
     cLim = ax.CLim;
     xlabel({strjoin(titleStr,'; ') 'before spatial norm'})
-    hold on; plot(maskC,'FaceColor','none')
+    hold on;
+    if doMaskOutline; plot(maskC,'FaceColor','none'); end
 
     % Average power
     nexttile
@@ -152,7 +171,8 @@ if ~isempty(f0)
     ax.Colormap = jet;
     ax.CLim = cLim;
     xlabel('full spectrum psd')
-    hold on; plot(maskC,'FaceColor','none')
+    hold on;
+    if doMaskOutline; plot(maskC,'FaceColor','none'); end
 
     % Normalization factor
     nexttile
@@ -163,7 +183,8 @@ if ~isempty(f0)
     ax.Colormap = jet;
     ax.CLim = cLim;
     xlabel('normalization factor')
-    hold on; plot(maskC,'FaceColor','none')
+    hold on;
+    if doMaskOutline; plot(maskC,'FaceColor','none'); end
 
 %     % After spatial normalization (same scale)
 %     nexttile
@@ -181,7 +202,8 @@ if ~isempty(f0)
     ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
     ax.Colormap = jet;
     xlabel({strjoin(titleStr,'; ') 'after spatial norm'})
-    hold on; plot(maskC,'FaceColor','none')
+    hold on;
+    if doMaskOutline; plot(maskC,'FaceColor','none'); end
     cLim = ax.CLim;
 else
     %% Plot brain and mask
@@ -192,7 +214,8 @@ else
     ax = gca; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
     ax.Colormap = gray;
     xlabel({strjoin(titleStr,'; ') 'after spatial norm' 'auto scale'})
-    hold on; plot(maskC,'FaceColor','none','EdgeColor','w','LineWidth',0.2)
+    hold on;
+    if doMaskOutline; plot(maskC,'FaceColor','none','EdgeColor','w','LineWidth',0.2); end
     xlabel({'mean brain' strjoin(titleStr,'; ')});
 
     nexttile
@@ -295,12 +318,12 @@ if freeviewFlag
     %%% Print command to view
     anatTmpName = strsplit(funPsdNorm.fspec,'/'); anatTmpName = strjoin(anatTmpName(1:11),'/');
     cmd = {'freeview'};
-    cmd{end+1} = fullfile(anatTmpName,'T1w_restore.nii.gz');
-    cmd{end+1} = fullfile(anatTmpName,'T1w_restore.2.nii.gz');
-    cmd{end+1} = fullfile(anatTmpName,'T2w_restore.nii.gz');
-    cmd{end+1} = fullfile(anatTmpName,'T2w_restore.2.nii.gz');
-    cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
-    cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
+%     cmd{end+1} = fullfile(anatTmpName,'T1w_restore.nii.gz');
+%     cmd{end+1} = fullfile(anatTmpName,'T1w_restore.2.nii.gz');
+%     cmd{end+1} = fullfile(anatTmpName,'T2w_restore.nii.gz');
+%     cmd{end+1} = fullfile(anatTmpName,'T2w_restore.2.nii.gz');
+%     cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainMean.nii.gz');
+%     cmd{end+1} = fullfile(anatTmpName,'Results/rfMRI_REST__brainStd.nii.gz');
     cmd{end+1} = [funTmpName ':colormap=turbo'];
 
     if isempty(f0)
