@@ -1,7 +1,13 @@
 function svdStruct = runMTsvd(anaType,funTs,fpass,W,mask)
 % Similar to Mitra 1997. A single svd is run on data tapered for
 % sensitivity over user-defined frequency band (fpass).
-funTs = vol2vec(funTs,mask);
+
+if ~exist('mask','var')
+    funTs = vol2vec(funTs);
+    mask = funTs.vol2vec;
+else
+    funTs = vol2vec(funTs,mask);
+end
 tr = funTs.tr/1000;
 
 %% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
