@@ -7,7 +7,11 @@ function [funPsd,psdStruct] = runPSD(funTs,W,mask)
 %    See funPsd.psd for other useful parameters.
 %    funPsd.tr reflects the frequency resolution in Hz*1000
 
-funTs = vol2vec(funTs,mask);
+if exist('mask','var') && ~isempty(mask)
+    funTs = vol2vec(funTs,mask);
+else
+    funTs = vol2vec(funTs);
+end
 tr = funTs.tr/1000;
 
 if any(all(funTs.vec==0,1))
@@ -47,7 +51,7 @@ funPsd.psd.dim = strjoin({'space' 'freq'},' X ');
 funPsd.psd.f = f;
 funPsd.psd.w = Wreal;
 funPsd.psd.tw = TW;
-funPsd.psd.mask = mask;
+funPsd.psd.mask = funTs.vol2vec;
 funPsd.psd.param = param;
 
 if nargout>1
