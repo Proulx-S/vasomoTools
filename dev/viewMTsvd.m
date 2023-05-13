@@ -225,7 +225,7 @@ switch anaType
 
         ax = gca;
         ax.YScale = 'log';
-        ax.XScale = 'log';
+%         ax.XScale = 'log';
         drawnow
         set(ax.YAxis,'LimitsMode','manual')
 
