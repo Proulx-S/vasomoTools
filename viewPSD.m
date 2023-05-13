@@ -31,6 +31,8 @@ if ~exist('mask','var') || isempty(mask)
         otherwise
             error('X')
     end
+else
+    doMaskOutline = true;
 end
 if ~exist('slc','var') || isempty(slc)
     slc = round(funPsd.depth*0.5);
