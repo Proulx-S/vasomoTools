@@ -5,15 +5,17 @@ funPsd = vol2vec(funPsd);
 %% Perform spatial normalization
 switch normMethod
     case 'psdNoise_toImAv'
+        error('double-check that for linear averaging')
         noiseInd = funPsd.psd.f>4 & funPsd.psd.f<funPsd.psd.f(round(0.95*end));
         normFact = exp( mean(log(funPsd.vec(noiseInd,:)),1) );
         normFact = normFact .* exp(mean(log(normFact),2));
     case 'psdAv_toImAv'
+        error('double-check that for linear averaging')
         normFact = exp( mean(log(funPsd.vec),1) );
         normFact = normFact .* exp(mean(log(normFact),2));
     case 'psdNoise_to1'
         noiseInd = funPsd.psd.f>4 & funPsd.psd.f<funPsd.psd.f(round(0.95*end));
-        normFact = exp( mean(log(funPsd.vec(noiseInd,:)),1) );
+        normFact = mean(funPsd.vec(noiseInd,:),1);
     case 'psdAv_to1'
         normFact = exp( mean(log(funPsd.vec),1) );
     case 'none'
@@ -26,5 +28,10 @@ end
 %%% Apply normalization
 funPsdNorm = funPsd;
 funPsdNorm.vec = funPsd.vec./normFact;
+
+%%% Output
+funPsdNorm.vecNorm = normFact;
 funPsdNorm.psd.norm.method = normMethod;
 funPsdNorm.psd.norm.fact = normFact;
+funPsdNorm = setNiceFieldOrder(funPsdNorm,{'vol' 'vol2vec' 'vol2vecFlag' 'vec' 'vecNorm'});
+
