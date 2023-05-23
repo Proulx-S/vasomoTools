@@ -3,6 +3,10 @@ normMethod = 'psdNoise'; % 'psdNoise', 'smoothPsdAv', 'psdAv' or 'none'
 globalNormMethod = 'to1'; % 'toImageAverage' or 'to1';
 cLimMethod = 'fullRange';% 'fullRange', '99prctile' or 'highFloor'
 fwhm = 5;
+if iscell(funPsd)
+    psdStruct = funPsd{2};
+    funPsd = funPsd{1};
+end
 if ischar(f0)
     switch f0
         case 'all'
@@ -193,7 +197,7 @@ if ~isempty(f0)
         ax.CLim = cLim;
         xlabel({strjoin(xStr,'; ') 'before spatial norm'})
         hold on;
-        if doMaskOutline; plot(maskC,'FaceColor','none'); end
+        if doMaskOutline; plot(maskC,'FaceColor','none','EdgeColor','m'); end
 
         % Average power
         nexttile
@@ -209,7 +213,7 @@ if ~isempty(f0)
             xlabel('full spectrum psd')
         end
         hold on;
-        if doMaskOutline; plot(maskC,'FaceColor','none'); end
+        if doMaskOutline; plot(maskC,'FaceColor','none','EdgeColor','m'); end
 
         % Normalization factor
         nexttile
@@ -221,7 +225,7 @@ if ~isempty(f0)
         ax.CLim = cLim;
         xlabel('normalization factor')
         hold on;
-        if doMaskOutline; plot(maskC,'FaceColor','none'); end
+        if doMaskOutline; plot(maskC,'FaceColor','none','EdgeColor','m'); end
 
         %     % After spatial normalization (same scale)
         %     nexttile
@@ -230,7 +234,7 @@ if ~isempty(f0)
         %     ax = gca; ax.ColorScale = 'log'; ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1]; ax.XTick = []; ax.YTick = []; ax.YDir = 'normal';
         %     ax.CLim = cLim;
         %     xlabel({strjoin(xStr,'; ') 'after spatial norm' '(same scale)'})
-        %     hold on; plot(maskC,'FaceColor','none')
+        %     hold on; plot(maskC,'FaceColor','none','EdgeColor','m')
 
         % After spatial normalization (auto scale)
         nexttile
@@ -240,17 +244,23 @@ if ~isempty(f0)
         ax.Colormap = jet;
         xlabel({strjoin(xStr,'; ') 'after spatial norm'})
         hold on;
-        if doMaskOutline; plot(maskC,'FaceColor','none'); end
+        if doMaskOutline; plot(maskC,'FaceColor','none','EdgeColor','m'); end
         tmp = funPsdNorm.vol(:,:,slc,f0Ind); tmp = tmp(logical(mask));
-        switch cLimMethod
-            case 'highFloor'
-                cLim = exp(prctile(log(tmp),[0.5 100]));
-            case '99prctile'
-                cLim = exp(prctile(log(tmp),[0.5 99.5]));
-            case 'fullRange'
-                cLim = [min(tmp) max(tmp)];
+        switch normMethod
+            case 'psdNoise'
+                cLim = [1 exp(prctile(log(tmp),95))];
             otherwise
-                error('X')
+                switch cLimMethod
+                    case 'highFloor'
+                        cLim = exp(prctile(log(tmp),[0.5 100]));
+                    case '99prctile'
+                        cLim = exp(prctile(log(tmp),[0.5 99.5]));
+                    case 'fullRange'
+                        cLim = [min(tmp) max(tmp)];
+                    otherwise
+                        error('X')
+                end
+
         end
         ax.CLim = cLim;
     else
@@ -290,7 +300,7 @@ if ~isempty(f0)
             ax.Colormap = jet;
 %             xlabel(strjoin(xStr,'; '),'interpreter','none')
             hold on;
-            if doMaskOutline; plot(maskC,'FaceColor','none'); end
+            if doMaskOutline; plot(maskC,'FaceColor','none','EdgeColor','m'); end
             cLim = ax.CLim;
         end
     end
@@ -358,7 +368,12 @@ tlTitle = title(tl,titleStr,'interpreter','none');
 
 %% Plot average spectra on semilog plot
 nexttile([1 tl.GridSize(2)])
-plot(f,psdSpecNormAv,'k'); hold on
+if exist('psdStruct','var')
+    plot(psdStruct.f,psdStruct.psd,'k'); hold on
+    plot(psdStruct.f,squeeze(psdStruct.psdErr),'r');
+else
+    plot(f,psdSpecNormAv,'k'); hold on
+end
 ax = gca; ax.YScale = 'log';
 ax.YAxisLocation = 'right';
 xlabel('Hz'); ylabel('psd averaged within mask');
