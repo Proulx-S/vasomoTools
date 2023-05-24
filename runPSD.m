@@ -1,4 +1,4 @@
-function [funPsd,psdStruct] = runPSD(funTs,W)
+function funPsd = runPSD(funTs,W)
 %Wrapper of the Chronux's mtspectrumc function for multitaper estimation of
 %pds spectra, compatible with MRI data imported by MRIread.m.
 %    Parameterization is simplified to the halfbandwidth parameter W only.
@@ -6,7 +6,7 @@ function [funPsd,psdStruct] = runPSD(funTs,W)
 %    edge.
 %    See funPsd.psd for other useful parameters.
 %    funPsd.tr reflects the frequency resolution in Hz*1000
-
+tMean = mean(funTs.vol,4);
 funTs = vol2vec(funTs);
 tr = funTs.tr/1000;
 
@@ -52,9 +52,11 @@ funPsd.psd.mask = funTs.vol2vec;
 funPsd.psd.maskLabel = funPsd.vol2vecFlag;
 funPsd.psd.param = param;
 
-if nargout>1
-    psdStruct = funPsd.psd;
-    psdStruct.psd = funPsd.vec';
-    psdStruct = setNiceFieldOrder(psdStruct,{'dim' 'psd' 'f'});
-end
+funPsd.tMean = tMean;
+
+% if nargout>1
+%     psdStruct = funPsd.psd;
+%     psdStruct.psd = funPsd.vec';
+%     psdStruct = setNiceFieldOrder(psdStruct,{'dim' 'psd' 'f'});
+% end
 

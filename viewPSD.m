@@ -46,89 +46,89 @@ end
 f = funPsd.psd.f;
 w = funPsd.psd.w;
 
-%% Perform spatial normalization
-switch normMethod
-    case 'psdNoise'
-        if isempty(funPsd.vec)
-            funPsd = vol2vec(funPsd);
-        end
-        noiseInd = funPsd.psd.f>4 & funPsd.psd.f<funPsd.psd.f(round(0.95*end));
-        normFact = exp( mean(log(funPsd.vec(noiseInd,:)),1) );
-        normFact0 = exp(mean(log(normFact),2));
-    case 'psdAv'
-        if isempty(funPsd.vec)
-            funPsd = vol2vec(funPsd);
-        end
-        normFact = exp( mean(log(funPsd.vec),1) );
-        normFact0 = exp(mean(log(normFact),2));
-    case 'smoothPsdAv'
-        error('this is probably broken')
-        %%% Compute average power and write to disk
-        funNorm = funPsd;
-        if isempty(funNorm.vol)
-            funNorm.vec = mean(log(funNorm.vec),1);
-            funNorm.nframes = 1;
-            normFact0 = exp(funNorm.vec);
-            funNorm = vec2vol(funNorm);
-        else
-            funNorm.vol = mean(log(funNorm.vol),4);
-            funNorm.nframes = 1;
-            tmp = vol2vec(funNorm);
-            normFact0 = exp(tmp.vec); clear tmp
-        end
-        funNormTmpName = [tempname '.nii.gz'];
-        MRIwrite(funNorm,funNormTmpName);
-        
-
-        %%% Define mask for smoothing and write to disk
-        funMask = funNorm;
-        funMask.vol = ~isnan(funMask.vol);
-        funMaskTmpName = [tempname '.nii.gz'];
-        MRIwrite(funMask,funMaskTmpName);
-
-        %%% Apply smoothing (mri_fwhm) to normalization map
-        cmd = {'source /usr/local/freesurfer/fs-dev-env-autoselect'};
-        cmd{end+1} = ['mri_fwhm'...
-            ' --i ' funNormTmpName...
-            ' --o ' funNormTmpName...
-            ' --smooth-only'...
-            ' --mask ' funMaskTmpName...
-            ' --fwhm ' num2str(fwhm)];
-        [status,cmdout] = system(strjoin(cmd,'; '));
-
-        % funNormSm = MRIread(funNormTmpName);
-        % figure('WindowStyle','docked');
-        % imagesc(exp(funNorm.vol(:,:,46)));
-        % ax = gca; ax.ColorScale = 'log';
-        % cLim = clim;
-        % figure('WindowStyle','docked');
-        % imagesc(exp(funNormSm.vol(:,:,46)));
-        % ax = gca; ax.ColorScale = 'log';
-        % clim(cLim);
-
-        funNorm = MRIread(funNormTmpName);
-        funNorm = vol2vec(funNorm,funPsd.vol2vec);
-        normFact = exp(funNorm.vec); clear funNorm
-    case 'none'
-        sz = size(funPsd.vec);
-        normFact = ones([1 sz(2)]);
-        normFact0 = ones([1 sz(2)]);
-    otherwise
-        error('')
-end
-
-%%% Apply normalization
-if isempty(funPsd.vec)
-    funPsd = vol2vec(funPsd);
-end
-funPsdNorm = funPsd;
-switch globalNormMethod
-    case 'toImageAverage'
-        funPsdNorm.vec = funPsd.vec./normFact .* normFact0;
-    case 'to1'
-        funPsdNorm.vec = funPsd.vec./normFact;
-end
-funPsdNorm.normFact = normFact;
+% %% Perform spatial normalization
+% switch normMethod
+%     case 'psdNoise'
+%         if isempty(funPsd.vec)
+%             funPsd = vol2vec(funPsd);
+%         end
+%         noiseInd = funPsd.psd.f>4 & funPsd.psd.f<funPsd.psd.f(round(0.95*end));
+%         normFact = exp( mean(log(funPsd.vec(noiseInd,:)),1) );
+%         normFact0 = exp(mean(log(normFact),2));
+%     case 'psdAv'
+%         if isempty(funPsd.vec)
+%             funPsd = vol2vec(funPsd);
+%         end
+%         normFact = exp( mean(log(funPsd.vec),1) );
+%         normFact0 = exp(mean(log(normFact),2));
+%     case 'smoothPsdAv'
+%         error('this is probably broken')
+%         %%% Compute average power and write to disk
+%         funNorm = funPsd;
+%         if isempty(funNorm.vol)
+%             funNorm.vec = mean(log(funNorm.vec),1);
+%             funNorm.nframes = 1;
+%             normFact0 = exp(funNorm.vec);
+%             funNorm = vec2vol(funNorm);
+%         else
+%             funNorm.vol = mean(log(funNorm.vol),4);
+%             funNorm.nframes = 1;
+%             tmp = vol2vec(funNorm);
+%             normFact0 = exp(tmp.vec); clear tmp
+%         end
+%         funNormTmpName = [tempname '.nii.gz'];
+%         MRIwrite(funNorm,funNormTmpName);
+%         
+% 
+%         %%% Define mask for smoothing and write to disk
+%         funMask = funNorm;
+%         funMask.vol = ~isnan(funMask.vol);
+%         funMaskTmpName = [tempname '.nii.gz'];
+%         MRIwrite(funMask,funMaskTmpName);
+% 
+%         %%% Apply smoothing (mri_fwhm) to normalization map
+%         cmd = {'source /usr/local/freesurfer/fs-dev-env-autoselect'};
+%         cmd{end+1} = ['mri_fwhm'...
+%             ' --i ' funNormTmpName...
+%             ' --o ' funNormTmpName...
+%             ' --smooth-only'...
+%             ' --mask ' funMaskTmpName...
+%             ' --fwhm ' num2str(fwhm)];
+%         [status,cmdout] = system(strjoin(cmd,'; '));
+% 
+%         % funNormSm = MRIread(funNormTmpName);
+%         % figure('WindowStyle','docked');
+%         % imagesc(exp(funNorm.vol(:,:,46)));
+%         % ax = gca; ax.ColorScale = 'log';
+%         % cLim = clim;
+%         % figure('WindowStyle','docked');
+%         % imagesc(exp(funNormSm.vol(:,:,46)));
+%         % ax = gca; ax.ColorScale = 'log';
+%         % clim(cLim);
+% 
+%         funNorm = MRIread(funNormTmpName);
+%         funNorm = vol2vec(funNorm,funPsd.vol2vec);
+%         normFact = exp(funNorm.vec); clear funNorm
+%     case 'none'
+%         sz = size(funPsd.vec);
+%         normFact = ones([1 sz(2)]);
+%         normFact0 = ones([1 sz(2)]);
+%     otherwise
+%         error('')
+% end
+% 
+% %%% Apply normalization
+% if isempty(funPsd.vec)
+%     funPsd = vol2vec(funPsd);
+% end
+% funPsdNorm = funPsd;
+% switch globalNormMethod
+%     case 'toImageAverage'
+%         funPsdNorm.vec = funPsd.vec./normFact .* normFact0;
+%     case 'to1'
+%         funPsdNorm.vec = funPsd.vec./normFact;
+% end
+% funPsdNorm.normFact = normFact;
 
 
 %% Compute summary statistics for later
@@ -154,10 +154,10 @@ else
 end
 titleStr{end+1} = ['tw=' num2str(funPsd.psd.tw) ', ' 'w=' num2str(w) 'Hz' ', ' 'k=' num2str(funPsd.psd.param.tapers(2))];
 % titleStr{end+1} = ['w=' num2str(w) 'Hz'];
-switch normMethod
-    case 'smoothPsdAv'
-        titleStr{end+1} = ['fwhm=' num2str(fwhm) 'mm'];
-end
+% switch normMethod
+%     case 'smoothPsdAv'
+%         titleStr{end+1} = ['fwhm=' num2str(fwhm) 'mm'];
+% end
 [~,b,c] = fileparts(funPsd.fspec);
 titleStr{end+1} = [b c];
 % titleStr = [strjoin(titleStr(1:end-1),'; ') titleStr(end)];
