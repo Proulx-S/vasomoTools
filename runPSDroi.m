@@ -71,3 +71,4 @@ psdRoi.tw = TW;
 psdRoi.param = param;
 psdRoi.mask = mask;
 psdRoi.maskLabel = maskLabel;
+psdRoi.normFact = volNorm;
