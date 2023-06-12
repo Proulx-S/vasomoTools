@@ -16,12 +16,13 @@ if isfield(funTs,'vol') && ~isempty(funTs.vol)
     if isfield(funTs,'vol2vec') && ~isempty(funTs.vol2vec)
         error('code that')
     else
-        if exist('vecNorm','var')
+        if exist('vecNorm','var') && ~isempty(vecNorm)
             tmp = vol2vec(funTs);
             volNorm = nan(size(tmp.vol2vec));
             volNorm(tmp.vol2vec) = vecNorm;
         else
-            error('code that')
+            tmp = vol2vec(funTs);
+            volNorm = ones(size(tmp.vol2vec));
         end
     end
 else
@@ -57,9 +58,14 @@ funTs = dtrnd4psd(funTs);
 
 %% Perform the multitaper PSD estimation
 param.Fs = 1/tr;
-param.err = [1 0.05];
+param.err = [2 0.05];
 param.trialave = 1;
-[psd,f,psdErr] = mtspectrumc(funTs.vec, param);
+if param.err(1)
+    [psd,f,psdErr] = mtspectrumc(funTs.vec, param);
+else
+    [psd,f] = mtspectrumc(funTs.vec, param);
+    psdErr = [];
+end
 
 %% Output some stuff
 psdRoi.dim = strjoin({'freq' 'errBound' 'roi'},' X ');

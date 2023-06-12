@@ -30,7 +30,8 @@ display(['k  (number of tapers) used: ' num2str(K)])
 
 
 %% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
-funTs = dtrnd4psd(funTs);
+funTs.vec = funTs.vec - mean(funTs.vec,1);
+% funTs = dtrnd4psd(funTs);
 
 %% Perform the multitaper PSD estimation
 funPsd = funTs; funPsd.vec = [];

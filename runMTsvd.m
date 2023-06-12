@@ -11,10 +11,8 @@ end
 
 %% Apply timeseries normalization
 % normFact based on psd so we need to use its square root here
-if exist('normFact','var')
-    funTs.vec = funTs.vec ./ sqrt(normFact(logical(mask))');
-else
-    error('code that')
+if exist('normFact','var') && ~isempty(normFact)
+    funTs.vec = funTs.vec ./ sqrt(normFact(logical(mask(funTs.vol2vec))));
 end
 
 %% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
@@ -150,6 +148,8 @@ end
 
 %% Run the decomposition
 tic
+% param.fpass = fpass;
+% [u,s,v,f,bandV] = spsvd2(funTs,param); sp = []; sv = []; fm = [];
 [sv,sp,fm,u,s,v,a,proj] = spsvd(funTs.vec,param,mdkp);
 toc
 
@@ -177,62 +177,62 @@ toc
 %     psdRec(:,:,modeInd) = permute(mean(conj(tmp).*tmp,2),[1 3 2]); % vox x freq x mode
 % end
 
-%% Reconstruct psd at each mode (simply from v)
-nTaper = param.tapers(2);
-tmp = permute(v,[2 1]);
-sz = size(tmp);
-sz(3) = sz(2)/nTaper;
-sz(2) = param.tapers(2);
-tmp = reshape(tmp,sz);
-psdRecSimple = permute(mean(conj(tmp).*tmp,2),[3 1 2]);
-
-%% Plot reconstructions
-[~,pad,~,~,~,~,~]=getparams(param);
-N=size(funTs.vec,1);
-nfft=max(2^(nextpow2(N)+pad),N);
-[f,~]=getfgrid(param.Fs,nfft,param.fpass);
-
-close all
-figure('WindowStyle','docked');
-plot(diag(s))
-ax = gca;
-ax.YScale = 'log';
-for modInd = 1:30
-    figure('WindowStyle','docked');
-    tl = tiledlayout(3,2);
-    tl.TileSpacing = "tight"; tl.Padding = "tight";
-    tl.TileIndexing = 'rowmajor';
-    title(tl,['mode ' num2str(modInd)])
-    
-    tmp = nan(size(mask));
-    tmp(logical(mask)) = u(:,modInd);
-    
-    nexttile(1,[2 1])
-    hIm = imagesc(abs(tmp));
-    hIm.AlphaData = ~isnan(tmp);
-    ax = gca;
-    ax.YTick = []; ax.XTick = [];
-    ax.ColorScale = 'linear'; ax.Colormap = jet;
-    ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
-    ylabel(colorbar,'psd')
-
-    nexttile(2,[2 1])
-    hIm = imagesc(angle(tmp));
-    hIm.AlphaData = ~isnan(tmp);
-    ax = gca;
-    ax.YTick = []; ax.XTick = [];
-    ax.ColorScale = 'linear'; ax.Colormap = hsv;
-    ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
-    ax.CLim = [-pi pi];
-    ylabel(colorbar,'phase')
-
-    nexttile(5,[1 2])
-%     plot(f,mean(psdRec(:,:,modInd),1))
-    plot(f,psdRecSimple(:,modInd))
-    ylabel('psd')
-    xlabel('Hz')
-    drawnow
-end
+% %% Reconstruct psd at each mode (simply from v)
+% nTaper = param.tapers(2);
+% tmp = permute(v,[2 1]);
+% sz = size(tmp);
+% sz(3) = sz(2)/nTaper;
+% sz(2) = param.tapers(2);
+% tmp = reshape(tmp,sz);
+% psdRecSimple = permute(mean(conj(tmp).*tmp,2),[3 1 2]);
+% 
+% %% Plot reconstructions
+% [~,pad,~,~,~,~,~]=getparams(param);
+% N=size(funTs.vec,1);
+% nfft=max(2^(nextpow2(N)+pad),N);
+% [f,~]=getfgrid(param.Fs,nfft,param.fpass);
+% 
+% close all
+% figure('WindowStyle','docked');
+% plot(diag(s))
+% ax = gca;
+% ax.YScale = 'log';
+% for modInd = 1:30
+%     figure('WindowStyle','docked');
+%     tl = tiledlayout(3,2);
+%     tl.TileSpacing = "tight"; tl.Padding = "tight";
+%     tl.TileIndexing = 'rowmajor';
+%     title(tl,['mode ' num2str(modInd)])
+%     
+%     tmp = nan(size(mask));
+%     tmp(logical(mask)) = u(:,modInd);
+%     
+%     nexttile(1,[2 1])
+%     hIm = imagesc(abs(tmp));
+%     hIm.AlphaData = ~isnan(tmp);
+%     ax = gca;
+%     ax.YTick = []; ax.XTick = [];
+%     ax.ColorScale = 'linear'; ax.Colormap = jet;
+%     ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+%     ylabel(colorbar,'psd')
+% 
+%     nexttile(2,[2 1])
+%     hIm = imagesc(angle(tmp));
+%     hIm.AlphaData = ~isnan(tmp);
+%     ax = gca;
+%     ax.YTick = []; ax.XTick = [];
+%     ax.ColorScale = 'linear'; ax.Colormap = hsv;
+%     ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+%     ax.CLim = [-pi pi];
+%     ylabel(colorbar,'phase')
+% 
+%     nexttile(5,[1 2])
+% %     plot(f,mean(psdRec(:,:,modInd),1))
+%     plot(f,psdRecSimple(:,modInd))
+%     ylabel('psd')
+%     xlabel('Hz')
+%     drawnow
+% end
 
 
 % 
@@ -271,10 +271,8 @@ svdStruct.w = Wreal;
 svdStruct.param = param;
 
 
-return
-
+if 0 
 %% Plot
-
 % cLim = [min(abs(svdStruct.sp(:))) max(abs(svdStruct.sp(:)))];
 cLim = 'auto';
 
@@ -294,7 +292,8 @@ for ind = 1:4
     clim(tmp_cLim)
 end
 
-for ind = 1:size(svdStruct.sp,3)
+nF = min(size(svdStruct.sp,3),30)
+for ind = 1:nF
     figure('WindowStyle','docked');
     tl = tiledlayout(2,2);
     tl.Padding = 'tight'; tl.TileSpacing = 'tight';
@@ -326,7 +325,7 @@ for ind = 1:size(svdStruct.sp,3)
     ax.XTick = []; ax.YTick = [];
     ax.Colormap = hsv;
     ax.CLim = [-pi pi];
-    ylabel(colorbar,'abs')
+    ylabel(colorbar,'rad')
 
     nexttile
     tmp = nan(size(mask));
@@ -339,5 +338,5 @@ for ind = 1:size(svdStruct.sp,3)
     ax.ColorScale = 'log';
     clim(cLim)
 end
-
+end
 

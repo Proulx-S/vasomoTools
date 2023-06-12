@@ -1,4 +1,4 @@
-function hF = viewPSD2(funPsd,f0,mask,fpass,id)
+function [hF,tl,axSpec,maskC] = viewPSD2(funPsd,f0,mask,fpass,id)
 
 
 %% Prepare some stuff
@@ -10,7 +10,14 @@ elseif isfield(funPsd,'roi')
     mask = funPsd.roi.mask;
     maskC = getMaskOutline(mask,5);
 else
+    roiFlag = 0;
     error('code that')
+end
+if ~exist('f0','var')
+    f0=0.1;
+end
+if ~exist('id','var')
+    id = {};
 end
 
 %% Prepare figure
@@ -22,20 +29,24 @@ tl.TileIndexing = 'rowmajor';
 
 %% Brain
 nexttile(1,[2 1])
-imagesc(funPsd.tMean)
+im = funPsd.tMean;
+imagesc(im)
 ax = gca;
 ax.Colormap = gray;
 ax.YTick = []; ax.XTick = [];
 ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+ax.CLim = prctile(im(:),[0 99]);
 title('timeseries mean')
 
 %% Mask
 nexttile(2,[2 1])
-imagesc(funPsd.tMean)
+im = funPsd.tMean;
+imagesc(im)
 ax = gca;
 ax.Colormap = gray;
 ax.YTick = []; ax.XTick = [];
 ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+ax.CLim = prctile(im(:),[0 99]);
 hold on
 hMask1 = plot(maskC);
 hMask1.FaceColor = 'r';
@@ -71,7 +82,8 @@ nexttile(4,[2 1])
 f = funPsd.psd.f;
 [~,f0Ind] = min(abs(f-f0'),[],2);
 tmpPsd = vec2vol(funPsd);
-imagesc(tmpPsd.vol(:,:,:,f0Ind));
+tmpIm = tmpPsd.vol(:,:,:,f0Ind);
+hIm = imagesc(tmpIm);
 hold on
 hMask3 = plot(maskC);
 hMask3.FaceColor = 'none';
@@ -80,12 +92,28 @@ ax = gca;
 ax.YTick = []; ax.XTick = [];
 ax.ColorScale = 'log'; ax.Colormap = jet;
 ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
-ylabel(colorbar,'raw psd')
-title(['f0=' num2str(f0,'%0.3f') 'Hz'])
+if normFlag
+    ylabel(colorbar,'normalized psd')
+else
+    ylabel(colorbar,'raw psd')
+end
+
+if isfield(funPsd.psd,'aboveNoiseInd')
+    tmp = zeros(size(mask));
+    tmp(:) = funPsd.psd.aboveNoiseInd(:,f0Ind);
+    hIm.AlphaData = tmp;
+    ax.CLim = prctile(tmpIm(logical(tmp)&logical(mask)),[0 95]);
+    ax.Color = 'k';
+    hMask3.EdgeColor = 'w';
+    title(['f0=' num2str(f0,'%0.3f') 'Hz (thresholded)'])
+else
+    title(['f0=' num2str(f0,'%0.3f') 'Hz'])
+end
+
 
 %% Spectrum
 % nexttile(9,[1 4])
-nexttile(17,[1 4])
+axSpec = nexttile(17,[1 4]);
 legLabel = {};
 h = {};
 if roiFlag
@@ -94,6 +122,8 @@ if roiFlag
     W = funPsd.roi.w;
     h{end+1} = plot(f,psd,'k'); legLabel{end+1} = 'mean spectrum';
     hold on
+%     yyaxis right
+%     h{end+1} = plot(f,diff(psdErr,[],2)./psd);
     h{end+1} = plot(f,psdErr,'r'); legLabel{end+1} = '95%CI';
     h{end} = h{end}(1);
 else
@@ -108,7 +138,9 @@ ax = gca;
 ax.YScale = 'log';
 ax.YAxisLocation = 'right';
 axis tight
-ax.XLim = fpass;
+if exist('fpass','var') && ~isempty(fpass)
+    ax.XLim = fpass;
+end
 yLim = [min(psd) max(psd)];
 yLim(1) = mean(psd(f>3.5));
 yLim(1) = exp(log(yLim(1)) - range(log(yLim))*0.05);
