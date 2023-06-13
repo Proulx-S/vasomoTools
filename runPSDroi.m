@@ -54,11 +54,12 @@ display(['tw (time-halfwidth) used  : ' num2str(TW)])
 display(['k  (number of tapers) used: ' num2str(K)])
 
 %% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
-funTs = dtrnd4psd(funTs);
+funTs.vec = funTs.vec - mean(funTs.vec,1);
+% funTs = dtrnd4psd(funTs);
 
 %% Perform the multitaper PSD estimation
 param.Fs = 1/tr;
-param.err = [2 0.05];
+param.err = [0 0.05];
 param.trialave = 1;
 if param.err(1)
     [psd,f,psdErr] = mtspectrumc(funTs.vec, param);
