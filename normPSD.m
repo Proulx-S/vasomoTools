@@ -1,4 +1,4 @@
-function funPsdNorm = normPSD(funPsd,normMethod)
+function funPsdNorm = normPSD(funPsd,normMethod,mask)
 % normMethod: 'psdNoise_to1', 'psdAv_to1', 'psdNoise_toImAv', 'psdAv_toImAv' or 'none'
 
 funPsd = vol2vec(funPsd);
@@ -56,11 +56,20 @@ switch normMethod
 
         %%% Define the range within which to fit the low-frequency slope
         lfSlopeRange = [
-%             0.01 0.1
             0    0.01
-            0.06 0.08
 %             0.17 0.2
+            0.13 0.2
             ];
+%         lfSlopeRange = [
+% %             0.01 0.1
+% %             0    0.01
+%             0.013 0.019
+% %             0.06 0.08
+%             0.13 0.15
+% %             0.17 0.2
+%             ];
+
+
         lfSlopeRange(lfSlopeRange==0) = f(find(f==0)+1); % make sure f=0 is not included
         ind = false(size(f));
         for i = 1:size(lfSlopeRange,1)
@@ -69,32 +78,33 @@ switch normMethod
 
         %%% Fit a linear slope in loglog space, for each voxel
         lfSlp = nan(size(psd));
-        a = nan(size(f));
-        b = nan(size(f));
+        a = nan(1,size(psd,2));
+        b = nan(1,size(psd,2));
         parfor ii = 1:size(psd,2)
             [lfSlp(:,ii),a(ii),b(ii)] = logloglin(f,psd(:,ii),ind,noiseInd);
         end
 
         %%% Define a new frequency- and voxel-specific normalization factor
         normFact2 = lfSlp;
-        % cut the slope at its intersection with the noise floor
-        normFact2(normFact2<1) = 1;
+        % set the slope at the noise floor as soon as it intercepts it
+        normFact2(a<0 & normFact2<1) = 1;
+        normFact2(a>0 & normFact2>1) = 1;
+        % set the slope at the noise floor if it never intercepts it
+        normFact2( : , all(normFact2>1,1) | all(normFact2<1,1) ) = 1;
+        % set f=0 to 0 as it is ill-defined
+        normFact2(f==0,:) = 0;
 
-%         %%% Scale high frequency noise back to 1
-%         normFact2 = normFact2./mean(normFact2(noiseInd,:),1);
-
-% ii = 0;
-% while 1
-%     ii = ii+1
-%         voxInd = false(1,size(psd,2));
-%         voxInd(ii) = true;
-        voxInd = true(1,size(psd,2));
+        if exist('mask','var') && ~isempty(mask)
+            voxInd = logical(mask(funPsdNorm.vol2vec));
+        else
+            voxInd = true(1,size(psd,2));
+        end
         figure('WindowStyle','docked');
         plot(f,mean(psd(:,voxInd),2),'k'); hold on
         tmp = mean(normFact2(:,voxInd),2);
         plot(f,tmp,'--r')
         tmp(~ind) = nan;
-        plot(f,tmp,'r')
+        plot(f,tmp,'r','linewidt',3)
         psd2 = psd./normFact2;
         hPlot = plot(f,mean(psd2(:,voxInd),2));
         plot(f,ones(size(f)),':k')
@@ -103,9 +113,8 @@ switch normMethod
         ax = gca;
         ax.YScale = 'log';
         ax.XScale = 'log';
-%         keyboard
-% end
         
+        %%% Apply the normalization
         funPsdNorm.vec = funPsdNorm.vec./normFact2;
     otherwise
 end
