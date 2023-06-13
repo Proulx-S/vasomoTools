@@ -1,7 +1,8 @@
-function [hF,tl,axSpec,maskC] = viewPSD2(funPsd,f0,mask,fpass,id)
-
-
+function [hF,tl,axSpec,maskC] = viewPSD2(funPsd,f0,mask,fpass,id,threshFlag)
 %% Prepare some stuff
+if ~exist("threshFlag",'var') || isempty(threshFlag)
+    threshFlag = false;
+end
 if exist('mask','var') && ~isempty(mask)
     roiFlag = 0;
     maskC = getMaskOutline(mask,5);
@@ -11,7 +12,7 @@ elseif isfield(funPsd,'roi')
     maskC = getMaskOutline(mask,5);
 else
     roiFlag = 0;
-    error('code that')
+    maskC = [];
 end
 if ~exist('f0','var')
     f0=0.1;
@@ -40,23 +41,29 @@ title('timeseries mean')
 
 %% Mask
 nexttile(2,[2 1])
-im = funPsd.tMean;
-imagesc(im)
-ax = gca;
-ax.Colormap = gray;
-ax.YTick = []; ax.XTick = [];
-ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
-ax.CLim = prctile(im(:),[0 99]);
-hold on
-hMask1 = plot(maskC);
-hMask1.FaceColor = 'r';
-hMask1.FaceAlpha = 0.1;
-hMask1.EdgeColor = 'none';
-title('mask')
+if isempty(maskC)
+    ax = gca;
+    ax.Visible = 'off';
+else
+    im = funPsd.tMean;
+    imagesc(im)
+    ax = gca;
+    ax.Colormap = gray;
+    ax.YTick = []; ax.XTick = [];
+    ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+    ax.CLim = prctile(im(:),[0 99]);
+    hold on
+    hMask1 = plot(maskC);
+    hMask1.FaceColor = 'r';
+    hMask1.FaceAlpha = 0.1;
+    hMask1.EdgeColor = 'none';
+    title('mask')
+end
 
 %% Normalization
+% drawnow
 nexttile(3,[2 1])
-if isfield(funPsd.psd,'norm')
+if isfield(funPsd.psd,'norm') && ~isfield(funPsd.psd.norm,'fact2')
     normFlag = 1;
     normFact = nan(size(funPsd.vol2vec));
     normFact(funPsd.vol2vec) = funPsd.psd.norm.fact;
@@ -85,9 +92,11 @@ tmpPsd = vec2vol(funPsd);
 tmpIm = tmpPsd.vol(:,:,:,f0Ind);
 hIm = imagesc(tmpIm);
 hold on
-hMask3 = plot(maskC);
-hMask3.FaceColor = 'none';
-hMask3.EdgeColor = 'k';
+if ~isempty(maskC)
+    hMask3 = plot(maskC);
+    hMask3.FaceColor = 'none';
+    hMask3.EdgeColor = 'k';
+end
 ax = gca;
 ax.YTick = []; ax.XTick = [];
 ax.ColorScale = 'log'; ax.Colormap = jet;
@@ -98,7 +107,7 @@ else
     ylabel(colorbar,'raw psd')
 end
 
-if isfield(funPsd.psd,'aboveNoiseInd')
+if threshFlag && isfield(funPsd.psd,'aboveNoiseInd')
     tmp = zeros(size(mask));
     tmp(:) = funPsd.psd.aboveNoiseInd(:,f0Ind);
     hIm.AlphaData = tmp;
@@ -124,8 +133,10 @@ if roiFlag
     hold on
 %     yyaxis right
 %     h{end+1} = plot(f,diff(psdErr,[],2)./psd);
-    h{end+1} = plot(f,psdErr,'r'); legLabel{end+1} = '95%CI';
-    h{end} = h{end}(1);
+    if ~isempty(psdErr)
+        h{end+1} = plot(f,psdErr,'r'); legLabel{end+1} = '95%CI';
+        h{end} = h{end}(1);
+    end
 else
     tmpPsd = vec2vol(funPsd);
     tmpPsd = vol2vec(tmpPsd,mask,1);
@@ -175,5 +186,5 @@ titleStr2 = {strjoin(titleStr2,'; ')};
 
 titleStr = [titleStr1 titleStr2];
 tlTitle = title(tl,titleStr,'interpreter','none');
-drawnow
+% drawnow
 
