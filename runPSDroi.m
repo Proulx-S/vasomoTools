@@ -1,4 +1,4 @@
-function psdRoi = runPSDroi(funTs,W,mask,maskLabel,vecNorm)
+function psdRoi = runPSDroi(funTs,W,K,mask,maskLabel,vecNorm)
 % Wrapper of the Chronux's mtspectrumc function for multitaper estimation
 % of pds spectra, compatible with MRI data imported by MRIread.m.
 %   Parameterization is simplified to the halfbandwidth parameter W only.
@@ -40,11 +40,36 @@ funTs.vec = funTs.vec ./ sqrt(vecNorm);
 tr = funTs.tr/1000;
 nFrame = funTs.nframes;
 
-T = tr.*nFrame;
-TW = T*W;
-K = round(TW*2-1);
-TW = (K+1)/2;
-param.tapers = [TW K];
+% T = tr.*nFrame;
+% TW = T*W;
+% K = round(TW*2-1);
+% TW = (K+1)/2;
+% param.tapers = [TW K];
+
+Wflag = exist('W','var') && ~isempty(W);
+Kflag = exist('K','var') && ~isempty(K);
+if Wflag && Kflag
+    error('Cannot specify both W and K');
+elseif Wflag
+    T = tr.*funTs.nframes;
+    TW = T*W;
+    K = round(TW*2-1);
+    TW = (K+1)/2;
+    param.tapers = [TW K];
+    Wreal = TW/T;
+    display(['w  (halfwidth) requested  : ' num2str(W,'%0.5f ')])
+    display(['w  (halfwidth) used       : ' num2str(Wreal,'%0.5f ')])
+    display(['tw (time-halfwidth) used  : ' num2str(TW)])
+    display(['k  (number of tapers) used: ' num2str(K)])
+elseif Kflag
+    TW = (K+1)/2;
+    T = tr.*funTs.nframes;
+    W = TW/T; Wreal = W;
+    param.tapers = [TW K];
+    display(['k  (number of tapers) requested  : ' num2str(K)])
+    display(['w  (halfwidth) used       : ' num2str(W,'%0.5f ')])
+    display(['tw (time-halfwidth) used  : ' num2str(TW)])
+end
 
 %% Display actual half-widht used
 Wreal = TW/T;
@@ -54,8 +79,8 @@ display(['tw (time-halfwidth) used  : ' num2str(TW)])
 display(['k  (number of tapers) used: ' num2str(K)])
 
 %% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
-funTs.vec = funTs.vec - mean(funTs.vec,1);
-% funTs = dtrnd4psd(funTs);
+% funTs.vec = funTs.vec - mean(funTs.vec,1);
+funTs = dtrnd4psd(funTs);
 
 %% Perform the multitaper PSD estimation
 param.Fs = 1/tr;

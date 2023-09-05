@@ -118,6 +118,12 @@ if threshFlag && isfield(funPsd.psd,'aboveNoiseInd')
 else
     title(['f0=' num2str(f0,'%0.3f') 'Hz'])
 end
+if normFlag
+    ax.CLim(1) = 1;
+    if exist('mask','var') && ~isempty(mask)
+        ax.CLim(2) = max(tmpIm(logical(mask)));
+    end
+end
 
 
 %% Spectrum
@@ -174,7 +180,11 @@ else
 end
 
 %% Title
-titleStr1 = {strjoin(id,'; ')};
+if iscell(id)
+    titleStr1 = {strjoin(id,'; ')};
+else
+    titleStr1 = {id};
+end
 if normFlag
     titleStr2 = {'normalized voxel-wise'};
 else
