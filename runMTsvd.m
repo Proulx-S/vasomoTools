@@ -1,4 +1,4 @@
-function svdStruct = runMTsvd(anaType,funTs,fpass,W,mask,normFact)
+function svdStruct = runMTsvd(anaType,funTs,fpass,W,K,mask,vecNorm)
 % Similar to Mitra 1997. A single svd is run on data tapered for
 % sensitivity over user-defined frequency band (fpass).
 tsMean = mean(funTs.vol,4);
@@ -10,9 +10,9 @@ else
 end
 
 %% Apply timeseries normalization
-% normFact based on psd so we need to use its square root here
-if exist('normFact','var') && ~isempty(normFact)
-    funTs.vec = funTs.vec ./ sqrt(normFact(logical(mask(funTs.vol2vec))));
+% normFact (vector) based on psd so we need to use its square root here
+if exist('normFact','var') && ~isempty(vecNorm)
+    funTs.vec = funTs.vec ./ sqrt(vecNorm(logical(mask(funTs.vol2vec))));
 end
 
 %% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
@@ -104,25 +104,59 @@ switch anaType
 
 
     case 'svdKlein'
-        error('double-check all that')
-        % if exist('W','var') && ~isempty(W)
-        %     anaType = 'svdKlein';
-        T = tr.*nFrame;
-        TW = T*W;
-        K = round(TW*2-1);
-        TW = (K+1)/2;
-        param.tapers = [TW K];
+% %         error('double-check all that')
+%         % if exist('W','var') && ~isempty(W)
+%         %     anaType = 'svdKlein';
+%         T = tr.*nFrame;
+%         TW = T*W;
+%         K = round(TW*2-1);
+%         TW = (K+1)/2;
+%         param.tapers = [TW K];
+%         if ~isempty(fpass)
+%             param.fpass = fpass;
+%         end
+%         mdkp = [];
+%         [~,f] = mtspectrumc(funTs.vec(:,1), param);
+%         %%% Display actual half-widht used
+%         Wreal = TW/T;
+%         display(['w  (halfwidth) requested  : ' num2str(W,'%0.5f ')])
+%         display(['w  (halfwidth) used       : ' num2str(Wreal,'%0.5f ')])
+%         display(['tw (time-halfwidth) used  : ' num2str(TW)])
+%         display(['k  (number of tapers) used: ' num2str(K)])
+
+
+
+
+        Wflag = exist('W','var') && ~isempty(W);
+        Kflag = exist('K','var') && ~isempty(K);
+        if Wflag && Kflag
+            error('Cannot specify both W and K');
+        elseif Wflag
+            T = tr.*funTs.nframes;
+            TW = T*W;
+            K = round(TW*2-1);
+            TW = (K+1)/2;
+            param.tapers = [TW K];
+            Wreal = TW/T;
+            display(['w  (halfwidth) requested  : ' num2str(W,'%0.5f ')])
+            display(['w  (halfwidth) used       : ' num2str(Wreal,'%0.5f ')])
+            display(['tw (time-halfwidth) used  : ' num2str(TW)])
+            display(['k  (number of tapers) used: ' num2str(K)])
+        elseif Kflag
+            TW = (K+1)/2;
+            T = tr.*funTs.nframes;
+            W = TW/T; Wreal = W;
+            param.tapers = [TW K];
+            display(['k  (number of tapers) requested  : ' num2str(K)])
+            display(['w  (halfwidth) used       : ' num2str(W,'%0.5f ')])
+            display(['tw (time-halfwidth) used  : ' num2str(TW)])
+        end
         if ~isempty(fpass)
             param.fpass = fpass;
         end
         mdkp = [];
         [~,f] = mtspectrumc(funTs.vec(:,1), param);
-        %%% Display actual half-widht used
-        Wreal = TW/T;
-        display(['w  (halfwidth) requested  : ' num2str(W,'%0.5f ')])
-        display(['w  (halfwidth) used       : ' num2str(Wreal,'%0.5f ')])
-        display(['tw (time-halfwidth) used  : ' num2str(TW)])
-        display(['k  (number of tapers) used: ' num2str(K)])
+
     case 'svdMitra'
         % else
         %     anaType = 'svdMitra';
@@ -150,7 +184,8 @@ end
 tic
 % param.fpass = fpass;
 % [u,s,v,f,bandV] = spsvd2(funTs,param); sp = []; sv = []; fm = [];
-[sv,sp,fm,u,s,v,a,proj] = spsvd(funTs.vec,param,mdkp);
+% [sv,sp,fm,u,s,v,a,proj] = spsvd(funTs.vec,param,mdkp);
+[sv,sp,fm] = spsvd(funTs.vec,param,mdkp);
 toc
 
 % %% Reconstruct reduced psd
@@ -259,7 +294,7 @@ toc
 
 %% Output
 svdStruct.mask = mask;
-svdStruct.normFact = normFact;
+svdStruct.normFact = vecNorm;
 svdStruct.tsMean = tsMean;
 svdStruct.dim = strjoin({'space/taper' 'freq' 'modes'},' X ');
 svdStruct.sv = permute(sv,[3 1 2]);
