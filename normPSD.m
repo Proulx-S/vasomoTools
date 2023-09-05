@@ -55,19 +55,19 @@ switch normMethod
         psd = funPsdNorm.vec;
 
         %%% Define the range within which to fit the low-frequency slope
-        lfSlopeRange = [
-            0    0.01
-%             0.17 0.2
-            0.13 0.2
-            ];
 %         lfSlopeRange = [
-% %             0.01 0.1
-% %             0    0.01
-%             0.013 0.019
-% %             0.06 0.08
-%             0.13 0.15
+%             0    0.01
 % %             0.17 0.2
+%             0.13 0.2
 %             ];
+        lfSlopeRange = [
+%             0.01 0.1
+%             0    0.01
+            0.013 0.019
+%             0.06 0.08
+            0.13 0.15
+%             0.17 0.2
+            ];
 
 
         lfSlopeRange(lfSlopeRange==0) = f(find(f==0)+1); % make sure f=0 is not included
