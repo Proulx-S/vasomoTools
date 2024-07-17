@@ -1,4 +1,4 @@
-function funPsd = runPSD(funTs,W,K,cFlag,mask)
+function funPsd = runPSD2(funTs,W,K,cFlag,mask)
 %Wrapper of the Chronux's mtspectrumc function for multitaper estimation of
 %pds spectra, compatible with MRI data imported by MRIread.m.
 %    Parameterization is simplified to the halfbandwidth parameter W only.
@@ -6,13 +6,53 @@ function funPsd = runPSD(funTs,W,K,cFlag,mask)
 %    edge.
 %    See funPsd.psd for other useful parameters.
 %    funPsd.tr reflects the frequency resolution in Hz*1000
-if ~exist('cFlag','var') || isempty(cFlag)
-    cFlag = 0;
+if ~exist('W','var'); W = []; end
+if ~exist('K','var'); K = []; end
+if ~exist('cFlag','var') || isempty(cFlag); cFlag = 0; end
+if ~exist('mask','var'); mask = []; end
+
+%% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
+tic
+funTs2 = cell(size(funTs));
+for i = 1:length(funTs)
+    funTs2{i} = dtrnd4psd(funTs(i));
+end
+funTs = [funTs2{:}];
+toc
+
+%% Put runs in same structure
+if length(funTs)>1
+    funTs2 = funTs(1);
+    funTs2.vol = cat(6,funTs.vol);
+    funTs2.volMean = cat(6,funTs.volMean);
+    funTs2.nruns = length(funTs);
+    funTs = funTs2;
 end
 
-tMean = mean(funTs.vol,4);
+%% Compute PSD
+funPsd = doIt(funTs,W,K,cFlag,mask);
+
+%% Add image mean
+funPsd.imMean = funTs.volMean;
+
+%% Split back in different structures
+nruns = size(funPsd.vec,4);
+if nruns>1
+    funPsd2 = funPsd;
+    funPsd2.vec = [];
+    funPsd2.nruns = 1;
+    funPsd2 = repmat(funPsd2,[1 nruns]);
+    for i = 1:nruns
+        funPsd2(i).vec = funPsd.vec(:,:,:,i);
+        funPsd2(i).vecMean = funPsd.vecMean(:,:,:,i);
+        funPsd2(i).tr = funPsd.tr(:,:,:,i);
+    end
+end
+funPsd = funPsd2; clear funPsd2
+
+function funPsd = doIt(funTs,W,K,cFlag,mask)
 if exist('mask','var') && ~isempty(mask)
-    funTs = vol2vec(funTs,mask);
+    funTs = vol2vec(funTs,mask,1);
 else
     funTs = vol2vec(funTs);
 end
@@ -48,32 +88,35 @@ elseif Kflag
     display(['tw (time-halfwidth) used  : ' num2str(TW)])
 end
 
-%% Detrend time series (detrend up to order-2 polynomial, since this is the highest order not fitting a sinwave)
-funTs = dtrnd4psd(funTs);
 
 %% Perform the multitaper PSD estimation
 funPsd = funTs; funPsd.vec = [];
 param.Fs = 1/tr;
 param.complex = cFlag;
 % [funPsd.vec,f] = mtspectrumc(funTs.vec, param);
-[funPsd.vec,vecC,f] = mtspectrumc2(funTs.vec, param);
+i=1;
+[funPsd.vec,vecC,f] = mtspectrumc2(funTs.vec(:,:,:,i), param);
+if size(funTs.vec,4)>1
+    vec = repmat(funPsd.vec,[1 1 1 size(funTs.vec,4)]);
+    vecC = repmat(vecC,[1 1 1 size(funTs.vec,4)]);
+    f = repmat(f,[1 1 1 size(funTs.vec,4)]);
+    parfor i = 2:size(funTs.vec,4)
+        [vec(:,:,:,i),vecC(:,:,:,i),f(:,:,:,i)] = mtspectrumc2(funTs.vec(:,:,:,i), param);
+    end
+    funPsd.vec = vec;
+end
 funPsd.nframes = size(funPsd.vec,1);
 funPsd.tr = mode(diff(f))*1000;
-
-% plot(f,mean(funPsd.vec,2))
-% funPsd = vec2vol(funPsd);
-% [~,b] = min(abs(f-0.931351));
-% imagesc(funPsd.vol(:,:,1,b));
-% ax = gca; ax.ColorScale = 'log';
 
 %% Output some stuff
 if isfield(funPsd,'psd')
     funPsd = rmfield(funPsd,'psd');
 end
-funPsd.psd.dim = strjoin({'space' 'freq' 'taper'},' X ');
-funPsd.psd.f = f;
+funPsd.psd.dim = strjoin({'space' 'freq' 'taper' 'run'},' X ');
+tmp = diff(f,[],4); if any(tmp(:)); dbstack; error('X'); end
+funPsd.psd.f = f(:,:,:,1);
 if param.complex
-    funPsd.psd.spec = permute(vecC,[2 1 3]);
+    funPsd.psd.spec = permute(vecC,[2 1 3 4]);
 else
     funPsd.psd.spec = [];
 end
@@ -82,12 +125,3 @@ funPsd.psd.tw = TW;
 funPsd.psd.mask = funTs.vol2vec;
 funPsd.psd.maskLabel = funPsd.vol2vecFlag;
 funPsd.psd.param = param;
-
-funPsd.tMean = tMean;
-
-% if nargout>1
-%     psdStruct = funPsd.psd;
-%     psdStruct.psd = funPsd.vec';
-%     psdStruct = setNiceFieldOrder(psdStruct,{'dim' 'psd' 'f'});
-% end
-

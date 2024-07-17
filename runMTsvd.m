@@ -11,7 +11,7 @@ end
 
 %% Apply timeseries normalization
 % normFact (vector) based on psd so we need to use its square root here
-if exist('normFact','var') && ~isempty(vecNorm)
+if exist('normFact','var') && exist('vecNorm','var') && ~isempty(vecNorm)
     funTs.vec = funTs.vec ./ sqrt(vecNorm(logical(mask(funTs.vol2vec))));
 end
 
@@ -28,78 +28,78 @@ nFrame = funTs.nframes;
 param.tapers = [];
 param.Fs = 1/tr;
 switch anaType
-    case 'svdProulx'
-%         error('double-check all that')
-        param.anaType = 'proulx';
-        T = tr.*funTs.nframes;
-%         TW = funTs.nframes/32-1;
-%         K = round(TW*2-1);
-        K = 10;
-        TW = (K+1)/2;
-        param.tapers = [TW K];
-        if ~isempty(fpass)
-            param.fpass = fpass;
-        end
-        [~,f] = mtspectrumc(funTs.vec(:,1), param);
-        %%% Display actual half-widht used
-        Wreal = TW/T;
-%         display(['w  (halfwidth) requested  : ' num2str(W,'%0.5f ')])
-        display(['w  (halfwidth) used       : ' num2str(Wreal,'%0.5f ')])
-        display(['tw (time-halfwidth) used  : ' num2str(TW)])
-        display(['k  (number of tapers) used: ' num2str(K)])
-        mdkp = [];
-%         tic
-%         [sv,sp,fm] = spsvd(funTs.vec,param,mdkp);
-%         % sv:     1 X mode
-%         % sp: space X 1    X mode
-%         % fm: taper X freq X mode
-%         toc
-% 
-%         figure('WindowStyle','docked');
-%         plot(sv)
-%         
-%         figure('WindowStyle','docked');
-%         offsetFac = 1;
-%         for kfInd = 1:size(fm,3)
-%             y = squeeze(mean(abs(fm(:,:,kfInd)),1));
-% %             y = squeeze(exp(mean(log(abs(fm(:,:,kfInd))),1))) + offsetFac*kfInd;
-%             plot(f,log(y) + offsetFac*kfInd);
-%             text(0.5,mean(y(end-10:end)),num2str(kfInd))
-%             hold on
+%     case 'svdProulx'
+% %         error('double-check all that')
+%         param.anaType = 'proulx';
+%         T = tr.*funTs.nframes;
+% %         TW = funTs.nframes/32-1;
+% %         K = round(TW*2-1);
+%         K = 10;
+%         TW = (K+1)/2;
+%         param.tapers = [TW K];
+%         if ~isempty(fpass)
+%             param.fpass = fpass;
 %         end
-%         ax = gca;
-%         ax.XScale = 'log';
-%         %     ax.YScale = 'log';
-%         grid on
-%         xlim([0.01 0.5])
-% 
-% 
-%         figure('WindowStyle','docked');
-%         kfInd = 2;
-%         y = abs(fm(:,:,kfInd));
-%         plot(f,y,':');
-%         hold on
-%         plot(f,mean(y,1),'k');
-%         ax = gca;
-%         ax.YScale = 'log';
-%         ax.XScale = 'log';
-%         grid on
-%         
-%         
-% 
-%         ax = gca;
-%         ax.XScale = 'log';
-%         %     ax.YScale = 'log';
-%         grid on
-%         xlim([0.01 0.5])
-% 
-% 
-%         
-%         funTs.vec = permute(abs(sp),[3 1 2]);
-%         funTs.nframes = size(funTs.vec,1);
-%         funTs = vec2vol(funTs);
-%         funTmpName = [tempname '.nii.gz'];
-%         MRIwrite(funTs,funTmpName);
+%         [~,f] = mtspectrumc(funTs.vec(:,1), param);
+%         %%% Display actual half-widht used
+%         Wreal = TW/T;
+% %         display(['w  (halfwidth) requested  : ' num2str(W,'%0.5f ')])
+%         display(['w  (halfwidth) used       : ' num2str(Wreal,'%0.5f ')])
+%         display(['tw (time-halfwidth) used  : ' num2str(TW)])
+%         display(['k  (number of tapers) used: ' num2str(K)])
+%         mdkp = [];
+% %         tic
+% %         [sv,sp,fm] = spsvd(funTs.vec,param,mdkp);
+% %         % sv:     1 X mode
+% %         % sp: space X 1    X mode
+% %         % fm: taper X freq X mode
+% %         toc
+% % 
+% %         figure('WindowStyle','docked');
+% %         plot(sv)
+% %         
+% %         figure('WindowStyle','docked');
+% %         offsetFac = 1;
+% %         for kfInd = 1:size(fm,3)
+% %             y = squeeze(mean(abs(fm(:,:,kfInd)),1));
+% % %             y = squeeze(exp(mean(log(abs(fm(:,:,kfInd))),1))) + offsetFac*kfInd;
+% %             plot(f,log(y) + offsetFac*kfInd);
+% %             text(0.5,mean(y(end-10:end)),num2str(kfInd))
+% %             hold on
+% %         end
+% %         ax = gca;
+% %         ax.XScale = 'log';
+% %         %     ax.YScale = 'log';
+% %         grid on
+% %         xlim([0.01 0.5])
+% % 
+% % 
+% %         figure('WindowStyle','docked');
+% %         kfInd = 2;
+% %         y = abs(fm(:,:,kfInd));
+% %         plot(f,y,':');
+% %         hold on
+% %         plot(f,mean(y,1),'k');
+% %         ax = gca;
+% %         ax.YScale = 'log';
+% %         ax.XScale = 'log';
+% %         grid on
+% %         
+% %         
+% % 
+% %         ax = gca;
+% %         ax.XScale = 'log';
+% %         %     ax.YScale = 'log';
+% %         grid on
+% %         xlim([0.01 0.5])
+% % 
+% % 
+% %         
+% %         funTs.vec = permute(abs(sp),[3 1 2]);
+% %         funTs.nframes = size(funTs.vec,1);
+% %         funTs = vec2vol(funTs);
+% %         funTmpName = [tempname '.nii.gz'];
+% %         MRIwrite(funTs,funTmpName);
         
 
 
@@ -176,8 +176,43 @@ switch anaType
         fpassReal = f0+[-1 1].*(TW/T);
         display(['frequency band requested: fpass=[' num2str(fpass,'%0.5f ') ']'])
         display(['frequency band used     : fpass=[' num2str(fpassReal,'%0.5f ') ']'])
+    case 'svdProulx'
+        % warning('code that')
+        % keyboard
+        % else
+        %     anaType = 'svdMitra';
+        %%% Set parameters for each user-defined frequency band
+        fpassOrig = fpass;
+        paramOrig = param;
+        for bandInd = 1:size(fpassOrig,1)
+            fpass_targ = fpassOrig(bandInd,:);
+            W_targ = diff(fpass_targ)/2;
+            T = tr.*nFrame;
+            TW_targ = T*W_targ;
+            K_actual = round(TW_targ*2-1);
+            TW_actual = (K_actual+1)/2;
+            W_actual = TW_actual/T;
+            
+            paramCur = paramOrig;
+            paramCur.tapers = [TW_actual K_actual];
+            [~,f] = mtspectrumc(funTs.vec(:,1), paramCur);
+            
+            f0_targ = mean(fpass_targ); [~,b] = min(abs(f - f0_targ));
+            f0_actual = f(b);
+            fpass_actual = f0_actual+[-1 1].*W_actual;
+
+            paramCur.fpass = [f0_actual f0_actual];
+            mdkp = [];
+            
+            % display(['frequency band requested: fpass=[' num2str(fpass,'%0.5f ') ']'])
+            % display(['frequency band used     : fpass=[' num2str(fpassReal,'%0.5f ') ']'])
+
+            param.tapers(bandInd,:) = paramCur.tapers;
+            param.fpass(bandInd,:) = paramCur.fpass;
+            param.BW(bandInd,1) = W_actual;
+        end
     otherwise
-        error('Invalid anaType. Choose one of ''svdMitra'' or ''svdKlein''')
+        error('Invalid anaType. Choose one of ''svdMitra'', ''svdKlein'' or ''svdProulx''')
 end
 
 %% Run the decomposition
@@ -185,8 +220,101 @@ tic
 % param.fpass = fpass;
 % [u,s,v,f,bandV] = spsvd2(funTs,param); sp = []; sv = []; fm = [];
 % [sv,sp,fm,u,s,v,a,proj] = spsvd(funTs.vec,param,mdkp);
-[sv,sp,fm] = spsvd(funTs.vec,param,mdkp);
+% [sv,sp,fm] = spsvd(funTs.vec,param,mdkp);
+switch anaType
+    case 'svdProulx'
+        [sv,sp,fm,tapers,tvec,f,data] = spsvd3(funTs.vec,param,mdkp);
+    otherwise
+        [sv,sp,fm,tapers,tvec,f,data] = spsvd(funTs.vec,param,mdkp);
+end
 toc
+
+% i=1;
+% timeTaper=tapers.*exp(-f(i)*tvec);
+% spaceTaper = sp(:,:,1)*permute(fm(:,:,1),[2 1]);
+% time = spaceTaper(1,:)*permute(timeTaper,[2 1]);
+% 
+% t = 0:funTs.tr/1000:funTs.tr/1000*(size(timeTaper,1)-1);
+% plot(t,real(time)); hold on
+% 
+% data2 = (data'*timeTaper)*permute(timeTaper,[2 1]);
+
+
+if 0
+%% Get component timecourse
+[~,fInd] = min(abs(f-0.09343));
+cInd = 1;
+sX = diag(sv(fInd,cInd));
+vX = conj(permute(fm(:,fInd,cInd),[1 3 2]));
+tm = proj*(vX*sX);
+
+%% Reconstructed data (best guess)
+[~,fInd] = min(abs(f-0.09343));
+cInd = 1;
+uX = conj(permute(sp(:,fInd,cInd),[1 3 2]));
+sX = diag(sv(fInd,cInd));
+vX = conj(permute(fm(:,fInd,cInd),[1 3 2]));
+aX = uX*sX*vX';
+fvec = exp(-f(fInd)*tvec);
+proj=tapers.*fvec;
+dataRec = proj*aX';
+whos aX proj dataRec data
+
+
+%% Reconstruct reduced psd
+[~,fInd] = min(abs(f-0.09343));
+cInd = 1;
+whos sv sp fm tapers tvec f data
+sp(:,fInd,cInd);
+sv(fInd,cInd);
+fm(:,fInd,cInd);
+
+uX = conj(permute(sp(:,fInd,cInd),[1 3 2]));
+sX = diag(sv(fInd,cInd));
+vX = conj(permute(fm(:,fInd,cInd),[1 3 2]));
+whos uX sX vX
+
+tmpX = proj*(vX*sX);
+whos proj vX tmpX
+cIndX = cInd;
+% plot(real(tmpX(:,cIndX))); hold on
+% plot(imag(tmpX(:,cIndX))); hold on
+plot(abs(tmpX(:,cIndX)))
+plot(abs(tmpX(:,1)),'k','LineWidth',8)
+sum(abs(tmpX),1)
+
+
+fvec = exp(-f(fInd)*tvec);
+proj=tapers.*fvec;
+a=data'*proj; % projected data
+[u,s,v]= svd(a,0); % svd
+dataX = (a/proj)';
+imagesc(data); colorbar
+imagesc(real(dataX)); colorbar
+
+voxInd = 1;
+plot(data(:,voxInd))
+tmpX = a(voxInd,:).*proj;
+tmpX = sum(tmpX,2);
+whos tmpX a proj
+plot(abs(tmpX))
+
+
+
+aX = uX*sX*vX';
+whos uX sX vX aX
+
+dataX = aX/proj;
+whos data dataX
+
+
+for mk=1:mdkp,
+    sp(:,j,mk)=u(:,mk)';
+    fm(:,j,mk)=v(:,mk)';
+end
+sv(j,:)=diag(s);
+end
+
 
 % %% Reconstruct reduced psd
 % maxModeInd = 1:2;
@@ -294,14 +422,21 @@ toc
 
 %% Output
 svdStruct.mask = mask;
-svdStruct.normFact = vecNorm;
+if exist('vecNorm','var')
+    svdStruct.normFact = vecNorm;
+else
+    svdStruct.normFact = [];
+end
 svdStruct.tsMean = tsMean;
-svdStruct.dim = strjoin({'space/taper' 'freq' 'modes'},' X ');
+svdStruct.dim = strjoin({'space/taper' 'freq/time' 'modes'},' X ');
 svdStruct.sv = permute(sv,[3 1 2]);
-svdStruct.sp = sp;
-svdStruct.fm = fm;
+svdStruct.sp = sp; %spatial singular vectors
+svdStruct.fm = fm; %taper singular vectors
+svdStruct.tp = permute(tapers,[2 1]); %tapers
+svdStruct.tv = permute(tvec(:,1),[2 1]); %time vector
+svdStruct.f = f; %freq vector
+svdStruct.tf = 'tp.*exp(-f(i)*tv)'; %taper frequency time vector
 svdStruct.c = sv(:,1)'.^2./sum(sv.^2,2)';
-svdStruct.f = f;
 svdStruct.w = Wreal;
 svdStruct.param = param;
 

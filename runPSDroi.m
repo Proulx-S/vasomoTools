@@ -1,10 +1,10 @@
-function psdRoi = runPSDroi(funTs,W,K,mask,maskLabel,vecNorm)
+function psdRoi = runPSDroi(funTs,W,K,mask,maskLabel,volNorm)
 % Wrapper of the Chronux's mtspectrumc function for multitaper estimation
 % of pds spectra, compatible with MRI data imported by MRIread.m.
 %   Parameterization is simplified to the halfbandwidth parameter W only.
 %   Includes minimal detrending to avoid distortions from the low frquency
 %   edge.
-%   funTs is optionally normalized by dividing by the square of vecNorm,
+%   funTs is optionally normalized by dividing by the square of volNorm,
 %   which should be obtained from previously computed voxel-wise psd.
 %   psd are averaged within mask.
 if ~exist('maskLabel','var')
@@ -16,10 +16,13 @@ if isfield(funTs,'vol') && ~isempty(funTs.vol)
     if isfield(funTs,'vol2vec') && ~isempty(funTs.vol2vec)
         error('code that')
     else
-        if exist('vecNorm','var') && ~isempty(vecNorm)
-            tmp = vol2vec(funTs);
-            volNorm = nan(size(tmp.vol2vec));
-            volNorm(tmp.vol2vec) = vecNorm;
+        % if exist('vecNorm','var') && ~isempty(vecNorm)
+        if exist('volNorm','var') && ~isempty(volNorm)
+            % % tmp = vol2vec(funTs);
+            % % volNorm = nan(size(tmp.vol2vec));
+            % % volNorm(tmp.vol2vec) = vecNorm;
+            % volNorm = nan(size(funTs.vol,[1 2]));
+            % volNorm(:) = vecNorm;
         else
             tmp = vol2vec(funTs);
             volNorm = ones(size(tmp.vol2vec));
@@ -34,6 +37,7 @@ if any(all(funTs.vec==0,1))
     warning('Some voxels are all 0s. Adjust your mask to avoid later problems')
 end
 funTs.vec = funTs.vec ./ sqrt(vecNorm);
+
 
 
 %% Set parameters
@@ -84,12 +88,12 @@ funTs = dtrnd4psd(funTs);
 
 %% Perform the multitaper PSD estimation
 param.Fs = 1/tr;
-param.err = [0 0.05];
+param.err = [1 0.05];
 param.trialave = 1;
 if param.err(1)
-    [psd,f,psdErr] = mtspectrumc(funTs.vec, param);
+    [psd,~,f,psdErr] = mtspectrumc2(funTs.vec, param);
 else
-    [psd,f] = mtspectrumc(funTs.vec, param);
+    [psd,~,f] = mtspectrumc2(funTs.vec, param);
     psdErr = [];
 end
 

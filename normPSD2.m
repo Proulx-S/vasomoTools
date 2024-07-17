@@ -1,11 +1,31 @@
-function funPsdNorm = normPSD(funPsd,normMethod,mask,noiseRange,physRange)
+function mriOut = normPSD2(funPsd,mriOut,noiseRange)
 % normMethod: 'psdNoise_to1', 'psdAv_to1', 'psdNoise_toImAv', 'psdAv_toImAv' or 'none'
 funPsd = vol2vec(funPsd);
 if ~exist("noiseRange",'var') || isempty(noiseRange); noiseRangeFlag = 0; else; noiseRangeflag = 1; end
-if ~exist("physRange",'var') || isempty(physRange); physRangeFlag = 0; else; physRangeFlag = 1; end
-
+noiseRange(isinf(noiseRange)) = funPsd.psd.f(end);
 
 %% Compute noise floor
+noiseInd = logical(funPsd.psd.f>=noiseRange(1) & funPsd.psd.f<=noiseRange(2));
+noiseFloor = mean(conj(funPsd.vec(noiseInd,:,:,:)).*funPsd.vec(noiseInd,:,:,:),1);
+funPsd.psd.noiseFloor = sqrt(noiseFloor);
+
+if ~exist('mriOut','var') || isempty(mriOut)
+    %% Apply normalization to funPsd
+    funPsd.normFac = funPsd.psd.noiseFloor;
+    funPsd.vec = funPsd.vec./funPsd.normFac;
+    mriOut = funPsd;
+else
+    %% Apply normalization to mriOut
+    if ~isfield(mriOut,'imMean') || isempty(mriOut.imMean)
+        mriOut.imMean = mean(mriOut.vol,4);
+    end
+    mriOut.normFac = nan(size(funPsd.vol2vec));
+    mriOut.normFac(funPsd.vol2vec) = funPsd.psd.noiseFloor;
+    mriOut.vol = mriOut.vol./mriOut.normFac;
+end
+
+return
+
 if noiseRangeFlag && ~physRangeFlag
     noiseInd = logical(funPsd.psd.f>noiseRange(1) & funPsd.psd.f<noiseRange(2));
 elseif ~noiseRangeFlag && physRangeFlag

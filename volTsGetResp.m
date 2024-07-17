@@ -1,0 +1,140 @@
+function [out, info] = volTsGetResp(do,info,volTs,volAnat)
+if isempty(do)
+    do.loadIt = 0;
+    do.doIt   = 1;
+    do.saveIt = 0;
+end
+
+if ~exist('volAnat','var'); volAnat = []; end
+
+% if ~isfield(info,'K');                   info.K = []        ; end
+% if ~isfield(info,'win');               info.win = zeros(0,2); end
+% if ~isfield(info,'skipSvd');       info.skipSvd = 0         ; end
+% if ~isfield(info,'dtrndOrder'); info.dtrndOrder = []        ; end
+% if ~isfield(info,'onsets');   info.onsets = []        ; end
+% if isempty(info.onsets);   info.onsets = []        ; end
+% if ~isfield(info,'ondurList');   info.ondurList = []        ; end
+
+
+if ~isfield(volTs,'dsgn');   volTs.dsgn = []        ; end
+if ~isempty(volTs.dsgn); onsets = volTs.dsgn.onsets; end
+if ~isempty(volTs.dsgn); ondurs = volTs.dsgn.ondurs; end
+
+
+
+
+%% User variables
+outVar = 'volResp';
+stepLabel = 'event-related response processing';
+
+
+
+
+%%%%%%%%%%%%%%%%
+%% House keeping
+%%%%%%%%%%%%%%%%
+if isfield(info,'outDir'); outDir = info.outDir; else, outDir = info.preprocDir; end; if ~exist(outDir,'dir'); mkdir(outDir); end; stepFile = fullfile(outDir,[strjoin({['sub-' info.sub] ['ses-' info.ses] mfilename},'_')]);
+
+if exist('do','var') && ~isempty(do)
+    if isfield(do,'loadIt') && ~isempty(do.loadIt); loadIt = do.loadIt; else, loadIt=0; end
+    if isfield(do,'doIt')   && ~isempty(do.doIt);   doIt   = do.doIt;   else, doIt=0;   end
+    if isfield(do,'saveIt') && ~isempty(do.saveIt); saveIt = do.saveIt; else, saveIt=0; end
+else
+    loadIt = 0; doIt = 1; saveIt = 0;
+end
+
+if loadIt && doIt
+    warning(strjoin({'does not make sense to loadIt then doIt' 'Changing to' 'loadIt = 0' 'doIt   = 1' 'saveIt = 1'},newline)); loadIt = 0; doIt = 1; saveIt = 1;
+end
+if loadIt && saveIt
+    warning(strjoin({'does not make sense to loadIt then saveIt' 'Changing to' 'loadIt = 1' 'doIt   = 0' 'saveIt = 0'},newline)); loadIt = 1; doIt = 0; saveIt = 0;
+end
+
+tic; disp(' '); disp(' '); disp(repmat('-',1,length(stepLabel))); disp(upper(stepLabel)); disp(repmat('-',1,length(stepLabel)))
+
+if loadIt
+    if exist([stepFile '.mat'],'file')
+        disp(strjoin({[upper(stepLabel) ': loading from'] [stepFile '.mat']},newline)); load(stepFile); disp([upper(stepLabel) ': loaded'])
+    else
+        warning(strjoin({[stepFile '.mat'] 'does not exist' 'Changing to' 'loadIt = 0' 'doIt   = 1' 'saveIt = 1'},newline)); loadIt = 0; doIt = 1; saveIt = 1;
+    end
+end
+
+
+
+
+
+
+if doIt
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Do the processing here
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Mask
+if ~isempty(volAnat)
+    volTs = vol2vec(volTs);
+    for I = 1:length(volAnat)
+        if isfield(volAnat(I),'fun') && isfield(volAnat(I).fun,'mask') && isfield(volAnat(I).fun.mask,'crop') && ~isempty(volAnat(I).fun.mask.crop.vol)
+            % volTs(I) = applyMask(volTs(I),volAnat(I).fun.mask.crop.vol);
+
+            %%%crop
+            mask = volAnat(I).fun.mask.crop.vol;
+            if isfield(volAnat(I).fun.mask,'head') && ~isempty(volAnat(I).fun.mask.head)
+                %%%head
+                mask = mask & any(volAnat(I).fun.mask.head.mri.vol,4);
+            elseif isfield(volAnat(I).fun.mask,'brain') && ~isempty(volAnat(I).fun.mask.brain)
+                %%%brain
+                mask = mask & any(volAnat(I).fun.mask.brain.mri.vol,4);
+            end
+            %%%apply
+            volTs(I) = applyMask(volTs(I),mask);
+        end
+    end
+    % if isfield(volAnat,'fun') && isfield(volAnat.fun,'mask') && isfield(volAnat.fun.mask,'crop') && ~isempty(volAnat.fun.mask.crop.vol)
+    %     volTs = applyMask(volTs,volAnat.fun.mask.crop.vol);
+    % end
+end
+
+% % %% Add time
+% % volTs = addTime(volTs);
+% 
+% %% Normalize to thermal noise
+% % thermalNoiseRange = [0.5 inf];
+% % modeToRemove = 1:5;
+% % funTs = normPSD3(funTs,thermalNoiseRange,modeToRemove);
+% 
+% %% Detrend run-by-run
+% [volTs,~,info.dtrndOrder] = dtrnd2(volTs,[],[],info.dtrndOrder);
+% % volTsTmp = vec2vol(volTs);
+% % volTsTmp.vol = volTsTmp.vol - volTsTmp.imMean;
+% 
+% 
+% % volTs = vol2vec(volTs);
+
+
+param.nDummy = info.dummy;
+param.trDecon = 1;
+param.verbose = 1;
+force = 1;
+[files,fRun,fSes,fSes_echoCat,param] = getResp(volTs,volAnat,param,force);
+volResp.ts = MRIread(files.resp.f{1});
+volResp.tsOnBase = MRIread(files.respOnBase.f{1});
+volResp.base = MRIread(files.base.f{1});
+volResp.F  = MRIread(files.respF.f{1});
+volResp.Fq = MRIread(files.respF_fdr.f{1});
+volResp.vid = files.respOnBaseMovieHighBit.f{1};
+
+
+end
+
+
+
+
+%%%%%%%%%%%%%%%%
+%% House keeping
+%%%%%%%%%%%%%%%%
+if saveIt; disp(strjoin({[upper(stepLabel) ': saving to '] [stepFile '.mat']},newline)); tmp = whos(outVar); if tmp.bytes/1e9<2; save(stepFile,outVar); else, save(stepFile,outVar,'-v7.3'); end; disp([upper(stepLabel) ': saved']); end
+
+disp(repmat('-',1,length(stepLabel)+6)); disp([upper(stepLabel) ': DONE']); toc; disp(repmat('-',1,length(stepLabel)+6)); disp(' '); disp(' ');
+eval(['out = ' outVar '; clear ' outVar]);

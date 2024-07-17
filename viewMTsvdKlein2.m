@@ -4,10 +4,16 @@ if ~exist("imType",'var') || isempty(imType)
     imType = 'psd'; % svMag, svPhase or psd
 end
 
-tmp = strsplit(funPsd.fspec,filesep); tmp = strsplit(tmp{end-1},'_');
-sub = replace(tmp{contains(tmp,'sub-')},'sub-','');
-ses = replace(tmp{contains(tmp,'ses-')},'ses-','');
-run = replace(tmp{contains(tmp,'run-')},'run-','');
+if exist('funPsd','var') && ~isempty(funPsd)
+    tmp = strsplit(funPsd.fspec,filesep); tmp = strsplit(tmp{end-1},'_');
+    sub = replace(tmp{contains(tmp,'sub-')},'sub-','');
+    ses = replace(tmp{contains(tmp,'ses-')},'ses-','');
+    run = replace(tmp{contains(tmp,'run-')},'run-','');
+else
+    sub = '???';
+    ses = '???';
+    run = '???';
+end
 fpass = svdStruct.param.fpass;
 fLim = [0 2.5];
 K = svdStruct.param.tapers(2);
@@ -20,7 +26,7 @@ if ~exist('axIm','var') || isempty(axIm)
 else
     tmp = [axIm{:}]; tmp = [tmp.Title];
 end
-if ~any(contains({tmp.String},'timeseries mean'))
+if ~any(contains({tmp.String},'timeseries mean')) && exist('funPsd','var') && ~isempty(funPsd)
     figure('WindowStyle','docked');
     hTile = tiledlayout(6,1); hTile.Padding = 'tight'; hTile.TileSpacing = "tight";
     nexttile([5 1]);
@@ -80,7 +86,11 @@ for fInd = 1:length(peakFreq)
     [~,b] = min(abs(f - peakFreq(fInd)));
     figure('WindowStyle','docked');
     %%% Plot map
-    axIm{end+1} = axes(gcf,'Units',axIm{end}.Units,'Position',axIm{end}.Position);
+    if exist('axIm','var') && ~isempty(axIm)
+        axIm{end+1} = axes(gcf,'Units',axIm{end}.Units,'Position',axIm{end}.Position);
+    else
+        axIm{end+1} = axes(gcf);
+    end
     switch imType
         case 'psd'
             curIm = vec2vol(funPsd); curIm = curIm.vol(:,:,:,b);
@@ -119,10 +129,16 @@ for fInd = 1:length(peakFreq)
     axIm{end}.PlotBoxAspectRatio = [1 1 1]; axIm{end}.DataAspectRatio = [1 1 1];
     axIm{end}.XTick = []; axIm{end}.YTick = [];
     title(['sub-' sub '; ses-' ses '; run-' run ' K=' num2str(K) '; ' num2str(peakFreq(fInd),'%.3f') 'Hz'])
-    axis([axIm{end-1}.XLim axIm{end-1}.YLim])
+    if length(axIm)>1
+        axis([axIm{end-1}.XLim axIm{end-1}.YLim])
+    end
 
     %% Plot spectra
-    axes(gcf,'Units',axIm{end-1}.Parent.Children(1).Units,'Position',axIm{end-1}.Parent.Children(1).Position);
+    if length(axIm)>1
+        axes(gcf,'Units',axIm{end-1}.Parent.Children(1).Units,'Position',axIm{end-1}.Parent.Children(1).Position);
+    else
+        axes
+    end
     yyaxis left
     plot(funPsd.roi.f,funPsd.roi.psd); hold on
     axis tight

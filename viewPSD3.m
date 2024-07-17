@@ -1,4 +1,4 @@
-function [hF,tl,axSpec,maskC] = viewPSD2(funPsd,f0,mask,fpass,id,threshFlag)
+function [hF,tl,axSpec,maskC] = viewPSD3(funPsd,f0,mask,fpass,id,threshFlag)
 %% Prepare some stuff
 if ~exist("threshFlag",'var') || isempty(threshFlag)
     threshFlag = false;
@@ -16,8 +16,25 @@ else
 end
 if ~exist('f0','var')
     f0=0.1;
+    f0w = nan;
 else
-    f0 = sort(f0);
+    if iscell(f0)
+        f0c = nan(1,length(f0));
+        f0w = nan(1,length(f0));
+        for i = 1:length(f0)
+            f0c(i) = mean(f0{i});
+            if length(f0{i})==2
+                f0w(i) = diff(f0{i});
+            end
+        end
+        f0 = f0c; clear f0c
+    end
+    [f0,b] = sort(f0);
+    if exist('f0w','var')
+        f0w = f0w(b);
+    else
+        f0w = nan;
+    end
 end
 if ~exist('id','var')
     id = {};
@@ -40,7 +57,7 @@ if isfield(funPsd,'imMean') && ~all(size(funPsd.imMean)==1)
     ax = gca;
     ax.Colormap = gray;
     ax.YTick = []; ax.XTick = [];
-    ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+    ax.DataAspectRatio = [1 1 1];
     ax.CLim = prctile(im(:),[0 99]);
     title('timeseries mean')
 else
@@ -49,6 +66,16 @@ else
 end
 
 %% Mask
+if ~exist('mask','var') || isempty(mask)
+    if isfield(funPsd,'normFac') && ~isempty(funPsd.normFac)
+        mask = ~any(isnan(funPsd.normFac),6);
+    else
+        tmpPsd = vec2vol(funPsd);
+        mask = all(~isnan(tmpPsd.vol),4) & ~all(tmpPsd.vol==0,4);
+        clear tmpPsd
+    end
+end
+
 nexttile(2,[2 1])
 if isempty(maskC)
     ax = gca;
@@ -72,16 +99,23 @@ end
 %% Normalization
 % drawnow
 nexttile(3,[2 1])
-if isfield(funPsd.psd,'norm') && ~isfield(funPsd.psd.norm,'fact2')
+if ( isfield(funPsd.psd,'norm') && ~isfield(funPsd.psd.norm,'fact2') ) || isfield(funPsd,'normFac')
     normFlag = 1;
-    
-    normFact = nan([size(funPsd.vec,[3 4]) size(funPsd.vol2vec)]);
-    normFact(:,:,funPsd.vol2vec) = permute(funPsd.psd.norm.fact,[3 4 2 1]);
-    normFact = permute(normFact,[3 4 5 1 2]);
+
+    if isfield(funPsd.psd,'norm') & ~isfield(funPsd,'normFac')
+        normFact = nan([size(funPsd.vec,[3 4]) size(funPsd.vol2vec)]);
+        normFact(:,:,funPsd.vol2vec) = permute(funPsd.psd.norm.fact,[3 4 2 1]);
+        normFact = permute(normFact,[3 4 5 1 2]);
+    elseif ~isfield(funPsd.psd,'norm') & isfield(funPsd,'normFac')
+        normFact = funPsd.normFac;
+    else
+        dbstack; error('X');
+    end
+
     if ~isreal(normFact)
         normFact = conj(normFact).*normFact;
     end
-    imagesc(squeeze(mean(normFact,5)))
+    imagesc(squeeze(mean(normFact(:,:,:,:,:),5)))
     hold on
     if ~isempty(maskC)
         hMask2 = plot(maskC);
@@ -103,8 +137,10 @@ end
 %% f0
 f = funPsd.psd.f;
 allF0 = f0;
+allF0w = f0w;
 for fInd = 1:length(allF0)
     f0 = allF0(fInd);
+    f0w = allF0w(fInd);
     if fInd==1
         nexttile(4,[2 1])
     elseif fInd>5
@@ -114,14 +150,24 @@ for fInd = 1:length(allF0)
         nexttile(8+fInd-1,[2 1])
     end
     if size(funPsd.vec,2)>1
-        [~,f0Ind] = min(abs(f-f0'),[],2);
-        f0 = f(f0Ind);
+        if isnan(f0w)
+            [~,f0Ind] = min(abs(f-f0'),[],2);
+            f0 = f(f0Ind);
+        else
+            [~,f0l_ind] = min(abs(f-(f0-f0w/2)),[],2);
+            [~,f0u_ind] = min(abs(f-(f0+f0w/2)),[],2);
+            f0l = f(f0l_ind);
+            f0u = f(f0u_ind);
+            f0 = mean([f0l f0u]);
+            f0Ind = false(size(f));
+            f0Ind(f0l_ind:f0u_ind) = true;
+        end
         tmpPsd = vec2vol(funPsd);
-        tmpIm = squeeze(tmpPsd.vol(:,:,:,f0Ind));
+        tmpIm = tmpPsd.vol(:,:,:,f0Ind,:);
         if ~isreal(tmpIm)
             tmpIm = conj(tmpIm).*tmpIm;
         end
-        hIm = imagesc(tmpIm);
+        hIm = imagesc(mean(tmpIm(:,:,:,:),4));
         hold on
         if ~isempty(maskC)
             hMask3 = plot(maskC);
@@ -131,7 +177,7 @@ for fInd = 1:length(allF0)
         ax = gca;
         ax.YTick = []; ax.XTick = [];
         ax.ColorScale = 'log'; ax.Colormap = jet;
-        ax.PlotBoxAspectRatio = [1 1 1]; ax.DataAspectRatio = [1 1 1];
+        ax.DataAspectRatio = [1 1 1];
         if normFlag
             ylabel(colorbar,'normalized psd')
         else
@@ -152,7 +198,9 @@ for fInd = 1:length(allF0)
         if normFlag
             ax.CLim(1) = 1;
             if exist('mask','var') && ~isempty(mask)
-                ax.CLim(2) = max(tmpIm(logical(mask)));
+                sz = size(mask,[1 2 3]);
+                tmpMask = false(sz); tmpMask(ceil(sz(1)*0.1):round(sz(1)*0.9),ceil(sz(2)*0.1):round(sz(2)*0.9),ceil(sz(3)*0.1):round(sz(3)*0.9)) = true;
+                ax.CLim(2) = max(tmpIm(logical(mask)&tmpMask));
             end
         end
     else
@@ -196,8 +244,8 @@ else
     if ~isreal(tmpPsd.vec)
         tmpPsd.vec = conj(tmpPsd.vec).*tmpPsd.vec;
     end
-    psd = mean(tmpPsd.vec,2,'omitnan');
-    psd = mean(psd,4);
+    psd = mean(tmpPsd.vec(:,:),2);
+    % psd = mean(psd,4);
     W = funPsd.psd.w;
     h{end+1} = plot(f,squeeze(psd),'k'); legLabel{end+1} = 'mean spectrum';
     hold on
@@ -209,10 +257,10 @@ axis tight
 if exist('fpass','var') && ~isempty(fpass)
     ax.XLim = fpass;
 end
-yLim = [min(psd) max(psd)];
-if max(f)>3.5
-    yLim(1) = mean(psd(f>3.5));
-end
+yLim = [min(psd(2:end)) max(psd(2:end))];
+% if max(f)>3.5
+%     yLim(1) = mean(psd(f>3.5));
+% end
 yLim(1) = exp(log(yLim(1)) - range(log(yLim))*0.05);
 ylim(yLim);
 grid on
@@ -223,17 +271,26 @@ if normFlag
 else
     ylabel('raw psd')
 end
-allF0 = f0;
 for fInd = 1:length(allF0)
     f0 = allF0(fInd);
-    [~,f0Ind] = min(abs(f-f0'),[],2);
-    f0 = f(f0Ind);
-    if fInd==1
-        h{end+1} = plot(f0.*[1 1],yLim,':r'); legLabel{end+1} = 'f0';
-        h{end+1} = plot(f0+W.*[-1 1],yLim(1).*[1 1],'g','LineWidth',5); legLabel{end+1} = 'BW';
+    f0w = allF0w(fInd);
+    if ~isnan(f0w)
+        f0l = f0-f0w/2;
+        f0u = f0+f0w/2;
+        hPatch = patch([f0l f0u f0u f0l f0l], yLim([1 1 2 2 1]),[1 1 1]*0);
+        hPatch.EdgeColor = 'none';
+        hPatch.FaceAlpha = 0.12;
+        uistack(hPatch,'bottom')
     else
-        plot(f0.*[1 1],yLim,':r');
-        plot(f0+W.*[-1 1],yLim(1).*[1 1],'g','LineWidth',5);
+        [~,f0Ind] = min(abs(f-f0'),[],2);
+        f0 = f(f0Ind);
+        if fInd==1
+            h{end+1} = plot(f0.*[1 1],yLim,':r'); legLabel{end+1} = 'f0';
+            h{end+1} = plot(f0+W.*[-1 1],yLim(1).*[1 1],'g','LineWidth',5); legLabel{end+1} = 'BW';
+        else
+            plot(f0.*[1 1],yLim,':r');
+            plot(f0+W.*[-1 1],yLim(1).*[1 1],'g','LineWidth',5);
+        end
     end
 end
 f0 = allF0;
@@ -250,6 +307,24 @@ if iscell(id)
 else
     titleStr1 = {id};
 end
+if isempty(titleStr1{1})
+    titleStr1 = strsplit(funPsd.fspec,filesep);
+    label = 'sub-';
+    tmp = strsplit(titleStr1{find(contains(titleStr1,label),1)},'_'); tmp = strsplit(tmp{find(contains(tmp,label),1)},'-');
+    sub = tmp{2};
+    label = 'ses-';
+    tmp = strsplit(titleStr1{find(contains(titleStr1,label),1)},'_'); tmp = strsplit(tmp{find(contains(tmp,label),1)},'-');
+    ses = tmp{2};
+    label = 'run-';
+    tmp = strsplit(titleStr1{find(contains(titleStr1,label),1)},'_'); tmp = strsplit(tmp{find(contains(tmp,label),1)},'-');
+    run = tmp{2};
+    titleStr1 = {['sub-' sub]};
+    titleStr1{end+1} = ['ses-' ses];
+    if funPsd.nruns==1
+        titleStr1{end+1} = ['run-' run];   
+    end
+    titleStr1 = strjoin(titleStr1,'_');
+end
 if normFlag
     titleStr2 = {'normalized voxel-wise'};
 else
@@ -257,6 +332,10 @@ else
 end
 titleStr2{end+1} = ['W=' num2str(funPsd.psd.w,'%0.4f')];
 titleStr2{end+1} = ['K=' num2str(funPsd.psd.param.tapers(2))];
+if funPsd.nruns>1
+    titleStr2{end+1} = ['nRuns=' num2str(funPsd.nruns)];
+end
+
 titleStr2 = {strjoin(titleStr2,'; ')};
 
 titleStr = [titleStr1 titleStr2];
