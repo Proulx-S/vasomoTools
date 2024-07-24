@@ -84,7 +84,13 @@ param.onsetList = onsetList;
 param.durList = durList;
 
 if param.win(1)==inf; skipGram = true; skipTrialGram = true; else skipGram = false; skipTrialGram = false; end
-if isempty(param.onsetList); skipTrialGram = true; end
+if isempty(param.onsetList)
+    skipTrialGram = true;
+else
+    if all((size(param.onsetList)==1)==[1 0])
+        dbstack; error('onsetList must be a column vector')
+    end
+end
 
 
 % if length(param.win)>2
@@ -522,7 +528,7 @@ if ~exist('cohFrange','var'); cohFrange = []; end
 if isempty(nShuf);         nShuf = 0; end
 if isempty(nRun);           nRun = 1; end
 if isempty(cohFrange); cohFrange = [0 inf]; end
-orderWin = -1;
+orderWin = 0;
 % skip.gram = any(ismember(param.win(2),[0 inf nan]));
 for runInd = 1:nRun
     if verbose && nRun>1; disp(['---Run ' num2str(runInd) '/' num2str(nRun) '---']); end
@@ -823,7 +829,7 @@ for runInd = 1:nRun
         NFFT=max(2^(nextpow2(N*E)+pad),N*E);
         [f,fInd]=getfgrid(Fs,NFFT,[0 Fs/2]);
         f = permute(f,[1 3 4 5 2 6 7 8]); % frequencies[time x trial x run x taper x freq x vox x window x mode]
-        [Nf,Ef,Rf,Kf,Ff,Vf,Wf] = size(f);
+        [Nf,Ef,Rf,Kf,Ff,Vf,Wf,Mf] = size(f);
         F = Ff;
 
 
@@ -847,7 +853,7 @@ for runInd = 1:nRun
         %%% loop over windows
         for wInd = 1:W
             %%% Compute J
-            ind  = w(:,:,:,:,:,:,wInd);
+            ind  = w(:,:,:,:,:,:,wInd,:);
             tWin = reshape(funTs.t(ind,:,:,:),size(ind)); tWin = tWin([1 end],:);
             d = funTs.vec(ind,:,:,:);   % [time  x vox x taper x run               ]
             d = permute(d,[3 2 4 1]);   % [taper x vox x run   x time*trial        ]
@@ -857,27 +863,31 @@ for runInd = 1:nRun
                 d = d - mean(d,1);
             end
             tp = tp;
-            t = t; % adjust t here for sub-tr stimulus onsets
+            t = t; %!!!!!!!!!!!!!!! adjust t here for sub-tr stimulus onsets
+
+
+
+            % dbstack; error('the error is somewhere here: in tp,t or f, or within getJ2')
             J = getJ2(d,tp,t,f)/Fs; % [time x trial x run x taper x freq x vox x window]
             %                         [N      E       R     K       F      V     W]
 
             %%% Compute psd at each trial
-            res.trialGram.PSD(:,:,:,:,:,:,wInd)    = mean(  conj(J).*J  ,4);
+            res.trialGram.PSD(:,:,:,:,:,:,wInd,:)    = mean(  conj(J).*J  ,4); % Compute power then average across tapers...
             %%% Compute psd averaged across trials
-            res.trialGram.PSDeav(:,:,:,:,:,:,wInd)   = mean(  res.trialGram.PSD(:,:,:,:,:,:,wInd)  ,2);
+            res.trialGram.PSDeav(:,:,:,:,:,:,wInd,:)   = mean(  res.trialGram.PSD(:,:,:,:,:,:,wInd,:)  ,2); % then average across trials.
             %%% Compute psd phase-coherently averaged across trials
-            res.trialGram.PSDepc(:,:,:,:,:,:,wInd) = mean(  conj(mean(J,2)).*mean(J,2)  ,4);
+            res.trialGram.PSDepc(:,:,:,:,:,:,wInd,:) = mean(  conj(mean(J,2)).*mean(J,2)  ,4); % Average across trials then compute power then average across tapers.
 
 
             if K > 1
                 %%% Compute coherence at each trial
-                dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
+                dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'M'};
                 prm = [ 6   4   2   1   3   5   7   8  ];
                 dim = strjoin(dim(prm),' ');
-                j = permute(J,prm); %[V K E N R F W Mk]
-                j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
+                j = permute(J,prm); %[V K E N R F W M]
+                j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*M]
                 [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
-                coh = s.^2./sum(s.^2,1); % coherence[Mk V E*N*R*F*W]
+                coh = s.^2./sum(s.^2,1); % coherence[M V E*N*R*F*W]
                 coh = reshape(coh,[M 1 E 1 R F 1]); % [M V E N R F W]
                 %       1   2   3   4   5   6   7   8
                 dim = {'M' 'V' 'E' 'N' 'R' 'F' 'W' 'K'};
@@ -895,14 +905,14 @@ for runInd = 1:nRun
                 prm = [ 6   4   2   1   3   5   7   8  ];
                 dim = strjoin(dim(prm),' ');
                 j = permute(mean(J,2),prm); %[V K E N R F W Mk]
-                j = reshape(j,[V K 1*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
-                [u,s,v] = pagesvd(j,'econ','vector'); % s[Mk V E*N*R*F*W]
-                coh = s.^2./sum(s.^2,1); % coherence[Mk V E*N*R*F*W]
-                coh = reshape(coh,[M 1 1 1 R F 1]); % [Mk V E N R F W]
+                j = reshape(j,[V K 1*1*R*F*1*1]); %[V K E*N*R*F*W*M]
+                [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                coh = s.^2./sum(s.^2,1); % coherence[M V E*N*R*F*W]
+                coh = reshape(coh,[M 1 1 1 R F 1]); % [M V E N R F W]
                 dim = {'Mk' 'V' 'E' 'N' 'R' 'F' 'W' 'K'};
                 prm = [ 2    4   3   6   5   7   8   1 ];
                 dim = strjoin(dim(prm),' ');
-                coh = permute(coh,prm); %[V N E F R W K Mk]
+                coh = permute(coh,prm); %[V N E F R W K M]
                 res.trialGram.COHepc(:,:,:,:,:,:,wInd,:) = coh;
             end
 

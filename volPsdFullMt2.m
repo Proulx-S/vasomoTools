@@ -13,7 +13,9 @@ if ~isfield(info,'skipSvd');       info.skipSvd = 0         ; end
 if ~isfield(info,'dtrndOrder'); info.dtrndOrder = []        ; end
 if ~isfield(info,'onsetList');   info.onsetList = []        ; end
 if ~isfield(info,'ondurList');   info.ondurList = []        ; end
+if ~isfield(info,'perm');             info.perm = []         ; end
 
+if isempty(info.perm); info.perm = 0; end
 
 
 %% User variables
