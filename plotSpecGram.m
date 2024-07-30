@@ -1,4 +1,4 @@
-function [ax,F] = plotSpecGram(volPsd,timeLabel,metricLabel,H)
+function [ax,F] = plotSpecGram(volPsd,timeLabel,metricLabel,H,volTs,respQthresh)
 if ~exist('H','var'); H = [];                             end
 if isempty(H);        H = figure('WindowStyle','docked'); end
 
@@ -6,9 +6,12 @@ if isfield(volPsd,'dsgn') && isfield(volPsd.dsgn,'f0'); f0 = volPsd.dsgn.f0; els
 
 if ~exist('timeLabel','var');     timeLabel = [];                             end
 if ~exist('metricLabel','var'); metricLabel = [];                             end
+if ~exist('volTs','var');             volTs = []; end
+if ~exist('respQthresh','var'); respQthresh = []; end
 if isempty(timeLabel);            timeLabel = 'gram'; end % 'gram' 'trialGram' 'trialGramMD'
 if isempty(metricLabel);        metricLabel = 'psd'; end % 'psd' 'psdEPC' 'coh' 'cohEPC' 'cohEK'
-
+if isempty(respQthresh);        respQthresh = 0.05; end % 'psd' 'coh'
+threshAvFlag = ismember(metricLabel,{'psd' 'psdEPC'}) && ~isempty(volTs) && isfield(volTs,'resp') && ~isempty(respQthresh) && respQthresh~=inf && respQthresh~=1;
 
 switch class(H)
     case 'matlab.graphics.layout.TiledChartLayout'
@@ -98,7 +101,11 @@ end
 
 
 %% spatial average
-vec = permute(mean(vec(:,:,:,:,:,:,:,1),6),[5 7 2 8 1 3 4 6]);
+if threshAvFlag
+    vec = permute(mean(vec(:,:,:,:,:,volTs.resp.Fq.vol(volPsd.vol2vec)<=respQthresh,:,1),6),[5 7 2 8 1 3 4 6]);
+else
+    vec = permute(mean(vec(:,:,:,:,:,:,:,1),6),[5 7 2 8 1 3 4 6]);
+end
 f   = permute(mt.f       ,[5 7 2 8 1 3 4 6]);
 Fs  = mt.param.Fs;
 t   = permute(mean(mt.t(:,1,:,:,:,:,:,1),1),[5 7 2 8 1 3 4 6]);
@@ -126,12 +133,16 @@ end
 % if contains(timeLabel,'trial')
 %     mt.t(:,1,:,:,:,:,:)
 % else
-runDur = volPsd.nframes/mt.param.Fs;
+runDur = volPsd.t(end);
 % end
 xlim([0 runDur])
 
 paramStr = ['(K=' num2str(K) '; 2W=' num2str(W*2,'%0.4f') 'Hz; T=' num2str(T,'%0.2f') 'sec; TW=' num2str(TW) ')'];
-title([label ' ' paramStr])
+if threshAvFlag
+    title([label ' ' paramStr ' averaged across voxels with Q<=' num2str(respQthresh,'%0.2f')])
+else
+    title([label ' ' paramStr])
+end
 
 
 cLim = vec(f>0.01,:);
@@ -148,7 +159,7 @@ addW([],mt)
 
 
 if isfield(volPsd,'psdTrialGram') && ~isempty(volPsd.psdTrialGram)
-    addFreq([],volPsd.psdTrialGram.onsetList,volPsd.psdTrialGram.durList)
+    addFreq([],volPsd.psdTrialGram.onsetList,volPsd.psdTrialGram.durList,1)
 end
 
 if ~isempty(f0)

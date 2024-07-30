@@ -885,12 +885,13 @@ for E = 1:size(fList,2)
         %% Define files
         fIn = fList{I,E};
         fOut = fIn;
-        fStat = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.nii.gz');
-        fMat = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.1D');
-        fStim = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_startTime.1D');
-        fResp = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resp.nii.gz');
-        fFit = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_fit.nii.gz');
-        fResid = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resid.nii.gz');
+        fStat   = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.nii.gz');
+        fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.1D');
+        fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.fig');
+        fStim   = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_startTime.1D');
+        fResp   = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resp.nii.gz');
+        fFit    = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_fit.nii.gz');
+        fResid  = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resid.nii.gz');
 
         fRun(I,E).fResp = fResp;
         fRun(I,E).fFit = fFit;
@@ -917,7 +918,7 @@ for E = 1:size(fList,2)
                     dbstack; error('please specify deconvolution time resolution (param.funDsgn.trDecon)');
                 end
             end
-            [tmp,n] = afniCmd(fIn,fMask,fStim,param.nDummy,startSeq,condSeq,dt,param.funDsgn.label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose);
+            [tmp,n] = afniCmd(fIn,fMask,fStim,param.nDummy,startSeq,condSeq,dt,param.funDsgn.label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved);
             cmdTmp = [cmdTmp tmp];
 
             cmdTmp{end+1} = ['echo ''   ''' fResp];
@@ -937,57 +938,68 @@ for E = 1:size(fList,2)
     end
 end
 
-%% Extract and plot design matrix
-if verbose>1
-    mri = MRIread(fIn,1); trMri = mri.tr/1000; nFrame = mri.nframes-param.nDummy; clear mri
-    cmdX = cmdTmp;
-    cmdX{contains(cmdTmp,'-input ')} = ['-nodata ' num2str(nFrame) ' ' num2str(trMri,'%f') ' \'];
-    ind = find(contains(cmdX,' \'),1,'last');
-    cmdX = [cmdX(1:ind) {'-x1D_stop \'} cmdX(ind+1:end)];
-    % cmdX = [cmdX(1:end-2) {'-x1D_stop \'} cmdX(end-1:end)];
-    cmdX{end} = [cmdX{end}];
-    % [status,cmdout] = system(strjoin(cmdX,newline));
-    [status,cmdout] = system(strjoin(cmdX,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR'); dbstack; error(cmdout); error('x'); end
-    cmdX = {srcAfni};
-    cmdX{end+1} = ['1dcat ' fMat];
-    % [status,cmdout] = system(strjoin(cmdX,newline));
-    [status,cmdout] = system(strjoin(cmdX,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR'); dbstack; error(cmdout); error('x'); end
-    param.funDsgn.mat = str2num(cmdout);
-    figure('WindowStyle','docked');
-    pInd = false([1 size(param.funDsgn.mat,2)]);
-    if TENTzeroFlag
-        pInd(1:(size(param.funDsgn.mat,2) - n + 2)) = true;
-    else
-        pInd(1:(size(param.funDsgn.mat,2) - n)) = true;
-    end
-    % imagesc(param.funDsgn.mat(:,pInd:end)); colormap gray
-    imagesc(param.funDsgn.mat); colormap gray
-    ax = gca;
-    ax.XTick = 1:size(param.funDsgn.mat,2);
-    ax.XTickLabel(pInd) = cell(1,nnz(pInd));
-    ax.XTickLabel(~pInd) = cellstr(num2str(((0:nnz(~pInd)-1)*dt)','%0.1f'));
-    clim([-1 1])
-end
+% %% Extract and plot design matrix
+% if verbose>1
+%     mri = MRIread(fIn,1); trMri = mri.tr/1000; nFrame = mri.nframes-(param.nDummy - param.nDummyRemoved); clear mri
+%     cmdX = cmdTmp;
+%     cmdX{contains(cmdTmp,'-input ')} = ['-nodata ' num2str(nFrame) ' ' num2str(trMri,'%f') ' \'];
+%     ind = find(contains(cmdX,' \'),1,'last');
+%     cmdX = [cmdX(1:ind) {'-x1D_stop \'} cmdX(ind+1:end)];
+%     % cmdX = [cmdX(1:end-2) {'-x1D_stop \'} cmdX(end-1:end)];
+%     cmdX{end} = [cmdX{end}];
+%     % [status,cmdout] = system(strjoin(cmdX,newline));
+%     [status,cmdout] = system(strjoin(cmdX,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR'); dbstack; error(cmdout); error('x'); end
+%     cmdX = {srcAfni};
+%     cmdX{end+1} = ['1dcat ' fMat];
+%     % [status,cmdout] = system(strjoin(cmdX,newline));
+%     [status,cmdout] = system(strjoin(cmdX,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR'); dbstack; error(cmdout); error('x'); end
+%     param.funDsgn.mat = str2num(cmdout);
+%     figure('WindowStyle','docked');
+%     pInd = false([1 size(param.funDsgn.mat,2)]);
+%     if TENTzeroFlag
+%         pInd(1:(size(param.funDsgn.mat,2) - n + 2)) = true;
+%     else
+%         pInd(1:(size(param.funDsgn.mat,2) - n)) = true;
+%     end
+%     % imagesc(param.funDsgn.mat(:,pInd:end)); colormap gray
+%     imagesc(param.funDsgn.mat); colormap gray
+%     ax = gca;
+%     ax.XTick = 1:size(param.funDsgn.mat,2);
+%     ax.XTickLabel(pInd) = cell(1,nnz(pInd));
+%     ax.XTickLabel(~pInd) = cellstr(num2str(((0:nnz(~pInd)-1)*dt)','%0.3f'));
+%     clim([-1 1])
+% end
 
 %% Run afni command
 cmd = strjoin(cmd,newline); % disp(strjoin(cmd,newline))
 [status,cmdout] = system(cmd,'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR'); dbstack; error(cmdout); error('x'); end
 
 % Extract and plot design matrix
-if verbose>1
-    % dt = trStim;
-    cmdX = {srcAfni};
-    cmdX{end+1} = ['1dcat ' fMat];
-    [status,cmdout] = system(strjoin(cmdX,newline));
-    param.funDsgn.mat = str2num(cmdout);
-    figure('WindowStyle','docked');
-    imagesc(param.funDsgn.mat); colormap gray
-    ax = gca;
-    ax.XTick = 1:size(param.funDsgn.mat,2);
-    ax.XTickLabel(pInd) = cell(1,nnz(pInd));
-    ax.XTickLabel(~pInd) = cellstr(num2str(((0:nnz(~pInd)-1)*dt)','%0.1f'));
-    clim([-1 1])
+% dt = trStim;
+hMat = figure('Visible','off');
+cmdX = {srcAfni};
+cmdX{end+1} = ['1dcat ' fMat];
+[status,cmdout] = system(strjoin(cmdX,newline));
+param.funDsgn.mat = str2num(cmdout);
+pInd = false([1 size(param.funDsgn.mat,2)]);
+if TENTzeroFlag
+    pInd(1:(size(param.funDsgn.mat,2) - n + 2)) = true;
+else
+    pInd(1:(size(param.funDsgn.mat,2) - n)) = true;
 end
+imagesc(param.funDsgn.mat); colormap gray
+ax = gca;
+ax.XTick = 1:size(param.funDsgn.mat,2);
+ax.XTickLabel(pInd) = cell(1,nnz(pInd));
+ax.XTickLabel(~pInd) = cellstr(num2str(((0:nnz(~pInd)-1)*dt)','%0.3f'));
+clim([-1 1])
+set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')'); 
+savefig(hMat,fMatFig,'compact')
+if verbose>1
+    hMat.Visible = 'on';
+    hMat.WindowStyle = 'docked';
+end
+
 
 
 
@@ -996,6 +1008,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
 cmd = {srcAfni};
 if size(fList,1)>1
+    dbstack; error('double-check that')
     for E = 1:size(fList,2)
 
         %% Define files
@@ -1005,6 +1018,7 @@ if size(fList,1)>1
 
         fStat = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.nii.gz');
         fMat = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.1D');
+        fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.fig');
         fStim = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_startTime.1D');
         fResp = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resp.nii.gz');
         fFit = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_fit.nii.gz');
@@ -1068,13 +1082,24 @@ else
 end
 
 
-function [cmd,n] = afniCmd(fIn,fMask,fStim,nDummy,startSeq,condSeq,dt,label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose)
+function [cmd,n] = afniCmd(fIn,fMask,fStim,nDummy,startSeq,condSeq,dt,label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose,nDummyRemoved)
+if ~exist('nDummyRemoved','var'); nDummyRemoved = []; end
+if isempty(nDummyRemoved);        nDummyRemoved = nDummy; warning('param.nDummyRemoved not specified, assuming param.nDummyRemoved = param.nDummy'); end
+if nDummyRemoved && nDummyRemoved~=nDummy; dbstack; error('param.nDummyRemoved specified, but does not match param.nDummy'); end
 cmd = {'3dDeconvolve -overwrite \'};
 % cmdTmp{end+1} = ['-force_TR ' num2str(trStim) ' \'];
 if iscell(fIn)
-    cmd{end+1} = ['-input ' strjoin(fIn,' ') '[' num2str(nDummy) '..$] \'];
+    if nDummyRemoved
+        cmd{end+1} = ['-input ' strjoin(fIn,' ') ' \'];
+    else
+        cmd{end+1} = ['-input ' strjoin(fIn,' ') '[' num2str(nDummy) '..$] \'];
+    end
 else
-    cmd{end+1} = ['-input ' fIn '[' num2str(nDummy) '..$] \'];
+    if nDummyRemoved
+        cmd{end+1} = ['-input ' fIn ' \'];
+    else
+        cmd{end+1} = ['-input ' fIn '[' num2str(nDummy) '..$] \'];
+    end
 end
 if ~isempty(fMask)
     cmd{end+1} = ['-mask ' fMask ' \'];
@@ -1096,12 +1121,17 @@ cmd{end+1} = ['-stim_label 1 ' label{1} ' \'];
 
 % write design to file
 fido = fopen(fStim, 'w');
-for i = 1:length(fIn)
+if iscell(fIn)
+    for i = 1:length(fIn)
+        fprintf(fido,'%.3f ',startSeq(condSeq==1));
+        fprintf(fido,'\n');
+    end
+else
     fprintf(fido,'%.3f ',startSeq(condSeq==1));
     fprintf(fido,'\n');
 end
 fclose(fido);
-deconWin = mode(diff(startSeq(condSeq==1)));
+deconWin = min(diff(startSeq(condSeq==1)));
 deconWin = floor(deconWin/dt)*dt;
 b = 0;
 c = deconWin-dt;

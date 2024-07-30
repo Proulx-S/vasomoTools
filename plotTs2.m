@@ -1,18 +1,21 @@
-function [ax,F] = plotTs2(volTs,H,onsets,ondurs,volAnat,roiInd)
-if ~exist('H','var');            H = []; end
-if isempty(H);                   H = figure('WindowStyle','docked'); end
-if ~exist('onsets','var');  onsets = []; end
-if ~exist('ondurs','var');  ondurs = []; end
-if ~exist('roiInd','var');  roiInd = []; end
-if ~exist('volAnat','var'); volRoi = [];
-                           volMask = [];
+function [ax,F] = plotTs2(volTs,H,onsets,ondurs,volAnat,roiInd,respQthresh)
+if ~exist('H','var');                      H = []; end
+if isempty(H);                             H = figure('WindowStyle','docked'); end
+if ~exist('onsets','var');            onsets = []; end
+if ~exist('ondurs','var');            ondurs = []; end
+if ~exist('roiInd','var');            roiInd = []; end
+if ~exist('respQthresh','var'); respQthresh = []; end
+if ~exist('volAnat','var');          volAnat = []; end
+if isempty(respQthresh);         respQthresh = 0.05; end
+if isempty(volAnat);                  volRoi = [];
+                                     volMask = [];
 elseif ~isempty(roiInd)
-                            volRoi = volAnat; clear volAnat
-                           volMask = [];
+                                      volRoi = volAnat; clear volAnat
+                                     volMask = [];
 else
-                            volRoi = [];
-                           volMask = volAnat; clear volAnat
-                   volMask.mri.vol = any(volMask.mri.vol,4);
+                                      volRoi = [];
+                                     volMask = volAnat; clear volAnat
+                             volMask.mri.vol = any(volMask.mri.vol,4);
 end
 
 
@@ -54,7 +57,11 @@ end
 %     ts = volTs.vec;
 %     ts = mean(ts(:,q<0.001),2);
 % else
+if isfield(volTs,'resp') && (respQthresh~=inf || respQthresh~=1)
+    ts = squeeze(mean(volTs.vec(:,volTs.resp.Fq.vol(volTs.vol2vec)<=respQthresh),2));
+else
     ts = squeeze(mean(volTs.vec,2));
+end
 % end
 plot(squeeze(volTs.t),ts,'k')
 grid on
@@ -64,10 +71,15 @@ ylabel('MR signal (a.u.)')
 
 
 %% Add response if available
-if isfield(volTs,'resp')
+
+if ~isempty(volTs) && isfield(volTs,'resp')
     hold on
     ts = permute(volTs.resp.ts.vol,[4 1 2 3]);
-    ts = mean(ts(:,volTs.vol2vec),2);
+    if respQthresh~=inf && respQthresh~=1
+        ts = mean(ts(:,volTs.resp.Fq.vol<=respQthresh),2);
+    else
+        ts = mean(ts(:,volTs.vol2vec),2);
+    end
     % %%%% weighted average
     % weights = volTs.resp.F.vol;
     % tmp = weights(weights~=0); tmp = tmp - min(tmp); tmp = tmp./mean(tmp);
@@ -112,7 +124,12 @@ if ~isempty(volMask)
 elseif ~isempty(volRoi)
     dbstack; error('code that');
 end
-title(['timeseries (' strjoin(paramStr,'; ') ')'])
+
+if ~isempty(volTs) && isfield(volTs,'resp') && (respQthresh~=inf && respQthresh~=1)
+    title(['timeseries (' strjoin(paramStr,'; ') ') averaged across voxels with Q<=' num2str(respQthresh,'%0.2f')])
+else
+    title(['timeseries (' strjoin(paramStr,'; ') ')'])
+end
 
 
 

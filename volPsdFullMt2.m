@@ -1,4 +1,4 @@
-function [out, info] = volPsdFullMt2(do,info,volTs,volAnat)
+function [out, info] = volPsdFullMt2(do,info,volTs,volAnat,volPsd)
 if isempty(do)
     do.loadIt = 0;
     do.doIt   = 1;
@@ -6,6 +6,7 @@ if isempty(do)
 end
 
 if ~exist('volAnat','var'); volAnat = []; end
+if ~exist('volPsd','var');   volPsd = []; end % for purpose of a second-step analysis using a mask derived from the first-step analysis
 
 if ~isfield(info,'K');                   info.K = []        ; end
 if ~isfield(info,'win');               info.win = zeros(0,2); end
@@ -79,6 +80,18 @@ if ~isempty(volAnat)
                 mask = mask & volAnat(I).fun.mask.head.mri.vol;
             elseif isfield(volAnat(I).fun.mask,'brain')
                 mask = mask & volAnat(I).fun.mask.brain.mri.vol;
+            end
+
+            if ~isempty(volPsd)
+                threshPrctl = 99;
+                Mi = 1;
+                [~,Fi] = min(abs(volPsd.svd.f - 1/mean(diff(volPsd.dsgn.onsets))));
+                threshMask = false(size(volPsd.vol2vec));
+                threshMask(volPsd.vol2vec) = abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi))>prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl);
+                % figure('WindowStyle','docked');
+                % imagesc(mask>prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl))
+                % histogram(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi))); xline(prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl))
+                mask = mask & threshMask;
             end
 
             %%%apply
@@ -201,7 +214,7 @@ volPsd.psd.fspec = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' 
 MRIwrite(tmp,volPsd.psd.fspec);
 
 %%% Coherence (first singular vector)
-if isfield(volPsd.svd,'spSV')
+if isfield(volPsd.svd,'spSV') && ~isempty(volPsd.svd.spSV)
     volPsd.vec = permute(abs(volPsd.svd.spSV(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
     volPsd.nframes = size(volPsd.vec,1);
     volPsd.tr = mean(diff(volPsd.svd.f))*1000;

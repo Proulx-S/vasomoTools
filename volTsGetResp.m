@@ -114,7 +114,22 @@ end
 
 
 param.nDummy = info.dummy;
-param.trDecon = 1;
+param.nDummyRemoved = param.nDummy;
+if volTs.tr/1000 ~= volTs.dsgn.dt
+    volTs.tr/1000 
+    diff(volTs.dsgn.onsets)
+    volTs.dsgn.onsets / (volTs.tr/1000)
+    volTs.dsgn.onsets / 4
+    warning(strjoin({''...
+        ['volume TR   =  ' sprintf('%7.3f ',volTs.tr/1000) 'sec']...
+        ['stim dt     =  ' sprintf('%7.3f ',volTs.dsgn.dt) 'sec']...
+        ['stim onsets = [' sprintf('%7.3f ',volTs.dsgn.onsets) ']sec']...
+        ['            = [' sprintf('%7.3f ',(volTs.dsgn.onsets / (volTs.tr/1000))) ']vol']...
+        'Defaulting to deconvolution TR = 1sec'},newline))
+    param.trDecon = 1;
+else
+    param.trDecon = volTs.tr/1000; %volTs.tr/1000/4; %1
+end
 param.verbose = 1;
 force = 1;
 [files,fRun,fSes,fSes_echoCat,param] = getResp(volTs,volAnat,param,force);
