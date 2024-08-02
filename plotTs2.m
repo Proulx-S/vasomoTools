@@ -4,9 +4,9 @@ if isempty(H);                             H = figure('WindowStyle','docked'); e
 if ~exist('onsets','var');            onsets = []; end
 if ~exist('ondurs','var');            ondurs = []; end
 if ~exist('roiInd','var');            roiInd = []; end
-if ~exist('respQthresh','var'); respQthresh = []; end
+if ~exist('respQthresh','var');  respQthresh = []; end
 if ~exist('volAnat','var');          volAnat = []; end
-if isempty(respQthresh);         respQthresh = 0.05; end
+if isempty(respQthresh);         respQthresh = 1; end % respQthresh = 1 means don't threshold
 if isempty(volAnat);                  volRoi = [];
                                      volMask = [];
 elseif ~isempty(roiInd)
@@ -135,9 +135,13 @@ end
 
 if isempty(onsets) && isfield(volTs,'dsgn') && isfield(volTs.dsgn,'onsets')
     onsets = volTs.dsgn.onsets;
+elseif isempty(onsets) && isfield(volTs,'dsgn') && isfield(volTs.dsgn,'onsetList')
+    onsets = volTs.dsgn.onsetList';
 end
 if isempty(ondurs) && isfield(volTs,'dsgn') && isfield(volTs.dsgn,'ondurs')
     ondurs = volTs.dsgn.ondurs;
+elseif isempty(ondurs) && isfield(volTs,'dsgn') && isfield(volTs.dsgn,'ondurList')
+    ondurs = volTs.dsgn.ondurList';
 end
 
 

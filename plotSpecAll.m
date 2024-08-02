@@ -1,7 +1,8 @@
-function plotSpecAll(volPsd,volTs,respQthresh)
+function plotSpecAll(volPsd,volTs,volResp,respQthresh)
+saveFlag = 1;
 
 if ~exist('respQthresh','var'); respQthresh = []; end
-if isempty(respQthresh);        respQthresh = 0.05; end % 'psd' 'coh'
+if isempty(respQthresh);        respQthresh = 1; end % respQthresh = 1 means don't threshold
 
 Fpsd = figure('WindowStyle','docked');
 HtPsd = tiledlayout(8,1); HtPsd.TileSpacing = 'tight'; HtPsd.Padding = 'tight';
@@ -14,14 +15,15 @@ axPsd{end+1} = plotSpecGram(volPsd,'trialGram'  ,'psdEPC',HtPsd,volTs,respQthres
 axPsd{end+1} = nexttile;
 axPsd{end+1} = plotSpecGram(volPsd,'trialGramMD','psd'   ,HtPsd,volTs,respQthresh);
 axPsd{end+1} = plotSpecGram(volPsd,'trialGramMD','psdEPC',HtPsd,volTs,respQthresh);
-cLim = get([axPsd{3:5}],'CLim'); cLim = cat(1,cLim{:}); cLim = [min(cLim(:)) max(cLim(:))];
-set([axPsd{3:5}],'CLim',cLim);
-cLim = get([axPsd{7:8}],'CLim'); cLim = cat(1,cLim{:}); cLim = [min(cLim(:)) max(cLim(:))];
-set([axPsd{7:8}],'CLim',cLim);
+% cLim = get([axPsd{3:5}],'CLim'); cLim = cat(1,cLim{:}); cLim = [min(cLim(:)) max(cLim(:))];
+% set([axPsd{3:5}],'CLim',cLim);
+% cLim = get([axPsd{7:8}],'CLim'); cLim = cat(1,cLim{:}); cLim = [min(cLim(:)) max(cLim(:))];
+% set([axPsd{7:8}],'CLim',cLim);
 
-[~,b,~] = fileparts(replace(volPsd.fspec,'.nii.gz',''));
+[~,b,~] = fileparts(fileparts(volPsd.fspec));
+% [~,b,~] = fileparts(replace(volPsd.fspec,'.nii.gz',''));
 b = strsplit(b,'_');
-title(HtPsd,b{1})
+title(HtPsd,strjoin(b(1:3)))
 
 
 Fcoh = figure('WindowStyle','docked');
@@ -73,4 +75,13 @@ end
 cLim = get([axCoh{7:8}],'CLim'); cLim = cat(1,cLim{:}); cLim = [min(cLim(:)) max(cLim(:))];
 set([axCoh{7:8}],'CLim',cLim);
 
-title(HtCoh,b{1})
+% title(HtCoh,b{1})
+title(HtCoh,strjoin(b(1:3)))
+
+
+%% save
+if saveFlag
+    [a,b,~] = fileparts(fileparts(volPsd.fspec));
+    saveas(Fpsd,fullfile(a,[b '_tPsd.fig']))
+    saveas(Fcoh,fullfile(a,[b '_tCoh.fig']))
+end

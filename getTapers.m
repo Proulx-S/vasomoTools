@@ -3,7 +3,7 @@ if ~exist('t','var'); t = []; end
 
 [TW,W,K] = K2W(N*tr,K,0);
 
-if isempty(t)
+if isempty(t) || max(abs(diff(t,2)))<1e-10
     [tp,eigs] = dpsschk([TW K],N,1/tr); % check tapers
     eigs = permute(eigs,[2 1]);
     % t = permute(0:tr:((N-1)*tr),[2 1]);

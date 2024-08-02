@@ -24,8 +24,20 @@ if ~exist('mask','var'); mask = []; end
 if ~exist('onsets','var'); onsets = []; end
 if ~exist('ondurs','var'); ondurs = []; end
 
-if isempty(onsets); onsets = funTs.dsgn.onsets; end
-if isempty(ondurs); ondurs = funTs.dsgn.ondurs; end
+if isempty(onsets)
+    if isfield(funTs.dsgn,'onsets')
+        onsets = funTs.dsgn.onsets;
+    else
+        onsets = funTs.dsgn.onsetList;
+    end
+end
+if isempty(ondurs)
+    if isfield(funTs.dsgn,'ondurs')
+        ondurs = funTs.dsgn.ondurs;
+    else
+        ondurs = funTs.dsgn.ondurList;
+    end
+end
 
 % if K==1; skipSVD = true; end
 
@@ -74,7 +86,7 @@ if ~exist('onsetList','var'); onsetList = []; end
 if ~exist('durList','var');     durList = []; end
 
 if isempty(win); win = [inf 0]; end
-
+windFlag = 1;
 
 
 if funTs.nvoxels==1; if verbose; disp('only one timeseries, skipping SVD'); end; skipSVD = true; end
@@ -154,7 +166,7 @@ if ~skipGram
     allWin = repmat(1:param.win(1),[param.win(3) 1]);
     allWin = allWin + (((1:param.win(3))-1)*param.win(2))'; % win x t
     allWin(any(allWin>funTs.nframes,2),:) = [];
-    allWin(end+1,:) = (funTs.nframes-param.win(1)+1:funTs.nframes)';
+    % allWin(end+1,:) = (funTs.nframes-param.win(1)+1:funTs.nframes)';
     param.win(3) = [];
     param.win = param.win*tr;
     if verbose && param.win(2)~=inf
@@ -172,8 +184,10 @@ allWin = unique(allWin,'rows');
 if ~skipTrialGram
     allWin; % [win X timeIndex]
     onsetList = param.onsetList;
+    if windFlag; onsetList(1) = []; end
     winSz = param.win(1)./tr;
-    n = max(allWin(:));
+    n = funTs.nframes;
+    % n = max(allWin(:));
     nWin = size(allWin,1);
     nTrial = size(onsetList,1);
     allWin2 = repmat({zeros(n,nWin)},[nTrial 1]);
@@ -182,28 +196,48 @@ if ~skipTrialGram
             if trialInd == 1
                 allWin2{trialInd}(allWin(winInd,:),winInd) = 1;
             else
-                offsetInd = floor((onsetList(trialInd) - onsetList(1)) ./ tr);
+                % offsetInd = floor((onsetList(trialInd) - onsetList(1)) ./ tr);
+                offsetInd = floor((onsetList(trialInd) - onsetList(1)) ./ tr) + 1;
                 tInd = allWin(winInd,:) + offsetInd;
                 tInd(tInd>n) = [];
                 allWin2{trialInd}(tInd,winInd) = 1;
             end
         end
     end
-    allWin3 = any(cat(3,allWin2{:}),3); % [win X time]
 
+    %%% allign windows to the end of the timeseries
+    timeShiftVol = n-find(allWin2{1}(:,end),1,'last');
+    for trialInd = 1:nTrial
+        allWin2{trialInd}(end-timeShiftVol+1:end,:) = false;
+        allWin2{trialInd} = circshift(allWin2{trialInd},timeShiftVol,1);
+    end
+    
     %%% remove windows exceeding timeseries
-    endInd = find(allWin3(end,:)==1,1)+1;
+    allWin3 = any(cat(3,allWin2{:}),3); % [win X time]
+    endInd = find(allWin3(end,:),1)+1;
+    % endInd = find(allWin3(end,:),1);
     for trialInd = 1:nTrial
         allWin2{trialInd}(:,endInd:end) = [];
     end
     % allWin3(:,endInd:end) = [];
+
+    % %%% remove completely overlapping windows
+    % endInd = find(sum((allWin2{1}+allWin2{2}(:,1))==2,1)==winSz);
+    % for trialInd = 1:nTrial
+    %     allWin2{trialInd}(:,endInd:end) = [];
+    % end
+    % % allWin3(:,endInd:end) = [];
+
 
     %%% remove completely overlapping windows
-    endInd = find(sum((allWin2{1}+allWin2{2}(:,1))==2,1)==winSz);
+    [a,endInd] = max(sum(allWin2{end}==allWin2{end-1}(:,end),1));
+    if a<n; endInd = endInd - 1; end
     for trialInd = 1:nTrial
-        allWin2{trialInd}(:,endInd:end) = [];
+        allWin2{trialInd}(:,1:endInd) = [];
     end
-    % allWin3(:,endInd:end) = [];
+    % imagesc(any(cat(3,allWin2{:}),3))
+    
+    
 
     % %%% visualize
     % figure('WindowStyle','docked');
@@ -231,7 +265,7 @@ if ~skipTrialGram
         allWin4(:,winInd) = find(allWin3(:,winInd));
     end
     allWinTrialLock = permute(allWin4,[2 1 3]); % [win X timeIndex]
-    % reshape(allWinTrialLock,size(allWinTrialLock,1),prod(size(allWinTrialLock,[2 3])))
+    % allWinTrialLock = reshape(allWinTrialLock,size(allWinTrialLock,1),prod(size(allWinTrialLock,[2 3])));
     clear allWin2 allWin3 allWin4 winSz2
 else
     allWinTrialLock = [];
@@ -360,7 +394,7 @@ for sInd = 1:length(funTs)
 
     % tic
     [funPsd.psd,funPsd.psdGram,funPsd.psdTrialGram,funPsd.psdTrialGramMD,funPsd.svd,funPsd.svdGram,funPsd.svdTrialGram,funPsd.svdTrialGramMD]...
-        = computeAll(funTs,TP,param,skip,verbose);
+        = computeAll(funTs,TP,param,windFlag,skip,verbose);
     % disp('+++++')
     % toc
     % disp('+++++')
@@ -521,7 +555,7 @@ for sInd = 1:length(funTs)
 end
 
 
-function [psd,psdGram,psdTrialGram,psdTrialGramMD,svd,svdGram,svdTrialGram,svdTrialGramMD] = computeAll(funTs,TP,param,skip,verbose)
+function [psd,psdGram,psdTrialGram,psdTrialGramMD,svd,svdGram,svdTrialGram,svdTrialGramMD] = computeAll(funTs,TP,param,windFlag,skip,verbose)
 if ~exist('nShuf','var');         nShuf = []; end
 if ~exist('nRun','var');           nRun = []; end
 if ~exist('cohFrange','var'); cohFrange = []; end
@@ -540,7 +574,8 @@ for runInd = 1:nRun
     % Over full timeseires %
     %%%%%%%%%%%%%%%%%%%%% %%
     %[time x trial x run x taper x freq x vox x window x mode]
-
+    tic
+    disp('full timeseries analysis')
     %%% tapers
     tp = permute(TP.full.tp,[1 3 4 2 5 6 7 8]); % tapers[time x trial x run x taper x freq x vox x window x mode]
     [Nk,Ek,Rk,Kk,Fk,Vk,Wk,M] = size(tp);
@@ -597,9 +632,10 @@ for runInd = 1:nRun
         dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
         prm = [ 6   4   2   1   3   5   7   8  ];
         dim = strjoin(dim(prm),' ');
-        j = permute(J,prm); %[V K E N R F W Mk]
-        j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
-        [u,s,v] = pagesvd(j,'econ','vector'); % s[Mk V E*N*R*F*W]
+        % j = permute(J,prm); %[V K E N R F W Mk]
+        % j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
+        % [u,s,v] = pagesvd(j,'econ','vector'); % s[Mk V E*N*R*F*W]
+        [u,s,~] = pagesvd(reshape(permute(J,prm),[V K E*1*R*F*1*1]),'econ','vector'); % s[Mk V E*N*R*F*W]
         coh     = s.^2./sum(s.^2,1); % coherence[Mk V E*N*R*F*W]
         spSVmag = abs(u);
         % coh = reshape(coh,[M 1 E 1 R F 1]); % [Mk V E N R F W]
@@ -700,11 +736,15 @@ for runInd = 1:nRun
     res.full.dim     = [N E R K F V W M];
     res.full.dimInfo = '[N E R K F V W M]';
 
+    toc
+
 
 
     %% %%%%%%%%%%%%%%%%%%%%%
     % Over each timewindow %
     %%%%%%%%%%%%%%%%%%%%% %%
+    tic
+    disp('time-resolved analysis')
     if ~skip.gram
         %[time x trial x run x taper x freq x vox x window x mode]
         %[   7       2     1       3      5     8       20]
@@ -743,6 +783,7 @@ for runInd = 1:nRun
         res.gram.COH    = zeros(1,E,1,1,F,1,W,M  ); % coherence [time x trial x run x taper x freq x vox x window x mode] at each trial
 
         %%% loop over windows
+        fprintf([repmat('|',1,W) '\n\n']);
         for wInd = 1:W
             %%% Compute J
             ind  = w(:,:,:,:,:,:,wInd);
@@ -767,9 +808,10 @@ for runInd = 1:nRun
                 dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
                 prm = [ 6   4   2   1   3   5   7   8  ];
                 dim = strjoin(dim(prm),' ');
-                j = permute(J,prm); %[V K E N R F W Mk]
-                j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
-                [u,s,v] = pagesvd(j,'econ','vector'); % s[Mk V E*N*R*F*W]
+                % j = permute(J,prm); %[V K E N R F W Mk]
+                % j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
+                % [u,s,v] = pagesvd(j,'econ','vector'); % s[Mk V E*N*R*F*W]
+                [~,s,~] = pagesvd(reshape(permute(J,prm),[V K E*1*R*F*1*1]),'econ','vector'); % s[Mk V E*N*R*F*W]
                 coh = s.^2./sum(s.^2,1); % coherence[Mk V E*N*R*F*W]
                 coh = reshape(coh,[M 1 E 1 R F 1]); % [Mk V E N R F W]
                 dim = {'Mk' 'V' 'E' 'N' 'R' 'F' 'W' 'K'};
@@ -781,6 +823,7 @@ for runInd = 1:nRun
 
             %%% Output window time
             res.gram.t(:,:,:,:,:,:,wInd,:) = tWin;
+            fprintf('\b''\n');
         end
         if K == 1
             res.gram.COH = [];
@@ -797,11 +840,19 @@ for runInd = 1:nRun
         res.gram = [];
     end
 
+    toc
 
 
     %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Over each event-related timewindow %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
+    % Much time could be saved by reusing the output of the time-resolved
+    % analysis, as long as the step sizes allow to construct every
+    % event-related window from available time-resolved windows. However,
+    % the missing-data event-related analysis seems superior to the
+    % event-related analysis so the latter might not be needed.
+    tic
+    disp('trial-locked time-resolved analysis')
     %[time x trial x run x taper x freq x vox x window x mode]
     %[   7       2     1       3      5     8       20]
     if ~skip.trialGram
@@ -851,6 +902,7 @@ for runInd = 1:nRun
 
 
         %%% loop over windows
+        fprintf([repmat('|',1,W) '\n\n']);
         for wInd = 1:W
             %%% Compute J
             ind  = w(:,:,:,:,:,:,wInd,:);
@@ -884,9 +936,10 @@ for runInd = 1:nRun
                 dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'M'};
                 prm = [ 6   4   2   1   3   5   7   8  ];
                 dim = strjoin(dim(prm),' ');
-                j = permute(J,prm); %[V K E N R F W M]
-                j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*M]
-                [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                % j = permute(J,prm); %[V K E N R F W M]
+                % j = reshape(j,[V K E*1*R*F*1*1]); %[V K E*N*R*F*W*M]
+                % [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                [~,s,~] = pagesvd(reshape(permute(J,prm),[V K E*1*R*F*1*1]),'econ','vector'); % s[M V E*N*R*F*W]
                 coh = s.^2./sum(s.^2,1); % coherence[M V E*N*R*F*W]
                 coh = reshape(coh,[M 1 E 1 R F 1]); % [M V E N R F W]
                 %       1   2   3   4   5   6   7   8
@@ -904,9 +957,10 @@ for runInd = 1:nRun
                 dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
                 prm = [ 6   4   2   1   3   5   7   8  ];
                 dim = strjoin(dim(prm),' ');
-                j = permute(mean(J,2),prm); %[V K E N R F W Mk]
-                j = reshape(j,[V K 1*1*R*F*1*1]); %[V K E*N*R*F*W*M]
-                [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                % j = permute(mean(J,2),prm); %[V K E N R F W Mk]
+                % j = reshape(j,[V K 1*1*R*F*1*1]); %[V K E*N*R*F*W*M]
+                % [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                [~,s,~] = pagesvd(reshape(permute(mean(J,2),prm),[V K 1*1*R*F*1*1]),'econ','vector'); % s[M V E*N*R*F*W]
                 coh = s.^2./sum(s.^2,1); % coherence[M V E*N*R*F*W]
                 coh = reshape(coh,[M 1 1 1 R F 1]); % [M V E N R F W]
                 dim = {'Mk' 'V' 'E' 'N' 'R' 'F' 'W' 'K'};
@@ -917,18 +971,24 @@ for runInd = 1:nRun
             end
 
             %%% Compute coherence with trials concatenated as extra sets of tapers (equivalent to averaging across trials)
-            dim = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
-            prm = [ 6   4   2   1   3   5   7   8  ];
-            dim = strjoin(dim(prm),' ');
-            j = permute(J,prm); %[V K E N R F W Mk]
-            j = reshape(j,[V K E 1*R*F*1*1]); %[V K E N*R*F*W*Mk]
-            dim = {'V' 'K' 'E' 'N*R*F*W*Mk'};
-            prm = [ 1   4   2   3          ];
-            dim = strjoin(dim(prm),' ');
-            j = permute(j,prm); %[V N*R*F*W*Mk K E]
-            j = reshape(j,[V 1*R*F*1*1 K*E]); %[V N*R*F*W*Mk K*E]
-            j = permute(j,[1 3 2]); %[V K*E N*R*F*W*Mk];
-            [u,s,v] = pagesvd(j,'econ','vector'); % s[Mke V N*R*F*W K E]
+            % dim1 = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
+            % prm1 = [ 6   4   2   1   3   5   7   8  ];
+            % dim1 = strjoin(dim1(prm1),' ');
+            % j = permute(J,prm1); %[V K E N R F W Mk]
+            % j = reshape(j,[V K E 1*R*F*1*1]); %[V K E N*R*F*W*Mk]
+            % dim2 = {'V' 'K' 'E' 'N*R*F*W*Mk'};
+            % prm2 = [ 1   4   2   3          ];
+            % dim2 = strjoin(dim2(prm2),' ');
+            % j = permute(j,prm2); %[V N*R*F*W*Mk K E]
+            % j = reshape(j,[V 1*R*F*1*1 K*E]); %[V N*R*F*W*Mk K*E]
+            % j = permute(j,[1 3 2]); %[V K*E N*R*F*W*Mk];
+            dim1 = {'N' 'E' 'R' 'K' 'F' 'V' 'W' 'Mk'};
+            prm1 = [ 6   4   2   1   3   5   7   8  ];
+            dim1 = strjoin(dim1(prm1),' ');
+            dim2 = {'V' 'K' 'E' 'N*R*F*W*Mk'};
+            prm2 = [ 1   4   2   3          ];
+            dim2 = strjoin(dim2(prm2),' ');
+            [~,s,~] = pagesvd(permute(reshape(permute(reshape(permute(J,prm1),[V K E 1*R*F*1*1]),prm2),[V 1*R*F*1*1 K*E]),[1 3 2]),'econ','vector'); % s[Mke V N*R*F*W K E]
             coh = s.^2./sum(s.^2,1); % coherence[Mke V N*R*F*W K E]
             coh = reshape(coh,[Mek 1 1 1 F 1 1 1]); % [Mke V N R F W K E]
             %       1   2   3   4   5   6   7   8
@@ -941,6 +1001,7 @@ for runInd = 1:nRun
 
             %%% Output window time
             res.trialGram.t(:,:,:,:,:,:,wInd,:) = tWin;
+            fprintf('\b''\n');
         end
         if K == 1
             res.trialGram.COH    = [];
@@ -960,10 +1021,15 @@ for runInd = 1:nRun
         res.trialGram = [];
     end
 
+    toc
+
+
     %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Over each event-related timewindow   %
     % (with missing data seperating tials) %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
+    tic
+    disp('trial-locked time-resolved analysis (using missing data tapers)')
     %[time x trial x run x taper x freq x vox x window x mode]
     %[   7       2     1       3      5     8       20]
     if ~skip.trialGram
@@ -985,7 +1051,15 @@ for runInd = 1:nRun
         t = TP.trialGramMD.t;
         [Nt,Et,Rt,Kt,Ft,Vt,Wt,Mt] = size(t);
         %%%% shifted to 0 at stim onset (phase coherent cross-trial avg)
-        tPC = reshape(reshape(t,Nw,E) - funTs.dsgn.onsets',Nw*E,1);
+        if isfield(funTs.dsgn,'onsets')
+            onsets = funTs.dsgn.onsets;
+        else
+            onsets = funTs.dsgn.onsetList;
+        end
+        if windFlag
+            onsets(1) = [];
+        end
+        tPC = reshape(reshape(t,Nw,E) - onsets,Nw*E,1);
         
 
         %%% freq
@@ -1009,6 +1083,7 @@ for runInd = 1:nRun
         res.trialGramMD.COHepc = zeros(1,1,1,1,F,1,W,M); % coherence [time x trial x run x taper x freq x vox x window x mode] trials concatenated as extra sets of tapers (eVENT AS TAPERS k   )
 
         %%% loop over windows
+        fprintf([repmat('|',1,W) '\n\n']);
         for wInd = 1:W
             %%% Compute J
             ind  = w(:,:,:,:,:,:,wInd);
@@ -1082,6 +1157,7 @@ for runInd = 1:nRun
 
             %%% Output window time
             res.trialGramMD.t(:,:,:,:,:,:,wInd,:) = tWin;
+            fprintf('\b''\n');
         end
         if K == 1
             res.trialGramMD.COH    = [];
@@ -1100,6 +1176,7 @@ for runInd = 1:nRun
         res.trialGramMD = [];
     end
 
+    toc
 
 
 

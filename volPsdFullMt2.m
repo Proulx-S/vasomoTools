@@ -68,95 +68,56 @@ if doIt
 %% Do the processing here
 %%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+    
+
 %% Mask
 if ~isempty(volAnat)
-    volTs = vec2vol(vol2vec(volTs));
-    for I = 1:length(volAnat)
-        if isfield(volAnat(I),'fun') && isfield(volAnat(I).fun,'mask')
+    if length(volAnat)==1 && ...
+            isfield(volAnat,'mask') && isfield(volAnat.mask,'crop') && isfield(volAnat.mask.crop,'mri') && isfield(volAnat.mask.crop.mri,'vol') && ~isempty(volAnat.mask.crop.mri.vol)
+        %%%crop
+        mask = volAnat.mask.crop.mri.vol;
+        %%%head
+        mask = mask & any(volAnat.mask.head.mri.vol,4);
+        % %%%brain
+        % mask = mask & any(volAnat.mask.brain.mri.vol,4);
+        %%%apply
+        volTs = applyMask(volTs,mask);
+    else
+        volTs = vec2vol(vol2vec(volTs));
+        for I = 1:length(volAnat)
+            if isfield(volAnat(I),'fun') && isfield(volAnat(I).fun,'mask')
 
-            mask = volAnat(I).fun.mask.crop.vol;
-            
-            if isfield(volAnat(I).fun.mask,'head')
-                mask = mask & volAnat(I).fun.mask.head.mri.vol;
-            elseif isfield(volAnat(I).fun.mask,'brain')
-                mask = mask & volAnat(I).fun.mask.brain.mri.vol;
+                mask = volAnat(I).fun.mask.crop.vol;
+
+                if isfield(volAnat(I).fun.mask,'head')
+                    mask = mask & volAnat(I).fun.mask.head.mri.vol;
+                elseif isfield(volAnat(I).fun.mask,'brain')
+                    mask = mask & volAnat(I).fun.mask.brain.mri.vol;
+                end
+
+                if ~isempty(volPsd)
+                    threshPrctl = 99;
+                    Mi = 1;
+                    [~,Fi] = min(abs(volPsd.svd.f - 1/mean(diff(volPsd.dsgn.onsets))));
+                    threshMask = false(size(volPsd.vol2vec));
+                    threshMask(volPsd.vol2vec) = abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi))>prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl);
+                    % figure('WindowStyle','docked');
+                    % imagesc(mask>prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl))
+                    % histogram(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi))); xline(prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl))
+                    mask = mask & threshMask;
+                end
+
+                %%%apply
+                volTs(I) = applyMask(volTs(I),mask);
+
+
             end
-
-            if ~isempty(volPsd)
-                threshPrctl = 99;
-                Mi = 1;
-                [~,Fi] = min(abs(volPsd.svd.f - 1/mean(diff(volPsd.dsgn.onsets))));
-                threshMask = false(size(volPsd.vol2vec));
-                threshMask(volPsd.vol2vec) = abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi))>prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl);
-                % figure('WindowStyle','docked');
-                % imagesc(mask>prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl))
-                % histogram(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi))); xline(prctile(abs(volPsd.svd.spSV(:,:,:,:,Fi,:,:,Mi)),threshPrctl))
-                mask = mask & threshMask;
-            end
-
-            %%%apply
-            volTs(I) = applyMask(volTs(I),mask);
-
-
-
-
-            % % volTs(I) = applyMask(volTs(I),volAnat(I).fun.mask.crop.vol);
-            % 
-            % % %%%arteries
-            % % volRoi = volAnat(I).fun.roi.vesselCenter;
-            % % ind  = squeeze(contains(volRoi.label,'a'));
-            % % volRoi.mri.vol(:,:,:,~ind) = [];
-            % % volRoi.label(:,:,:,~ind)   = [];
-            % % 
-            % % combineFlag = 1;
-            % % vol2vec(volTs(I))
-            % % volTs(I) = applyRoi(volTs(I),volRoi,[],combineFlag);
-            % 
-            % 
-            % % 
-            % % 
-            % % 
-            % %%%crop
-            % mask = volAnat(I).fun.mask.crop.vol;
-            % % 
-            % % % %%%vessel and surroundings
-            % % % mask = mask & any(volAnat(I).fun.mask.vessel.mri.vol,4);
-            % % 
-            % % 
-            % % 
-            % % 
-            % % volMask.mri.vol   = any(volRoi.mri.vol,4);
-            % % volMask.mri.label = strjoin(volRoi.label,'+');
-            % % 
-            % % % %%%brain
-            % % % mask = mask & any(volAnat(I).fun.mask.brain.mri.vol,4);
-            % % 
-            % % % %%%head
-            % % % mask = mask & any(volAnat(I).fun.mask.head.mri.vol,4);
-            % % 
-            % % 
-            % % if exist('volMask','var')
-            % %     volMask.mri.vol
-            % %     roi = permute(arteries,[4 1 2 3]);
-            % %     volTs(I).vecRoi = permute(roi(:,any(roi,1))~=0,[3 2 4 5 1]);
-            % %     volTs(I).vecInfo = strjoin({volTs(I).vecInfo 'roi'},' x ');
-            % % end
-            % % 
-            % % 
-            % % mask = mask & arteries(:,:,:,1)~=0;
-            % % if exist('arteries','var')
-            % %     roi = permute(arteries,[4 1 2 3]);
-            % %     volTs(I).vecRoi = permute(roi(:,any(roi,1))~=0,[3 2 4 5 1]);
-            % %     volTs(I).vecInfo = strjoin({volTs(I).vecInfo 'roi'},' x ');
-            % % end
-            % % 
-            % % mask = mask & arteries(:,:,:,1)~=0;
-            % % 
         end
+        % if isfield(volAnat,'fun') && isfield(volAnat.fun,'mask') && isfield(volAnat.fun.mask,'crop') && ~isempty(volAnat.fun.mask.crop.vol)
+        %     volTs = applyMask(volTs,volAnat.fun.mask.crop.vol);
+        % end
     end
-    % if isfield(volAnat,'fun') && isfield(volAnat.fun,'mask') && isfield(volAnat.fun.mask,'crop') && ~isempty(volAnat.fun.mask.crop.vol)
-    %     volTs = applyMask(volTs,volAnat.fun.mask.crop.vol);
-    % end
 end
 
 % %% Add time
@@ -188,7 +149,10 @@ if winSz~=inf && winStep==0; winStep = 1; end
 
 phaseRand = 0;
 taperPerm = info.perm;
-% info.onsetList
+if isempty(info.onsetList)
+    info.onsetList = volTs.dsgn.onsetList';
+    info.ondurList = volTs.dsgn.ondurList';
+end
 volPsd = runFullMT2(volTs,W,K,[winSz winStep],info.onsetList,info.ondurList,[],1,info.skipSvd,[],[],taperPerm,phaseRand);
 
 % phaseRand = 2^2;
@@ -210,7 +174,8 @@ volPsd.nframes = size(volPsd.vec,1);
 volPsd.tr = mean(diff(volPsd.psd.f))*1000;
 tmp = vec2vol(volPsd);
 tmp.vol(1:10,1:10,1,:) = repmat(permute(tmpMean,[2 3 4 1]),[10 10 1 1]);
-volPsd.psd.fspec = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['logPsd']},'_')) '.nii.gz'];
+volPsd.psd.fspec = replace(volTs.fspec,'_volTs.nii.gz','_volPsd.nii.gz');
+% volPsd.psd.fspec = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['logPsd']},'_')) '.nii.gz'];
 MRIwrite(tmp,volPsd.psd.fspec);
 
 %%% Coherence (first singular vector)
@@ -224,7 +189,8 @@ if isfield(volPsd.svd,'spSV') && ~isempty(volPsd.svd.spSV)
     if info.perm
         tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
     end
-    volPsd.svd.fspec.spSVmag = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSV']},'_')) '.nii.gz'];
+    volPsd.svd.fspec.spSVmag = replace(volTs.fspec,'_volTs.nii.gz','_volCohMag.nii.gz');
+    % volPsd.svd.fspec.spSVmag = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSV']},'_')) '.nii.gz'];
     MRIwrite(tmp,volPsd.svd.fspec.spSVmag);
     tmp = vec2vol(volPsd);
     tmp.vol = angle(tmp.vol);
@@ -232,7 +198,8 @@ if isfield(volPsd.svd,'spSV') && ~isempty(volPsd.svd.spSV)
     if info.perm
         tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
     end
-    volPsd.svd.fspec.spSVphase = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-phase'] ['spSV']},'_')) '.nii.gz'];
+    volPsd.svd.fspec.spSVphase = replace(volTs.fspec,'_volTs.nii.gz','_volCohPhase.nii.gz');
+    % volPsd.svd.fspec.spSVphase = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-phase'] ['spSV']},'_')) '.nii.gz'];
     MRIwrite(tmp,volPsd.svd.fspec.spSVphase);
 end
 if isfield(volPsd.svd,'spSV_pVal')

@@ -32,6 +32,7 @@ elseif isstruct(funTs)
         [funTs(I).vec,funTs(I).poly] = dtrnd2(funTs(I).vec,funTs(I).t,prcBOLDflag,order);
         funTs(I).poly.vol2vec = funTs(I).vol2vec;
     end
+    order = size(funTs(I).poly.beta,2)-1;
     funTs = setNiceFieldOrder(funTs,{'vol' 'vol2vec' 'vec' 't' 'poly' 'volInfo' 'vecInfo'});
     poly = [];
 

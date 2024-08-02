@@ -20,24 +20,32 @@ end
 
 
 %% Mask files
-if isfield(volAnat.fun.mask,'head') && ~isempty(volAnat.fun.mask.head)
-    %%%head
-    fMask = volAnat.fun.mask.head.mri.fspec;
-elseif isfield(volAnat.fun.mask,'brain') && ~isempty(volAnat.fun.mask.brain)
-    %%%brain
-    fMask = volAnat.fun.mask.brain.mri.fspec;
-    % mask = mask & any(volAnat.fun.mask.brain.mri.vol,4);
-else
+if isempty(volAnat)
     fMask = [];
+else
+    if isfield(volAnat.fun.mask,'head') && ~isempty(volAnat.fun.mask.head)
+        %%%head
+        fMask = volAnat.fun.mask.head.mri.fspec;
+    elseif isfield(volAnat.fun.mask,'brain') && ~isempty(volAnat.fun.mask.brain)
+        %%%brain
+        fMask = volAnat.fun.mask.brain.mri.fspec;
+        % mask = mask & any(volAnat.fun.mask.brain.mri.vol,4);
+    else
+        fMask = [];
+    end
 end
-
 
 %% Functional design
 if isfield(volTs,'dsgn')
     param.funDsgn.trStim   = volTs.dsgn.dt;
     param.funDsgn.k        = 1;
-    param.funDsgn.startSeq = volTs.dsgn.onsets;
-    param.funDsgn.durSeq   = volTs.dsgn.ondurs;
+    if isfield(volTs.dsgn,'onsets')
+        param.funDsgn.startSeq = volTs.dsgn.onsets;
+        param.funDsgn.durSeq   = volTs.dsgn.ondurs;
+    else
+        param.funDsgn.startSeq = volTs.dsgn.onsetList;
+        param.funDsgn.durSeq   = volTs.dsgn.ondurList;
+    end
     param.funDsgn.condSeq  = ones(size(param.funDsgn.startSeq));
     param.funDsgn.label    = volTs.dsgn.label;
     param.funDsgn.trDecon  = param.trDecon;
@@ -903,14 +911,14 @@ for E = 1:size(fList,2)
         TENTzeroFlag = 1;
 
 
-        %% Contruct afni command
+        %% Construct afni command
         cmdTmp = {srcAfni};
         if size(fList,2)>1
             cmdTmp{end+1} = ['echo ''  ''run' num2str(I) '/' num2str(size(fList,1)) ' -- echo' num2str(E) '/' num2str(size(fList,2))];
         else
             cmdTmp{end+1} = ['echo ''  ''run' num2str(I) '/' num2str(size(fList,1))];
         end
-        if ~exist(fStat,'file') || force
+        % if ~exist(fStat,'file') || force
             if ~isfield(param.funDsgn,'trDecon')
                 if isfield(param.funDsgn,'trStim')
                     param.funDsgn.trDecon = param.funDsgn.trStim;
@@ -925,13 +933,19 @@ for E = 1:size(fList,2)
             cmdTmp{end+1} = ['echo ''   ''' fStat];
             cmdTmp{end+1} = ['echo ''   ''' fMat];
             cmdTmp{end+1} = 'echo ''   ''done';
-        else
-            cmdTmp{end+1} = ['echo ''   ''' fResp];
-            cmdTmp{end+1} = ['echo ''   ''' fStat];
-            cmdTmp{end+1} = ['echo ''   ''' fMat];
-            cmdTmp{end+1} = 'echo ''   ''already done, skipping';
-        end
+        % else
+        %     cmdTmp{end+1} = ['echo ''   ''' fResp];
+        %     cmdTmp{end+1} = ['echo ''   ''' fStat];
+        %     cmdTmp{end+1} = ['echo ''   ''' fMat];
+        %     cmdTmp{end+1} = 'echo ''   ''already done, skipping';
+        % end
         fRun(I,E).cmd =  strjoin(cmdTmp,newline);
+
+        if exist(fStat,'file') && ~force
+            cmdTmp(startsWith(cmdTmp,'-') | startsWith(cmdTmp,'3dDeconvolve')) = [];
+            cmdTmp{ismember(cmdTmp,{'echo ''   ''done'})} = 'echo ''   ''already done, skipping';
+            cmdTmp(endsWith(cmdTmp,'  ''done')) = [];
+        end
 
         cmd = [cmd cmdTmp];
         % [status,cmdout] = system(strjoin(cmdTmp,newline),'-echo');
@@ -1117,7 +1131,7 @@ trMri = mri.tr/1000;
 % trMri = 3;
 cmd{end+1} = ['-stim_times_subtract ' num2str(trMri*nDummy,'%f') ' \'];
 cmd{end+1} = '-num_stimts 1 \';
-cmd{end+1} = ['-stim_label 1 ' label{1} ' \'];
+cmd{end+1} = ['-stim_label 1 ' char(label) ' \'];
 
 % write design to file
 fido = fopen(fStim, 'w');

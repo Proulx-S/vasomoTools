@@ -1,6 +1,7 @@
 function tryL2svd(volPsd)
 method = 1;
 adjustPhase = 1;
+saveFlag = 1;
 
 N = volPsd.svd.dim(1);
 W = volPsd.svd.dim(2);
@@ -11,7 +12,8 @@ V = volPsd.svd.dim(6);
 W = volPsd.svd.dim(7);
 M = volPsd.svd.dim(8);
 
-subStr = strsplit(replace(volPsd.fspec,'.nii.gz',''),filesep); subStr = strsplit(subStr{end},'_');
+% subStr = strsplit(replace(volPsd.fspec,'.nii.gz',''),filesep); subStr = strsplit(subStr{end},'_');
+subStr = strsplit(replace(volPsd.fspec,'.nii.gz',''),filesep); subStr = strsplit(subStr{end-1},'_');
 
 spSV = permute(volPsd.svd.spSV,[5 6 8 1 2 3 4 7]); % [F V M]
 switch method
@@ -64,7 +66,7 @@ axIm = [ax{2:end}];
 cLim = get(axIm,'CLim');
 cLim = [min([cLim{:}]) max([cLim{:}])];
 set(axIm,'CLim',cLim);
-title(ht,subStr{1})
+title(ht,strjoin(subStr(1:3)))
 
 
 % add underlay
@@ -129,7 +131,7 @@ end
 axIm = [ax{2:end}];
 cLim = [-pi pi];
 set(axIm,'CLim',cLim);
-title(ht,subStr{1})
+title(ht,strjoin(subStr(1:3)))
 
 
 % add underlay
@@ -170,7 +172,7 @@ fPhase.SizeChangedFcn = @(src,evn) set( axImPhase_under'   , {'Position'} , get(
 
 
 %% Frequency singular vector
-figure('WindowStyle','docked');
+fSV = figure('WindowStyle','docked');
 ht = tiledlayout(GridSize(1),GridSize(2)); ax = {};
 ht.TileSpacing = 'tight'; ht.Padding = 'tight';
 ax{end+1} = nexttile;
@@ -190,12 +192,24 @@ for ml2 = 1:(prod(ht.GridSize)-1)
     title(['Level-2 mode ' num2str(ml2) '; method' num2str(method)])
     grid on
 
-    xline(1/unique(diff(volPsd.dsgn.onsets)),'--r')
+    if isfield(volPsd.dsgn,'onsets')
+        xline(1/mean(diff(volPsd.dsgn.onsets)),'--r')
+    else
+        xline(1/mean(diff(volPsd.dsgn.onsetList)),'--r')
+    end
 end
 axIm = [ax{2:end}];
 yLim = get(axIm,'YLim');
 yLim = [min([yLim{:}]) max([yLim{:}])];
 set(axIm,'YLim',yLim);
 
-title(ht,subStr{1})
+title(ht,strjoin(subStr(1:3)))
 
+
+
+if saveFlag
+    [a,b,~] = fileparts(fileparts(volPsd.fspec));
+    saveas(fMag,  fullfile(a,[b '_L2SVD_spSvMag.fig']))
+    saveas(fPhase,fullfile(a,[b '_L2SVD_spSvPhase.fig']))
+    saveas(fSV,   fullfile(a,[b '_L2SVD_tSvMag.fig']))
+end
