@@ -1,4 +1,4 @@
-function funPsd = runFullMT2(funTs,W,K,win,onsets,ondurs,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand)
+function funPsd = runFullMT3(funTs,W,K,win,onsets,ondurs,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand)
 % Wrapper for the Chronux's mtspectrumc function for multitaper estimation of
 % pds spectra, compatible with MRI data imported by MRIread.m.
 %
@@ -31,6 +31,8 @@ if isempty(onsets)
         onsets = funTs.dsgn.onsetList;
     end
 end
+if size(onsets,1)==1; onsets = onsets'; end
+
 if isempty(ondurs)
     if isfield(funTs.dsgn,'ondurs')
         ondurs = funTs.dsgn.ondurs;
@@ -38,6 +40,7 @@ if isempty(ondurs)
         ondurs = funTs.dsgn.ondurList;
     end
 end
+if size(ondurs,1)==1; ondurs = ondurs'; end
 
 % if K==1; skipSVD = true; end
 
@@ -86,7 +89,7 @@ if ~exist('onsetList','var'); onsetList = []; end
 if ~exist('durList','var');     durList = []; end
 
 if isempty(win); win = [inf 0]; end
-windFlag = 1;
+windFlag = 0;
 
 
 if funTs.nvoxels==1; if verbose; disp('only one timeseries, skipping SVD'); end; skipSVD = true; end
@@ -166,6 +169,8 @@ if ~skipGram
     allWin = repmat(1:param.win(1),[param.win(3) 1]);
     allWin = allWin + (((1:param.win(3))-1)*param.win(2))'; % win x t
     allWin(any(allWin>funTs.nframes,2),:) = [];
+    allWin = allWin - allWin(end,end) + funTs.nframes;
+    
     % allWin(end+1,:) = (funTs.nframes-param.win(1)+1:funTs.nframes)';
     param.win(3) = [];
     param.win = param.win*tr;
@@ -186,7 +191,7 @@ if ~skipTrialGram
     onsetList = param.onsetList;
     if windFlag; onsetList(1) = []; end
     winSz = param.win(1)./tr;
-    n = funTs.nframes;
+    n = funTs.nframes+winSz;
     % n = max(allWin(:));
     nWin = size(allWin,1);
     nTrial = size(onsetList,1);
@@ -205,22 +210,12 @@ if ~skipTrialGram
         end
     end
 
-    %%% allign windows to the end of the timeseries
-    timeShiftVol = n-find(allWin2{1}(:,end),1,'last');
-    % imagesc(any(cat(3,allWin2{:}),3))
-    % find(allWin2{1}(:,end),1,'last')
-    % find(allWin2{2}(:,end),1,'last')
-    % find(allWin2{3}(:,end),1,'last')
-    % find(allWin2{4}(:,end),1,'last')
-    % find(allWin2{5}(:,end),1,'last')
-    for trialInd = 1:nTrial
-        allWin2{trialInd}(end-timeShiftVol+1:end,:) = false;
-        allWin2{trialInd} = circshift(allWin2{trialInd},timeShiftVol,1);
-    end
+    
     
     %%% remove windows exceeding timeseries
-    allWin3 = any(cat(3,allWin2{:}),3); % [win X time]
-    endInd = find(allWin3(end,:),1)+1;
+    allWin3 = any(cat(3,allWin2{:}),3); % [win X time in trial]
+    % endInd = find(allWin3(end,:),1)+1;
+    endInd = find(allWin3(funTs.nframes,:),1)+1;
     % endInd = find(allWin3(end,:),1);
     for trialInd = 1:nTrial
         allWin2{trialInd}(:,endInd:end) = [];
@@ -244,6 +239,25 @@ if ~skipTrialGram
     % imagesc(any(cat(3,allWin2{:}),3))
     
     
+    %%% allign windows to the end of the timeseries
+    timeShiftVol = n-find(allWin2{end}(:,end),1,'last');
+    % imagesc(any(cat(3,allWin2{:}),3))
+    % find(allWin2{1}(:,end),1,'last')
+    % find(allWin2{2}(:,end),1,'last')
+    % find(allWin2{3}(:,end),1,'last')
+    % find(allWin2{4}(:,end),1,'last')
+    % find(allWin2{5}(:,end),1,'last')
+    for trialInd = 1:nTrial
+        allWin2{trialInd}(end-timeShiftVol+1:end,:) = false;
+        allWin2{trialInd} = circshift(allWin2{trialInd},timeShiftVol,1);
+    end
+
+    %%% trim
+    for trialInd = 1:nTrial
+        ind = size(allWin2{trialInd},1) - funTs.nframes;
+        allWin2{trialInd}(1:ind,:) = [];
+    end
+    
 
     % %%% visualize
     % figure('WindowStyle','docked');
@@ -265,9 +279,9 @@ if ~skipTrialGram
     % allWinTrialLock = allWin4; % [win X timeIndex]
     allWin3 = cat(3,allWin2{:}); % [win X time X trial]
 
-    figure('WindowStyle','docked');
-    % imagesc(any((allWin3(:,:,end)),3))
-    imagesc(any(allWin3,3))
+    % figure('WindowStyle','docked');
+    % imagesc(any(allWin3,3))
+    % yline(param.onsetList./(funTs.tr/1000),'r')
 
     winSz2 = unique(sum(allWin3,1));
     if length(winSz2)~=1; dbstack; error('badly defined trial-locked windows'); end
@@ -888,7 +902,7 @@ for runInd = 1:nRun
         %%% freq
         pad = 0;
         % pad = E-1;
-        NFFT=max(2^(nextpow2(N*E)+pad),N*E);
+        NFFT=max(2^(nextpow2(N)+pad),N);
         [f,fInd]=getfgrid(Fs,NFFT,[0 Fs/2]);
         f = permute(f,[1 3 4 5 2 6 7 8]); % frequencies[time x trial x run x taper x freq x vox x window x mode]
         [Nf,Ef,Rf,Kf,Ff,Vf,Wf,Mf] = size(f);
@@ -926,12 +940,14 @@ for runInd = 1:nRun
                 d = d - mean(d,1);
             end
             tp = tp;
-            t = t; %!!!!!!!!!!!!!!! adjust t here for sub-tr stimulus onsets
 
+            % adjust t here for sub-tr stimulus onsets
+            onsetList = param.onsetList';
+            if windFlag; onsetList(1) = []; end
+            t = t + tWin(1,:) - onsetList;
 
-
-            % dbstack; error('the error is somewhere here: in tp,t or f, or within getJ2')
-            J = getJ2(d,tp,t,f)/Fs; % [time x trial x run x taper x freq x vox x window]
+            J = getJ3(d,tp,t,f)/Fs; % [time x trial x run x taper x freq x vox x window]
+            % J = getJ2(d,tp,t,f)/Fs; % [time x trial x run x taper x freq x vox x window]
             %                         [N      E       R     K       F      V     W]
 
             %%% Compute psd at each trial
@@ -1070,8 +1086,8 @@ for runInd = 1:nRun
         if windFlag
             onsets(1) = [];
         end
-        tPC = reshape(reshape(t,Nw,E) - onsets,Nw*E,1);
         
+
 
         %%% freq
         pad = 0;
@@ -1111,8 +1127,8 @@ for runInd = 1:nRun
             tp = tp;
 
             
-            %%% Using normal time (incoherent phase averaging across trials)
-            t = t; % adjust t here phase coherent cross-trial averaging
+            %%% Using normal time (incoherent phase averaging across trials, but phase coherency can be generated by stimulus design)
+            t = t;
             J = getJ2(d,tp,t,f)/Fs; % [time x trial x run x taper x freq x vox x window]
             %                         [N      E       R     K       F      V     W]
 
@@ -1126,7 +1142,7 @@ for runInd = 1:nRun
                 dim = strjoin(dim(prm),' ');
                 j = permute(J,prm); %[V K E N R F W M]
                 j = reshape(j,[V K 1*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
-                [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                [~,s,~] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
                 coh = s.^2./sum(s.^2,1); % coherence[M V E*N*R*F*W]
                 coh = reshape(coh,[M 1 1 1 R F 1]); % [M V E N R F W]
                 %       1   2   3   4   5   6   7   8
@@ -1140,7 +1156,7 @@ for runInd = 1:nRun
 
 
             %%% Now adjusting time for phase coherent cross-trial averaging
-            tPC = tPC;
+            tPC = reshape(reshape(t,Nw,E) - onsets,Nw*E,1); % aligning the time vector to 0 at stimulus onset effectively enforces coherent phase averaging across trials
             J = getJ2(d,tp,tPC,f)/Fs; % [time x trial x run x taper x freq x vox x window]
             %                         [N      E       R     K       F      V     W]
 
@@ -1154,7 +1170,7 @@ for runInd = 1:nRun
                 dim = strjoin(dim(prm),' ');
                 j = permute(J,prm); %[V K E N R F W M]
                 j = reshape(j,[V K 1*1*R*F*1*1]); %[V K E*N*R*F*W*Mk]
-                [u,s,v] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
+                [~,s,~] = pagesvd(j,'econ','vector'); % s[M V E*N*R*F*W]
                 coh = s.^2./sum(s.^2,1); % coherence[M V E*N*R*F*W]
                 coh = reshape(coh,[M 1 1 1 R F 1]); % [M V E N R F W]
                 %       1   2   3   4   5   6   7   8

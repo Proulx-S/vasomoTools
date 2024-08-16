@@ -1,7 +1,7 @@
 function addFreq(H,onsets,ondurs,freqFlag)
 if ~exist('ondurs','var');     ondurs = []; end
 if ~exist('freqFlag','var'); freqFlag = []; end
-if isempty(freqFlag);        freqFlag = 1; end
+if isempty(freqFlag);        freqFlag = 0; end
 if isempty(H)
     H = gca;
 else
@@ -13,11 +13,11 @@ fStim = 1/mean(diff(onsets));
 if any(contains(H.Title.String,{'spectrogram' 'coherogram'}))
     yline(fStim,'Color','r','linestyle','--')
     xLim = xlim;
-    text(xLim(2),fStim,'fStim','HorizontalAlignment','right','VerticalAlignment','baseline','Color','r')
+    text(xLim(2),fStim,'fStim','HorizontalAlignment','right','VerticalAlignment','top','Color','r')
 elseif any(contains(H.Title.String,{'spectrum'}))
     xline(fStim,'Color','r','linestyle','--')
     yLim = ylim;
-    text(fStim,yLim(2),'fStim','HorizontalAlignment','right','VerticalAlignment','top','Color','r')
+    text(fStim,yLim(2),'fStim','HorizontalAlignment','left','VerticalAlignment','top','Color','r')
 end
 if freqFlag && ~isempty(ondurs) && length(unique(ondurs))==1
     fOn = 1/ondurs(1);

@@ -21,6 +21,13 @@ if iscell(funTs)
 
 
 elseif isstruct(funTs)
+    if isMRI(funTs)
+        wasSubMRI = 0;
+    else
+        if ~isfield(funTs,'mri'); dbstack; error('X'); end
+        funTs = funTs.mri;
+        wasSubMRI = 1;
+    end
     funTs = vol2vec(funTs);
     for I = 1:numel(funTs)
         if ~strcmp(mfilename,'dtrnd2'); dbstack; error('change function name (dtrnd2)'); end
@@ -35,6 +42,11 @@ elseif isstruct(funTs)
     order = size(funTs(I).poly.beta,2)-1;
     funTs = setNiceFieldOrder(funTs,{'vol' 'vol2vec' 'vec' 't' 'poly' 'volInfo' 'vecInfo'});
     poly = [];
+
+    if wasSubMRI
+        mri = funTs; clear funTs
+        funTs.mri = mri; clear mri
+    end
 
 
 

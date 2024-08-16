@@ -10,9 +10,12 @@ if Et~=1 && Ed~=Et; dbstack; end; E = Ed;
 if Rt~=1 && Rd~=Rt; dbstack; end; R = Rd;
 if Wt~=1 && Wd~=Wt; dbstack; end; W = Wd;
 
-
+% for e = 1:E
+% tp2 = reshape(  tp .* exp(-f.*t(:,e)*2*pi*1i)                   ,[N 1*R*K*F*1*Wt]);
+% d2  = reshape(  d(:,e,:,:,:,:,:,:) - mean(d(:,e,:,:,:,:,:,:),1) ,[N 1*R*1*1*V*W ]); % removing the mean here
 tp2 = reshape(  tp .* exp(-f.*t*2*pi*1i)  ,[N Et*R*K*F*1*Wt]);
 d2  = reshape(  d - mean(d,1)             ,[N E*R*1*1*V*W]); % removing the mean here
+
 
 d2 = permute(d2,[2 1]);
 J = d2*tp2; % [V E*R*K*F*1*W]
