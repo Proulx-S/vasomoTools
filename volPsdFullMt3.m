@@ -164,7 +164,8 @@ taperPerm = info.perm;
 %     info.ondurList = volTs.dsgn.ondurList';
 % end
 % volPsd = runFullMT2(volTs,W,K,[winSz winStep],info.onsetList,info.ondurList,[],1,info.skipSvd,[],[],taperPerm,phaseRand);
-volPsd = runFullMT3(volTs,W,K,[winSz winStep],[],[],[],1,info.skipSvd,[],[],taperPerm,phaseRand);
+extra.keepJ = 1;
+volPsd = runFullMT3(volTs,W,K,[winSz winStep],[],[],[],extra,info.skipSvd,[],[],taperPerm,phaseRand);
 volPsd.volAnat = volAnat;
 
 % phaseRand = 2^2;
@@ -187,7 +188,11 @@ volPsd.nframes = size(volPsd.vec,1);
 volPsd.tr = mean(diff(volPsd.psd.f))*1000;
 tmp = vec2vol(volPsd);
 tmp.vol(1:10,1:10,1,:) = repmat(permute(tmpMean,[2 3 4 1]),[10 10 1 1]);
-volPsd.psd.fspec = replace(volTs.fspec,'_volTs.nii.gz','_volPsd');
+if contains(volTs.fspec,'_volTs.nii.gz')
+    volPsd.psd.fspec = replace(volTs.fspec,'_volTs.nii.gz','_volPsd');
+elseif contains(volTs.fspec,'_fit.nii.gz')
+    volPsd.psd.fspec = replace(volTs.fspec,'_fit.nii.gz','_fitPsd');
+end
 [a,b,~] = fileparts(volPsd.psd.fspec); b = replace(b,'preproc',strjoin({['mask-' volPsd.volAnat.label] ['K-' num2str(volPsd.psd.K)]},'_'));
 volPsd.psd.fspec = fullfile(a,[b '.nii.gz']);
 % volPsd.psd.fspec = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['logPsd']},'_')) '.nii.gz'];
@@ -205,7 +210,13 @@ if isfield(volPsd.svd,'spSV') && ~isempty(volPsd.svd.spSV)
     if info.perm
         tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
     end
-    volPsd.svd.fspec.spSVmag = replace(volTs.fspec,'_volTs.nii.gz','_volCohMag');
+    if contains(volTs.fspec,'_volTs.nii.gz')
+        volPsd.svd.fspec.spSVmag = replace(volTs.fspec,'_volTs.nii.gz','_volCohMag');
+    elseif contains(volTs.fspec,'_fit.nii.gz')
+        volPsd.svd.fspec.spSVmag = replace(volTs.fspec,'_fit.nii.gz','_fitCohMag');
+    else
+        dbstack; error('not sure how to name this');
+    end
     [a,b,~] = fileparts(volPsd.svd.fspec.spSVmag); b = replace(b,'preproc',strjoin({['mask-' volPsd.volAnat.label] ['K-' num2str(volPsd.psd.K)]},'_'));
     volPsd.svd.fspec.spSVmag = fullfile(a,[b '.nii.gz']);
     MRIwrite(tmp,volPsd.svd.fspec.spSVmag);
@@ -217,7 +228,13 @@ if isfield(volPsd.svd,'spSV') && ~isempty(volPsd.svd.spSV)
     if info.perm
         tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
     end
-    volPsd.svd.fspec.spSVphase = replace(volTs.fspec,'_volTs.nii.gz','_volCohPhase');
+    if contains(volTs.fspec,'_volTs.nii.gz')
+        volPsd.svd.fspec.spSVphase = replace(volTs.fspec,'_volTs.nii.gz','_volCohPhase');
+    elseif contains(volTs.fspec,'_fit.nii.gz')
+        volPsd.svd.fspec.spSVphase = replace(volTs.fspec,'_fit.nii.gz','_fitCohPhase');
+    else
+        dbstack; error('not sure how to name this');
+    end
     [a,b,~] = fileparts(volPsd.svd.fspec.spSVphase); b = replace(b,'preproc',strjoin({['mask-' volPsd.volAnat.label] ['K-' num2str(volPsd.psd.K)]},'_'));
     volPsd.svd.fspec.spSVphase = fullfile(a,[b '.nii.gz']);
     MRIwrite(tmp,volPsd.svd.fspec.spSVphase);

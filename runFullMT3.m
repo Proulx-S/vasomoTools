@@ -1,4 +1,4 @@
-function funPsd = runFullMT3(funTs,W,K,win,onsets,ondurs,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand)
+function funPsd = runFullMT3(funTs,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand)
 % Wrapper for the Chronux's mtspectrumc function for multitaper estimation of
 % pds spectra, compatible with MRI data imported by MRIread.m.
 %
@@ -14,7 +14,7 @@ function funPsd = runFullMT3(funTs,W,K,win,onsets,ondurs,mask,memFlag,skipSVD,sk
 %    See funPsd.psd for other useful parameters.
 %    funPsd.tr reflects the frequency resolution in Hz*1000
 if ~exist('verbose','var') || isempty(verbose); verbose = true; end
-if ~exist('memFlag','var') || isempty(memFlag); memFlag = false; end
+if ~exist('extra','var'); extra = []; end
 if ~exist('W','var'); W = []; end
 if ~exist('K','var'); K = []; end
 if isempty(K) && isempty(W); K = 1; end
@@ -46,12 +46,12 @@ if size(ondurs,1)==1; ondurs = ondurs'; end
 
 if iscell(funTs)
     for I = 1:numel(funTs)
-        funPsd{I} = runFullMT2(funTs{I},W,K,win,onsets,ondurs,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand);
+        funPsd{I} = runFullMT2(funTs{I},W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand);
     end
 elseif isstruct(funTs)
     for I = 1:numel(funTs)
         cohFperm = [0 1.1];
-        funPsd(I) = doIt(funTs(I),W,K,win,onsets,ondurs,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
+        funPsd(I) = doIt(funTs(I),W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
 
         % % taperPerm = 2^7;
         % % phaseRand = 0;
@@ -82,7 +82,7 @@ end
 
 
 
-function funPsd = doIt(funTs,W,K,win,onsetList,durList,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand,cohF,cohFperm)
+function funPsd = doIt(funTs,W,K,win,onsetList,durList,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,cohF,cohFperm)
 if length(K)>1; tp = K; K = size(tp,2); else tp = []; end
 if ~exist('win','var');             win = []; end
 if ~exist('onsetList','var'); onsetList = []; end
@@ -416,7 +416,7 @@ for sInd = 1:length(funTs)
 
     param.perm = taperPerm;
 
-
+    param.keepJ = extra.keepJ;
     % tic
     [funPsd.psd,funPsd.psdGram,funPsd.psdTrialGram,funPsd.psdTrialGramMD,funPsd.svd,funPsd.svdGram,funPsd.svdTrialGram,funPsd.svdTrialGramMD]...
         = computeAll(funTs,TP,param,windFlag,skip,verbose);
@@ -635,8 +635,11 @@ for runInd = 1:nRun
     M = min([V K]);
 
     %%% allocate
-    res.full.PSD    = zeros(1,E,1,1,F,V,W,1  ); % psd       [time x trial x run x taper x freq x vox x window x mode] at each trial
-    res.full.COH    = zeros(1,E,1,1,F,1,W,M  ); % coherence [time x trial x run x taper x freq x vox x window x mode] at each trial
+    if param.keepJ
+        res.full.J = zeros(1,E,1,1,F,V,W,1  ); % psd       [time x trial x run x taper x freq x vox x window x mode] at each trial
+    end
+    res.full.PSD   = zeros(1,E,1,1,F,V,W,1  ); % psd       [time x trial x run x taper x freq x vox x window x mode] at each trial
+    res.full.COH   = zeros(1,E,1,1,F,1,W,M  ); % coherence [time x trial x run x taper x freq x vox x window x mode] at each trial
 
     %%% Compute J
     d = funTs.vec;              % [time  x vox x taper x run               ]
@@ -649,8 +652,10 @@ for runInd = 1:nRun
     %                         [N      E       R     K       F      V     W]
 
     %%% Compute psd
-    res.full.PSD = mean(  conj(J).*J  ,4);
-
+    if param.keepJ
+        res.full.J = J;
+    end
+    res.full.PSD   = mean(  conj(J).*J  ,4);
 
     %%% Compute coherence
     if K > 1

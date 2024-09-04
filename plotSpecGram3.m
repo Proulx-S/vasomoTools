@@ -258,36 +258,39 @@ ax = [ax{:}];
 % Add to timeseries %
 %%%%%%%%%%%%%%%%%% %%
 
-axTs = findobj(allchild(F.Children),'type','axes'); ttl = get(axTs,'Title'); ttl = get([ttl{:}],'String');
+axTs = findobj(allchild(F.Children),'type','axes'); ttl = get(axTs,'Title'); if ~iscell(ttl); ttl = {ttl}; end; ttl = get([ttl{:}],'String');
 axTs = axTs(contains(ttl,'timeseries'));
+if ~isempty(axTs)
 
-%%% delete previous window size visual elements (magentat lines)
-hLine = findobj(axTs.Children,'type','Line'); %hLine = {hLine(:)};
-mLine = get(hLine,'Color'); if iscell(mLine); mLine = cat(1,mLine{:}); end
-mLine = all(cat(1,mLine)==[1 0 1],2);
-delete(hLine(mLine));
+    %%% delete previous window size visual elements (magentat lines)
+    hLine = findobj(axTs.Children,'type','Line'); %hLine = {hLine(:)};
+    mLine = get(hLine,'Color'); if iscell(mLine); mLine = cat(1,mLine{:}); end
+    mLine = all(cat(1,mLine)==[1 0 1],2);
+    delete(hLine(mLine));
 
-% % if length(hLine)==1
-% %     hLine = {hLine};
-% % end
-% % 
-% %     mLine = get(hLine,'Color');
-% % else
-% %     mLine = {get([axTs.Children(:)],'Color')};
-% % end
-% mLine = get(hLine,'Color'); if ~iscell(mLine); mLine = {mLine}; end
-% ind = all(cat(1,mLine{:})==[1 0 1],2);
-% mLine(ind)
-% 
-% mLine = hLine(all(cat(1,mLine{:})==[1 0 1],2));
-% delete(mLine);
-% % if length(axTs.Children)>1
-% %     mLine = get(hLine,'Color');
-% % else
-% %     mLine = {get([axTs.Children(:)],'Color')};
-% % end
-% % mLine = axTs.Children(all(cat(1,mLine{:})==[1 0 1],2));
-% % delete(mLine);
 
-%%% add window size
-addWin(axTs,mt)
+    % % if length(hLine)==1
+    % %     hLine = {hLine};
+    % % end
+    % %
+    % %     mLine = get(hLine,'Color');
+    % % else
+    % %     mLine = {get([axTs.Children(:)],'Color')};
+    % % end
+    % mLine = get(hLine,'Color'); if ~iscell(mLine); mLine = {mLine}; end
+    % ind = all(cat(1,mLine{:})==[1 0 1],2);
+    % mLine(ind)
+    %
+    % mLine = hLine(all(cat(1,mLine{:})==[1 0 1],2));
+    % delete(mLine);
+    % % if length(axTs.Children)>1
+    % %     mLine = get(hLine,'Color');
+    % % else
+    % %     mLine = {get([axTs.Children(:)],'Color')};
+    % % end
+    % % mLine = axTs.Children(all(cat(1,mLine{:})==[1 0 1],2));
+    % % delete(mLine);
+
+    %%% add window size
+    addWin(axTs,mt)
+end

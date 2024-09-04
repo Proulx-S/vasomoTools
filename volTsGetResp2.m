@@ -249,22 +249,33 @@ switch info.dataSetLabel
     case 'vsmDriven'
         %% Response from each runs
         param.skipCat = ~info.doCat;
-        [files,fRun,fSes,fSes_echoCat,param] = getResp2(volTs,dsgn,volAnat.mask.head.f,param,forceThis,verboseThis);
+        [files,fRun,fSes,~,param_getResp2] = getResp2(volTs,dsgn,volAnat.mask.head.f,param,forceThis,verboseThis);
         
-        % [files,fRun,fSes,fSes_echoCat,param] =
-        % getRespTmp(volTs,dsgn,volAnat.mask.head.f,param,forceThis,verboseThis);
-        % % getRespTmp.m implements multiple FIR (more than one response
-        % time course, one per stimulus condition, e.g. here one for
-        % regular trials and one for the catch trial). The difficulty here
-        % is that it is hard to get a F test for individual stimulus
-        % condition--by default there is only the omnibus F test. The
-        % solution might be to use glt but I'm not well verse on that.
+        % % % % % % % % [files,fRun,fSes,fSes_echoCat,param] =
+        % % % % % % % % getRespTmp(volTs,dsgn,volAnat.mask.head.f,param,forceThis,verboseThis);
+        % % % % % % % % % getRespTmp.m implements multiple FIR (more than one response
+        % % % % % % % % time course, one per stimulus condition, e.g. here one for
+        % % % % % % % % regular trials and one for the catch trial). The difficulty here
+        % % % % % % % % is that it is hard to get a F test for individual stimulus
+        % % % % % % % % condition--by default there is only the omnibus F test. The
+        % % % % % % % % solution might be to use glt but I'm not well verse on that.
+        % % % % % % % 
+        % % % % % % % % %% Response from each runs and concatenated runs
+        % % % % % % % % for rr = 1:length(volTs)
+        % % % % % % % %     [files,fRun,fSes,fSes_echoCat,param] = getResp2(volTs(rr),dsgn,volAnat.mask.head.f,param,forceThis);
+        % % % % % % % % end
+        % % % % % % % % %% Response from concatenated runs
+        % % % % % % % % [files,fRun,fSes,fSes_echoCat,param] = getResp2(volTs,dsgn,volAnat.mask.head.f,param,forceThis,verboseThis);
 
-        % %% Response from each runs and concatenated runs
-        % for rr = 1:length(volTs)
-        %     [files,fRun,fSes,fSes_echoCat,param] = getResp2(volTs(rr),dsgn,volAnat.mask.head.f,param,forceThis);
-        % end
-        % %% Response from concatenated runs
+
+
+
+
+        %% SPM double gamma fit (gamma variate + d/dt derivative)
+        param.model = 'SPMG2';
+        [filesAct,fRunAct,fSesAct,~,param_getAct] = getAct(volTs,dsgn,volAnat.mask.head.f,param,forceThis,verboseThis);
+
+
     otherwise
         dbstack; error('double-check that');
         [files,fRun,fSes,fSes_echoCat,param] = getResp(volTs,volAnat,param,forceThis);
@@ -278,6 +289,12 @@ for rr = 1:size(files.resp.f,1)
     volRespRun(rr,1).F  = MRIread(files.respF.f{rr,1});
     volRespRun(rr,1).Fq = MRIread(files.respF_fdr.f{rr,1});
     volRespRun(rr,1).vid = files.respOnBaseMovieHighBit.f{rr,1};
+end
+for rr = 1:size(filesAct.coef.f,1)
+    volRespRun(rr,1).(param_getAct.model).coef    = MRIread(filesAct.coef.f{rr,1},~readFlag);
+    volRespRun(rr,1).(param_getAct.model).coefPol = MRIread(filesAct.coefPol.f{rr,1},~readFlag);
+    volRespRun(rr,1).(param_getAct.model).F       = MRIread(filesAct.F.f{rr,1});
+    volRespRun(rr,1).(param_getAct.model).Fq      = MRIread(filesAct.F_fdr.f{rr,1});
 end
 if ~isempty(fSes)
     volRespSes.ts = MRIread(char(files.resp.fSes),~readFlag);

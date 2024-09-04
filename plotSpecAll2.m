@@ -2,6 +2,7 @@ function plotSpecAll2(volPsd,volTs,volResp,dsgn,fMask,fUlay,Q)
 saveFlag = 0;
 
 
+if ~exist('volTs','var');       volTs = []; end
 if ~exist('Q','var');       Q = []; end
 if ~exist('dsgn','var'); dsgn = []; end
 if isempty(Q);              Q = 1; end % respQthresh = 1 means don't threshold
@@ -10,6 +11,14 @@ if isempty(dsgn)
                          dsgn = volPsd.dsgn;
     end
 end
+
+if ~isempty(volTs)
+    if ~isMRI(volTs)
+        volTs = volTs.mri;
+    end
+end
+
+
 
 Fpsd = figure('WindowStyle','docked');
 HtPsd = tiledlayout(8,1); HtPsd.TileSpacing = 'tight'; HtPsd.Padding = 'tight';
@@ -40,19 +49,21 @@ title(HtPsd,strjoin(b(1:3)))
 %     set([axPsd{ind}],'CLim',cLim);
 % end
 
+drawnow
 
-Fcoh = figure('WindowStyle','docked');
-HtCoh = tiledlayout(8,1); HtCoh.TileSpacing = 'tight'; HtCoh.Padding = 'tight';
-axCoh = {};
-axCoh{end+1} = plotTs3(      HtCoh,volTs,volResp                ,dsgn,fMask        ,Q   );
-axCoh{end+1} = plotSpec3(    HtCoh,volPsd,'coh'                 ,dsgn,fMask,volResp,Q,[]);
-axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'gram'       ,'coh'   ,dsgn,fMask,volResp,Q   );
-axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'coh'   ,dsgn,fMask,volResp,Q   );
-axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEPC',dsgn,fMask,volResp,Q   );
-axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEK' ,dsgn,fMask,volResp,Q   );
-axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGramMD','coh'   ,dsgn,fMask,volResp,Q   );
-axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGramMD','cohEPC',dsgn,fMask,volResp,Q   );
-
+if volPsd.param.tapers(2)~=1
+    Fcoh = figure('WindowStyle','docked');
+    HtCoh = tiledlayout(8,1); HtCoh.TileSpacing = 'tight'; HtCoh.Padding = 'tight';
+    axCoh = {};
+    axCoh{end+1} = plotTs3(      HtCoh,volTs,volResp                ,dsgn,fMask        ,Q   );
+    axCoh{end+1} = plotSpec3(    HtCoh,volPsd,'coh'                 ,dsgn,fMask,volResp,Q,[]);
+    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'gram'       ,'coh'   ,dsgn,fMask,volResp,Q   );
+    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'coh'   ,dsgn,fMask,volResp,Q   );
+    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEPC',dsgn,fMask,volResp,Q   );
+    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEK' ,dsgn,fMask,volResp,Q   );
+    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGramMD','coh'   ,dsgn,fMask,volResp,Q   );
+    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGramMD','cohEPC',dsgn,fMask,volResp,Q   );
+end
 
 
 % 
@@ -121,6 +132,8 @@ end
 
 % title(HtCoh,b{1})
 title(HtCoh,strjoin(b(1:3)))
+
+drawnow
 
 
 %% save

@@ -1,5 +1,5 @@
-function [files,fRun,fSes,fSes_echoCat,param] = getResp2(volTs,dsgn,fMask,param,force,verbose)
-% see /autofs/space/takoyaki_001/users/proulxs/tools/vasomoTools/getAct.m
+function [files,fRun,fSes,fSes_echoCat,param] = getAct(volTs,dsgn,fMask,param,force,verbose)
+% see /autofs/space/takoyaki_001/users/proulxs/tools/vasomoTools/getResp2.m
 fSes_echoCat = [];
 global srcAfni srcFs
 if ~exist('force','var');     force = []; end
@@ -45,11 +45,34 @@ param.funDsgn.label    = dsgn.label;
 param.funDsgn.trDecon  = param.trDecon;
 
 
-%% Run afni's 3dDeconvolve
+% %% Run afni's 3dDeconvolve for response timecourse estimation
+% [fRun,fSes,param] = runAfni(fVolTs,param,fMask,force,verbose); % analysis performed on each echoe within that function
+% nEcho = size(fRun,2);
+% nRun = size(fRun,1);
+
+%% Run afni's 3dDeconvolve for double-gamma response amplitude (and delay) fit
+%  'SPMG1'       = 1 parameter SPM gamma variate basis function
+%      exp(-t)*(A1*t^P1-A2*t^P2) where
+%    A1 = 0.0083333333  P1 = 5  (main positive lobe)
+%    A2 = 1.274527e-13  P2 = 15 (undershoot part)
+%    This function is NOT normalized to have peak=1!
+% 'SPMG2'       = 2 parameter SPM: gamma variate + d/dt derivative
+%    [For backward compatibility: 'SPMG' == 'SPMG2']
+%  'SPMG3'       = 3 parameter SPM basis function set
+%            ==> ** The SPMGx functions now can take an optional
+%                   (duration) argument, specifying that the primal
+%                    SPM basis functions should be convolved with
+%                     a square wave 'duration' seconds long and then
+%                  be normalized to have peak absolute value = 1;
+%                  e.g., 'SPMG3(20)' for a 20 second duration with
+%                  three basis function.  [28 Apr 2009]
+%               ** Note that 'SPMG1(0)' will produce the usual
+%                     'SPMG1' wavefunction shape, but normalized to
+%                   have peak value = 1 (for example).
+param.model = 'SPMG2';
 [fRun,fSes,param] = runAfni(fVolTs,param,fMask,force,verbose); % analysis performed on each echoe within that function
 nEcho = size(fRun,2);
 nRun = size(fRun,1);
-
 
 
 
@@ -58,45 +81,93 @@ disp('Simplifying stat outputs')
 forceThis = force;
 cmd = {srcAfni};
 for i = 1:numel(fSes)
-    fIn = fSes(i).fStat;
-    fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
-    fSes(i).fRespStat = fOut;
-    if forceThis || ~exist(fOut,'file')
-        cmd{end+1} = '3dbucket -overwrite \';
-        cmd{end+1} = ['-prefix ' fOut ' \'];
-        cmd{end+1} = [fIn '[Full_Fstat]'];
+    switch param.model
+        case {'SPMG2' 'SPMG3'}
+            %%% Fstat
+            fIn = fSes(i).fStat;
+            fOut = replace(fIn,'_stats.nii.gz','_fullF.nii.gz');
+            fSes(i).fF = fOut;
+            if forceThis || ~exist(fOut,'file')
+                cmd{end+1} = '3dbucket -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = [fIn '[Full_Fstat]'];
+            end
+            dbstack; error('code that');
+
+        case {'TENT' 'TENTzero'}
+            fIn = fSes(i).fStat;
+            fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
+            fSes(i).fRespStat = fOut;
+            if forceThis || ~exist(fOut,'file')
+                cmd{end+1} = '3dbucket -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = [fIn '[Full_Fstat]'];
+            end
+        otherwise
+            dbstack; error('code that');
     end
 end
 for i = 1:numel(fRun)
-    fIn = fRun(i).fStat;
-    fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
-    fRun(i).fRespStat = fOut;
-    if forceThis || ~exist(fOut,'file')
-        cmd{end+1} = '3dbucket -overwrite \';
-        cmd{end+1} = ['-prefix ' fOut ' \'];
-        cmd{end+1} = [fIn '[Full_Fstat]'];
+    switch param.model
+        case {'SPMG2' 'SPMG3'}
+            %%% F stat
+            fIn = fRun(i).fStat;
+            fOut = replace(fIn,'_stats.nii.gz','_fullF.nii.gz');
+            fRun(i).fF = fOut;
+            if forceThis || ~exist(fOut,'file')
+                cmd{end+1} = '3dbucket -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = [fIn '[Full_Fstat]'];
+            end
+            %%% Coef fits
+            fIn = fRun(i).fStat;
+            fOut = replace(fIn,'_stats.nii.gz','_coef.nii.gz');
+            fRun(i).fCoef = fOut;
+            if forceThis || ~exist(fOut,'file')
+                cmd{end+1} = '3dbucket -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = [fIn '[' param.funDsgn.label '#0_Coef,' param.funDsgn.label '#1_Coef]'];
+            end
+        case {'TENT' 'TENTzero'}
+            fIn = fRun(i).fStat;
+            fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
+            fRun(i).fRespStat = fOut;
+            if forceThis || ~exist(fOut,'file')
+                cmd{end+1} = '3dbucket -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = [fIn '[Full_Fstat]'];
+            end
+        otherwise
+            dbstack; error('code that');
     end
 end
 if nEcho>1
-    for i = 1:numel(fSes_echoRms)
-        fIn = fSes_echoRms(i).fStat;
-        fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
-        fSes_echoRms(i).fRespStat = fOut;
-        if forceThis || ~exist(fOut,'file')
-            cmd{end+1} = '3dbucket -overwrite \';
-            cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = [fIn '[Full_Fstat]'];
-        end
-    end
-    for i = 1:numel(fRun_echoRms)
-        fIn = fRun_echoRms(i).fStat;
-        fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
-        fRun_echoRms(i).fRespStat = fOut;
-        if forceThis || ~exist(fOut,'file')
-            cmd{end+1} = '3dbucket -overwrite \';
-            cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = [fIn '[Full_Fstat]'];
-        end
+    switch param.model
+        case {'SPMG2' 'SPMG3'}
+            dbstack; error('code that');
+        case {'TENT' 'TENTzero'}
+            for i = 1:numel(fSes_echoRms)
+                fIn = fSes_echoRms(i).fStat;
+                fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
+                fSes_echoRms(i).fRespStat = fOut;
+                if forceThis || ~exist(fOut,'file')
+                    cmd{end+1} = '3dbucket -overwrite \';
+                    cmd{end+1} = ['-prefix ' fOut ' \'];
+                    cmd{end+1} = [fIn '[Full_Fstat]'];
+                end
+            end
+            for i = 1:numel(fRun_echoRms)
+                fIn = fRun_echoRms(i).fStat;
+                fOut = replace(fIn,'_stats.nii.gz','_respF.nii.gz');
+                fRun_echoRms(i).fRespStat = fOut;
+                if forceThis || ~exist(fOut,'file')
+                    cmd{end+1} = '3dbucket -overwrite \';
+                    cmd{end+1} = ['-prefix ' fOut ' \'];
+                    cmd{end+1} = [fIn '[Full_Fstat]'];
+                end
+            end
+        otherwise
+            dbstack; error('code that');
     end
 end
 if length(cmd)>1
@@ -113,268 +184,274 @@ end
 
 
 
-%% Add baseline to estimated responses (for later visualization as movies)
-forceThis = force;
-% useFittedBaseline = 1;
-cmd = {srcAfni};
+switch param.model
+    case {'SPMG2' 'SPMG3'}
+    case {'TENT' 'TENTzero'}
+        %% Add baseline to estimated responses (for later visualization as movies)
+        forceThis = force;
+        % useFittedBaseline = 1;
+        cmd = {srcAfni};
 
-%%% Each run
-for R = 1:nRun
-    for E = 1:nEcho+1
-        %%%% Define file names
-        if E>nEcho
-            if nEcho==1; continue; end
-            fResp = fRun_echoRms(R,1).fResp;
-            fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
-            fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
-            fRun_echoRms(R,1).fBase = fBase;
-            fRun_echoRms(R,1).fRespOnBase = fRespOnBase;
-            % if useFittedBaseline
-            % Use fitted baseline
-            fStat = fRun_echoRms(R,1).fStat;
-            % else
-            %     % Use plain average as baseline
-            %     copyfile(fFunc.fAvCatAvEchoRms,fBase);
-            % end
-        else
-            fResp = fRun(R,E).fResp;
-            fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
-            fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
-            fRun(R,E).fBase = fBase;
-            fRun(R,E).fRespOnBase = fRespOnBase;
-            % if useFittedBaseline
-            % Use fitted baseline
-            fStat = fRun(R,E).fStat;
-            % else
-            %     % Use plain average as baseline
-            %     copyfile(fFunc.fAvCatAv{E},fBase);
-            % end
+        %%% Each run
+        for R = 1:nRun
+            for E = 1:nEcho+1
+                %%%% Define file names
+                if E>nEcho
+                    if nEcho==1; continue; end
+                    fResp = fRun_echoRms(R,1).fResp;
+                    fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
+                    fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
+                    fRun_echoRms(R,1).fBase = fBase;
+                    fRun_echoRms(R,1).fRespOnBase = fRespOnBase;
+                    % if useFittedBaseline
+                    % Use fitted baseline
+                    fStat = fRun_echoRms(R,1).fStat;
+                    % else
+                    %     % Use plain average as baseline
+                    %     copyfile(fFunc.fAvCatAvEchoRms,fBase);
+                    % end
+                else
+                    fResp = fRun(R,E).fResp;
+                    fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
+                    fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
+                    fRun(R,E).fBase = fBase;
+                    fRun(R,E).fRespOnBase = fRespOnBase;
+                    % if useFittedBaseline
+                    % Use fitted baseline
+                    fStat = fRun(R,E).fStat;
+                    % else
+                    %     % Use plain average as baseline
+                    %     copyfile(fFunc.fAvCatAv{E},fBase);
+                    % end
+                end
+
+                % if useFittedBaseline
+                %%% Average fitted baselines across runs
+                cmd{end+1} = '3dTstat -overwrite \';
+                cmd{end+1} = '-mean \';
+                cmd{end+1} = ['-prefix ' fBase ' \'];
+                % buck = num2str(1:size(fRun,1),'Run#%iPol#0_Coef,'); buck(end) = [];
+                buck = 'Run#1Pol#0_Coef';
+                cmd{end+1} = [fStat '[' buck ']'];
+                % end
+
+                %%% Add baseline to response
+                cmd{end+1} = '3dcalc -overwrite \';
+                cmd{end+1} = ['-prefix ' fRespOnBase ' \'];
+                cmd{end+1} = ['-a ' fBase ' \'];
+                cmd{end+1} = ['-b ' fResp ' \'];
+                cmd{end+1} = '-expr ''a+b''';
+            end
         end
 
-        % if useFittedBaseline
-        %%% Average fitted baselines across runs
-        cmd{end+1} = '3dTstat -overwrite \';
-        cmd{end+1} = '-mean \';
-        cmd{end+1} = ['-prefix ' fBase ' \'];
-        % buck = num2str(1:size(fRun,1),'Run#%iPol#0_Coef,'); buck(end) = [];
-        buck = 'Run#1Pol#0_Coef';
-        cmd{end+1} = [fStat '[' buck ']'];
-        % end
 
-        %%% Add baseline to response
-        cmd{end+1} = '3dcalc -overwrite \';
-        cmd{end+1} = ['-prefix ' fRespOnBase ' \'];
-        cmd{end+1} = ['-a ' fBase ' \'];
-        cmd{end+1} = ['-b ' fResp ' \'];
-        cmd{end+1} = '-expr ''a+b''';
-    end
-end
+        %%% Whole session
+        if nRun>1 && ~isempty(fSes) && ~param.skipCat
+            for E = 1:nEcho+1
+                %%% Define file names
+                if E>nEcho
+                    if nEcho==1; continue; end
+                    fResp = fSes_echoRms.fResp;
+                    fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
+                    fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
+                    fSes_echoRms.fBase = fBase;
+                    fSes_echoRms.fRespOnBase = fRespOnBase;
+                    % if useFittedBaseline
+                    % Use fitted baseline
+                    fStat = fSes_echoRms.fStat;
+                    % else
+                    %     % Use plain average as baseline
+                    %     copyfile(fFunc.fAvCatAvEchoRms,fBase);
+                    % end
+                else
+                    fResp = fSes(1,E).fResp;
+                    fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
+                    fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
+                    fSes(1,E).fBase = fBase;
+                    fSes(1,E).fRespOnBase = fRespOnBase;
+                    % if useFittedBaseline
+                    % Use fitted baseline
+                    fStat = fSes(1,E).fStat;
+                    % else
+                    %     % Use plain average as baseline
+                    %     copyfile(fFunc.fAvCatAv{E},fBase);
+                    % end
+                end
 
+                % if useFittedBaseline
+                %%% Average fitted baselines across runs
+                cmd{end+1} = '3dTstat -overwrite \';
+                cmd{end+1} = '-mean \';
+                cmd{end+1} = ['-prefix ' fBase ' \'];
+                buck = num2str(1:size(fRun,1),'Run#%iPol#0_Coef,'); buck(end) = [];
+                cmd{end+1} = [fStat '[' buck ']'];
+                % end
 
-%%% Whole session
-if nRun>1 && ~isempty(fSes) && ~param.skipCat
-    for E = 1:nEcho+1
-        %%% Define file names
-        if E>nEcho
-            if nEcho==1; continue; end
-            fResp = fSes_echoRms.fResp;
-            fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
-            fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
-            fSes_echoRms.fBase = fBase;
-            fSes_echoRms.fRespOnBase = fRespOnBase;
-            % if useFittedBaseline
-            % Use fitted baseline
-            fStat = fSes_echoRms.fStat;
+                %%% Add baseline to response
+                cmd{end+1} = '3dcalc -overwrite \';
+                cmd{end+1} = ['-prefix ' fRespOnBase ' \'];
+                cmd{end+1} = ['-a ' fBase ' \'];
+                cmd{end+1} = ['-b ' fResp ' \'];
+                cmd{end+1} = '-expr ''a+b''';
+            end
             % else
-            %     % Use plain average as baseline
-            %     copyfile(fFunc.fAvCatAvEchoRms,fBase);
-            % end
-        else
-            fResp = fSes(1,E).fResp;
-            fBase = replace(fResp,'_resp.nii.gz','_base.nii.gz');
-            fRespOnBase = replace(fResp,'_resp.nii.gz','_respOnBase.nii.gz');
-            fSes(1,E).fBase = fBase;
-            fSes(1,E).fRespOnBase = fRespOnBase;
-            % if useFittedBaseline
-            % Use fitted baseline
-            fStat = fSes(1,E).fStat;
-            % else
-            %     % Use plain average as baseline
-            %     copyfile(fFunc.fAvCatAv{E},fBase);
-            % end
+            %     fSes = fRun;
         end
 
-        % if useFittedBaseline
-        %%% Average fitted baselines across runs
-        cmd{end+1} = '3dTstat -overwrite \';
-        cmd{end+1} = '-mean \';
-        cmd{end+1} = ['-prefix ' fBase ' \'];
-        buck = num2str(1:size(fRun,1),'Run#%iPol#0_Coef,'); buck(end) = [];
-        cmd{end+1} = [fStat '[' buck ']'];
-        % end
-
-        %%% Add baseline to response
-        cmd{end+1} = '3dcalc -overwrite \';
-        cmd{end+1} = ['-prefix ' fRespOnBase ' \'];
-        cmd{end+1} = ['-a ' fBase ' \'];
-        cmd{end+1} = ['-b ' fResp ' \'];
-        cmd{end+1} = '-expr ''a+b''';
-    end
-% else
-%     fSes = fRun;
-end
-
-%%% Run command
-disp('Adding estimated baseline and responses for visualization as movies')
-if forceThis || ~exist(fRespOnBase,'file') || ~exist(fBase,'file')
-    if verbose
-        [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
-    else
-        [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
-    end
-    disp(' done')
-else
-    disp(' already done, skipping')
-end
-
-%%% Make the movies
-movieFlag = MRIread(fVolTs{1},1); movieFlag = movieFlag.depth==1;
-if movieFlag
-    forceThis = force;
-    disp('Making movies')
-    nLoop = 4;
-    if ~isempty(fMask)
-        mask = MRIread(fMask); mask = logical(mask.vol);
-    else
-        mask = true(volTs.height,volTs.width,volTs.depth);
-    end
-
-    %%%% Individual runs
-    for R = 1:nRun
-        for E = 1:nEcho+1
-            if E>nEcho && nEcho==1; break; end
-            disp([' run' num2str(R) '/' num2str(nRun)])
-            disp(['  file' num2str(E) '/' num2str(size(fSes,2)+1)])
-            if E>nEcho
-                fIn = fRun_echoRms(R).fRespOnBase;
-                fOut = replace(fIn,'.nii.gz','');
-                fRun_echoRms(R).fRespOnBaseMovie = [fOut '.avi'];
-                fRun_echoRms(R).fRespOnBaseMovieHighBit = [fOut '.mj2'];
+        %%% Run command
+        disp('Adding estimated baseline and responses for visualization as movies')
+        if forceThis || ~exist(fRespOnBase,'file') || ~exist(fBase,'file')
+            if verbose
+                [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
             else
-                fIn = fRun(R,E).fRespOnBase;
-                fOut = replace(fIn,'.nii.gz','');
-                fRun(R,E).fRespOnBaseMovie = [fOut '.avi'];
-                fRun(R,E).fRespOnBaseMovieHighBit = [fOut '.mj2'];
+                [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
             end
-            if forceThis || ~exist([fOut '.avi'],'file')
-                vOut = VideoWriter(fOut,'Uncompressed AVI');
-            end
-            if forceThis || ~exist([fOut '.mj2'],'file')
-                vOutHighBit = VideoWriter(fOut,'Archival');
+            disp(' done')
+        else
+            disp(' already done, skipping')
+        end
+
+        %%% Make the movies
+        movieFlag = MRIread(fVolTs{1},1); movieFlag = movieFlag.depth==1;
+        if movieFlag
+            forceThis = force;
+            disp('Making movies')
+            nLoop = 4;
+            if ~isempty(fMask)
+                mask = MRIread(fMask); mask = logical(mask.vol);
+            else
+                mask = true(volTs.height,volTs.width,volTs.depth);
             end
 
-            if forceThis || ~exist([fOut '.avi'],'file') || ~exist([fOut '.mj2'],'file')
-                resp = MRIread(fIn);
-                % Scale
-                mask = repmat(mask,[1 1 resp.depth resp.nframes]);
-                resp.vol(mask) = resp.vol(mask) - min(resp.vol(mask));
-                resp.vol(mask) = resp.vol(mask) ./ max(resp.vol(mask));
-                mask = mask(:,:,1,1);
-                % Crop
-                resp.vol(all(~mask,2),:,:,:) = [];
-                resp.vol(:,all(~mask,1),:,:) = [];
-                % Upsample
-                resp.vol = imresize(resp.vol,3,'nearest');
-                % Set frame rate to 1cycle/sec
-                vOutHighBit.FrameRate = resp.nframes;
-                vOut.FrameRate = resp.nframes;
+            %%%% Individual runs
+            for R = 1:nRun
+                for E = 1:nEcho+1
+                    if E>nEcho && nEcho==1; break; end
+                    disp([' run' num2str(R) '/' num2str(nRun)])
+                    disp(['  file' num2str(E) '/' num2str(size(fSes,2)+1)])
+                    if E>nEcho
+                        fIn = fRun_echoRms(R).fRespOnBase;
+                        fOut = replace(fIn,'.nii.gz','');
+                        fRun_echoRms(R).fRespOnBaseMovie = [fOut '.avi'];
+                        fRun_echoRms(R).fRespOnBaseMovieHighBit = [fOut '.mj2'];
+                    else
+                        fIn = fRun(R,E).fRespOnBase;
+                        fOut = replace(fIn,'.nii.gz','');
+                        fRun(R,E).fRespOnBaseMovie = [fOut '.avi'];
+                        fRun(R,E).fRespOnBaseMovieHighBit = [fOut '.mj2'];
+                    end
+                    if forceThis || ~exist([fOut '.avi'],'file')
+                        vOut = VideoWriter(fOut,'Uncompressed AVI');
+                    end
+                    if forceThis || ~exist([fOut '.mj2'],'file')
+                        vOutHighBit = VideoWriter(fOut,'Archival');
+                    end
 
-                % Write
-                open(vOut)
-                open(vOutHighBit)
-                for L = 1:nLoop
-                    for f = 1:resp.nframes
-                        writeVideo(vOut,resp.vol(:,:,1,f));
-                        writeVideo(vOutHighBit,uint16(resp.vol(:,:,1,f)*(2^16-1)));
+                    if forceThis || ~exist([fOut '.avi'],'file') || ~exist([fOut '.mj2'],'file')
+                        resp = MRIread(fIn);
+                        % Scale
+                        mask = repmat(mask,[1 1 resp.depth resp.nframes]);
+                        resp.vol(mask) = resp.vol(mask) - min(resp.vol(mask));
+                        resp.vol(mask) = resp.vol(mask) ./ max(resp.vol(mask));
+                        mask = mask(:,:,1,1);
+                        % Crop
+                        resp.vol(all(~mask,2),:,:,:) = [];
+                        resp.vol(:,all(~mask,1),:,:) = [];
+                        % Upsample
+                        resp.vol = imresize(resp.vol,3,'nearest');
+                        % Set frame rate to 1cycle/sec
+                        vOutHighBit.FrameRate = resp.nframes;
+                        vOut.FrameRate = resp.nframes;
+
+                        % Write
+                        open(vOut)
+                        open(vOutHighBit)
+                        for L = 1:nLoop
+                            for f = 1:resp.nframes
+                                writeVideo(vOut,resp.vol(:,:,1,f));
+                                writeVideo(vOutHighBit,uint16(resp.vol(:,:,1,f)*(2^16-1)));
+                            end
+                        end
+                        close(vOut)
+                        close(vOutHighBit)
+
+                        disp('  done')
+                    else
+                        disp('  already done,skipping')
                     end
                 end
-                close(vOut)
-                close(vOutHighBit)
-
-                disp('  done')
-            else
-                disp('  already done,skipping')
-            end
-        end
-    end
-
-
-    if nRun>1 && ~isempty(fSes) && ~param.skipCat
-        %%%% Whole session
-        disp(' runCat')
-        for E = 1:nEcho+1
-            if E>nEcho && nEcho==1; break; end
-            disp(['  file' num2str(E) '/' num2str(size(fSes,2)+1)])
-            if E>nEcho && nEcho>1
-                fIn = fSes_echoRms.fRespOnBase;
-                fOut = replace(fIn,'.nii.gz','');
-                fSes_echoRms.fRespOnBaseMovie = [fOut '.avi'];
-                fSes_echoRms.fRespOnBaseMovieHighBit = [fOut '.mj2'];
-            else
-                fIn = fSes(1,E).fRespOnBase;
-                fOut = replace(fIn,'.nii.gz','');
-                fSes(1,E).fRespOnBaseMovie = [fOut '.avi'];
-                fSes(1,E).fRespOnBaseMovieHighBit = [fOut '.mj2'];
-            end
-            if forceThis || ~exist([fOut '.avi'],'file')
-                vOut = VideoWriter(fOut,'Uncompressed AVI');
-            end
-            if forceThis || ~exist([fOut '.mj2'],'file')
-                vOutHighBit = VideoWriter(fOut,'Archival');
             end
 
-            if forceThis || ~exist([fOut '.avi'],'file') || ~exist([fOut '.mj2'],'file')
-                resp = MRIread(fIn);
-                % Scale
-                mask = repmat(mask,[1 1 resp.depth resp.nframes]);
-                resp.vol(mask) = resp.vol(mask) - min(resp.vol(mask));
-                resp.vol(mask) = resp.vol(mask) ./ max(resp.vol(mask));
-                mask = mask(:,:,1,1);
-                % Crop
-                resp.vol(all(~mask,2),:,:,:) = [];
-                resp.vol(:,all(~mask,1),:,:) = [];
-                % Upsample
-                resp.vol = imresize(resp.vol,3,'nearest');
-                % Set frame rate to 1cycle/sec
-                vOutHighBit.FrameRate = resp.nframes;
-                vOut.FrameRate = resp.nframes;
 
-                % Write
-                open(vOut)
-                open(vOutHighBit)
-                for L = 1:nLoop
-                    for f = 1:resp.nframes
-                        writeVideo(vOut,resp.vol(:,:,1,f));
-                        writeVideo(vOutHighBit,uint16(resp.vol(:,:,1,f)*(2^16-1)));
+            if nRun>1 && ~isempty(fSes) && ~param.skipCat
+                %%%% Whole session
+                disp(' runCat')
+                for E = 1:nEcho+1
+                    if E>nEcho && nEcho==1; break; end
+                    disp(['  file' num2str(E) '/' num2str(size(fSes,2)+1)])
+                    if E>nEcho && nEcho>1
+                        fIn = fSes_echoRms.fRespOnBase;
+                        fOut = replace(fIn,'.nii.gz','');
+                        fSes_echoRms.fRespOnBaseMovie = [fOut '.avi'];
+                        fSes_echoRms.fRespOnBaseMovieHighBit = [fOut '.mj2'];
+                    else
+                        fIn = fSes(1,E).fRespOnBase;
+                        fOut = replace(fIn,'.nii.gz','');
+                        fSes(1,E).fRespOnBaseMovie = [fOut '.avi'];
+                        fSes(1,E).fRespOnBaseMovieHighBit = [fOut '.mj2'];
+                    end
+                    if forceThis || ~exist([fOut '.avi'],'file')
+                        vOut = VideoWriter(fOut,'Uncompressed AVI');
+                    end
+                    if forceThis || ~exist([fOut '.mj2'],'file')
+                        vOutHighBit = VideoWriter(fOut,'Archival');
+                    end
+
+                    if forceThis || ~exist([fOut '.avi'],'file') || ~exist([fOut '.mj2'],'file')
+                        resp = MRIread(fIn);
+                        % Scale
+                        mask = repmat(mask,[1 1 resp.depth resp.nframes]);
+                        resp.vol(mask) = resp.vol(mask) - min(resp.vol(mask));
+                        resp.vol(mask) = resp.vol(mask) ./ max(resp.vol(mask));
+                        mask = mask(:,:,1,1);
+                        % Crop
+                        resp.vol(all(~mask,2),:,:,:) = [];
+                        resp.vol(:,all(~mask,1),:,:) = [];
+                        % Upsample
+                        resp.vol = imresize(resp.vol,3,'nearest');
+                        % Set frame rate to 1cycle/sec
+                        vOutHighBit.FrameRate = resp.nframes;
+                        vOut.FrameRate = resp.nframes;
+
+                        % Write
+                        open(vOut)
+                        open(vOutHighBit)
+                        for L = 1:nLoop
+                            for f = 1:resp.nframes
+                                writeVideo(vOut,resp.vol(:,:,1,f));
+                                writeVideo(vOutHighBit,uint16(resp.vol(:,:,1,f)*(2^16-1)));
+                            end
+                        end
+                        close(vOut)
+                        close(vOutHighBit)
+
+                        disp('  done')
+                    else
+                        disp('  already done,skipping')
                     end
                 end
-                close(vOut)
-                close(vOutHighBit)
-
-                disp('  done')
-            else
-                disp('  already done,skipping')
             end
         end
-    end
+    otherwise
+        dbstack; error('X');
 end
 
 %% Reconcile output with convention
 forceThis = force;
 disp('Catenating functional analyses')
 cmd = {srcAfni};
-fieldListIn =  {'fBase' 'fResp' 'fRespOnBase' 'fRespOnBaseMovie' 'fRespOnBaseMovieHighBit' 'fRespStat' 'fFit' 'fResid' 'fStat' 'fMat'   };
-fieldListOut = {'base'  'resp'  'respOnBase'  'respOnBaseMovie'  'respOnBaseMovieHighBit'  'respF'     'fit'  'resid'  'stat'  'dsgnMat'};
+fieldListIn =  {'fBase' 'fResp' 'fRespOnBase' 'fRespOnBaseMovie' 'fRespOnBaseMovieHighBit' 'fRespStat' 'fFit' 'fResid' 'fStat' 'fMat'    'fF' 'fCoef'};
+fieldListOut = {'base'  'resp'  'respOnBase'  'respOnBaseMovie'  'respOnBaseMovieHighBit'  'respF'     'fit'  'resid'  'stat'  'dsgnMat' 'F'  'coef' };
 for i = 1:length(fieldListIn)
     fieldIn = fieldListIn{i};
     fieldOut = fieldListOut{i};
@@ -472,33 +549,60 @@ end
 
 %% Produce fdr maps
 %clean up the old catenation approach
-if param.skipCat
-    if isfield(files.respF,'fCat')
-        if exist(char(files.respF.fCat),'file')
-            delete(char(files.respF.fCat))
-        end
-        files.respF = rmfield(files.respF,'fCat');
-    end
-end
-fieldList = fields(files.respF);
-for i = 1:length(fieldList)
-    f = files.respF.(fieldList{i});
-    fOut = replace(f,'_respF.nii.gz','_respFfdr.nii.gz');
-    for E = 1:size(f,2)
-        for R = 1:size(f,1)
-            if force || ~exist(fOut{R,E},'file')
-                cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' f{R,E} ')'];
-                cmd{end+1} = 'df1=$(echo $df | awk ''{print $(NF-1)}'')';
-                cmd{end+1} = 'df2=$(echo $df | awk ''{print $NF}'')';
-                cmd{end+1} = '3dcalc -overwrite \';
-                cmd{end+1} = ['-prefix ' fOut{R,E} ' \'];
-                cmd{end+1} = ['-a ' f{R,E} ' \'];
-                cmd{end+1} = '-expr "1-stat2cdf(a,4,$df1,$df2,0)" 2> /dev/null';
+switch param.model
+    case {'TENT' 'TENTzero'}
+        if param.skipCat
+            if isfield(files.respF,'fCat')
+                if exist(char(files.respF.fCat),'file')
+                    delete(char(files.respF.fCat))
+                end
+                files.respF = rmfield(files.respF,'fCat');
             end
         end
-    end
-    files.respF_fdr.(fieldList{i}) = fOut;
+
+        fieldList = fields(files.F);
+        for i = 1:length(fieldList)
+            f = files.respF.(fieldList{i});
+            fOut = replace(f,'_respF.nii.gz','_respFfdr.nii.gz');
+            for E = 1:size(f,2)
+                for R = 1:size(f,1)
+                    if force || ~exist(fOut{R,E},'file')
+                        cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' f{R,E} ')'];
+                        cmd{end+1} = 'df1=$(echo $df | awk ''{print $(NF-1)}'')';
+                        cmd{end+1} = 'df2=$(echo $df | awk ''{print $NF}'')';
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' fOut{R,E} ' \'];
+                        cmd{end+1} = ['-a ' f{R,E} ' \'];
+                        cmd{end+1} = '-expr "1-stat2cdf(a,4,$df1,$df2,0)" 2> /dev/null';
+                    end
+                end
+            end
+            files.respF_fdr.(fieldList{i}) = fOut;
+        end
+
+    case {'SPMG2' 'SPMG3'}
+        f = files.F.f;
+        for E = 1:size(f,2)
+            for R = 1:size(f,1)
+                fOut = replace(f{R,E},'_fullF.nii.gz','_fullFfdr.nii.gz');
+                if force || ~exist(fOut,'file')
+                    cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' char(f{R,E}) ')'];
+                    cmd{end+1} = 'df1=$(echo $df | awk ''{print $(NF-1)}'')';
+                    cmd{end+1} = 'df2=$(echo $df | awk ''{print $NF}'')';
+                    cmd{end+1} = '3dcalc -overwrite \';
+                    cmd{end+1} = ['-prefix ' char(fOut) ' \'];
+                    cmd{end+1} = ['-a ' char(f{R,E}) ' \'];
+                    cmd{end+1} = '-expr "1-stat2cdf(a,4,$df1,$df2,0)" 2> /dev/null';
+                end
+                files.F_fdr.f{R,E} = fOut;
+            end
+        end
+
+    otherwise
+        dbstack; error('figure that out')
 end
+
+
 
 
 % % if nEcho>1
@@ -560,6 +664,42 @@ if length(cmd)>1
     disp(' done')
 else
     disp(' already done, skipping')
+end
+
+
+
+
+%% Convert SPMG2 cartesian responses coefficient (gamma + first derivative) to polar (amplitude + delay) coefficient
+switch param.model
+    case 'SPMG2'
+        disp('convert hrf+derivative cartesian coefficients to polar coefficients')
+        f = files.coef.f;
+        for E = 1:size(f,2)
+            for R = 1:size(f,1)
+                fOut = replace(f{R,E},'_coef.nii.gz','_coefPol.nii.gz');
+                if force || ~exist(fOut,'file')
+                    mask = MRIread(fMask);
+                    F = MRIread(char(files.F.f{R,E}));
+                    fdr = MRIread(char(files.F_fdr.f{R,E}));
+                    mask = mask.vol & fdr.vol<0.05;
+
+                    coef = MRIread(f{R,E});
+                    coefPol = coef;
+                    coef.vol = complex(coef.vol(:,:,:,1),coef.vol(:,:,:,2));
+                    coefPol.vol(:,:,:,1) = abs(coef.vol);
+                    coefPol.vol(:,:,:,2) = wrapToPi(angle(coef.vol) - circ_mean(angle(coef.vol(mask))));
+
+                    MRIwrite(coefPol,fOut);
+                    disp(' done')
+                else
+                    disp(' already done, skipping')
+                end
+                files.coefPol.f{R,E} = fOut;
+            end
+        end
+    case {'TENT' 'TENTzero'}
+    otherwise
+        dbstack; error('figure that out')
 end
 
 
@@ -889,13 +1029,14 @@ trStim = param.funDsgn.trStim;
 durSeq =  param.funDsgn.durSeq;
 condSeq = param.funDsgn.condSeq;
 startSeq = param.funDsgn.startSeq;
+HRmodel = param.model;
 
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Fixed-effect model on individual runs %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
-trDecon = param.funDsgn.trDecon;
-TENTzeroFlag = 1;
+% trDecon = param.funDsgn.trDecon;
+% TENTzeroFlag = 1;
 
 cmd = {srcAfni};
 for E = 1:size(fList,2)
@@ -904,15 +1045,28 @@ for E = 1:size(fList,2)
         %% Define files
         fIn = fList{I,E};
         fOut = fIn;
-        fStat   = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.nii.gz');
-        fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.1D');
-        fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_stats.xmat.fig');
-        fStim   = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_startTime.1D');
-        fResp   = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resp.nii.gz');
-        fFit    = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_fit.nii.gz');
-        fResid  = fullfile(fileparts(replace(fOut,'.nii.gz','')),'cond-visOn_resid.nii.gz');
+        fStat   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.nii.gz']);
+        fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.xmat.1D']);
+        fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.xmat.fig']);
+        fStim   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_startTime.1D']);
+        switch HRmodel
+            case {'TENT' 'TENTzero'}
+                fResp   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_resp.nii.gz']);
+            case {'SPMG2' 'SPMG3'}
+            otherwise
+                dbstack; error('figure that out')
+        end
+        fFit    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_fit.nii.gz']);
+        fResid  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_resid.nii.gz']);
 
-        fRun(I,E).fResp = fResp;
+
+        switch HRmodel
+            case {'TENT' 'TENTzero'}
+                fRun(I,E).fResp = fResp;
+            case {'SPMG2' 'SPMG3'}
+            otherwise
+                dbstack; error('figure that out')
+        end
         fRun(I,E).fFit = fFit;
         fRun(I,E).fResid = fResid;
         fRun(I,E).fStat = fStat;
@@ -929,21 +1083,24 @@ for E = 1:size(fList,2)
             cmdTmp{end+1} = ['echo ''  ''run' num2str(I) '/' num2str(size(fList,1))];
         end
         % if ~exist(fStat,'file') || force
-            if ~isfield(param.funDsgn,'trDecon')
-                if isfield(param.funDsgn,'trStim')
-                    param.funDsgn.trDecon = param.funDsgn.trStim;
-                else
-                    dbstack; error('please specify deconvolution time resolution (param.funDsgn.trDecon)');
-                end
-            end
-            
-            [tmp,n] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,condSeq,trDecon,param.funDsgn.label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved);
-            cmdTmp = [cmdTmp tmp];
+        % if ~isfield(param.funDsgn,'trDecon')
+        %     if isfield(param.funDsgn,'trStim')
+        %         param.funDsgn.trDecon = param.funDsgn.trStim;
+        %     else
+        %         dbstack; error('please specify deconvolution time resolution (param.funDsgn.trDecon)');
+        %     end
+        % end
 
-            cmdTmp{end+1} = ['echo ''   ''' fResp];
-            cmdTmp{end+1} = ['echo ''   ''' fStat];
-            cmdTmp{end+1} = ['echo ''   ''' fMat];
-            cmdTmp{end+1} = 'echo ''   ''done';
+        [tmp,nReg] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,durSeq,condSeq,HRmodel,param.funDsgn.label,[],[],fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved);
+        cmdTmp = [cmdTmp tmp];
+
+        switch HRmodel
+            case {'TENT' 'TENTzero'}
+                cmdTmp{end+1} = ['echo ''   ''' fResp];
+        end
+        cmdTmp{end+1} = ['echo ''   ''' fStat];
+        cmdTmp{end+1} = ['echo ''   ''' fMat];
+        cmdTmp{end+1} = 'echo ''   ''done';
         % else
         %     cmdTmp{end+1} = ['echo ''   ''' fResp];
         %     cmdTmp{end+1} = ['echo ''   ''' fStat];
@@ -1007,12 +1164,16 @@ cmdX{end+1} = ['1dcat ' fMat];
 param.funDsgn.mat = str2num(cmdout);
 tRun = (0:size(param.funDsgn.mat,1)-1)+(param.nDummyRemoved-1);
 tRun = tRun.*param.tr;
-if TENTzeroFlag
-    nPoly = size(param.funDsgn.mat,2) - (n-2);
-    tStim = (1:n-2).*trDecon;
-else
-    nPoly = size(param.funDsgn.mat,2) - n;
-    tStim = (0:n-1).*trDecon;
+switch HRmodel
+    case 'TENTzero'
+        nPoly = size(param.funDsgn.mat,2) - (nReg-2);
+        tStim = (1:nReg-2).*trDecon;
+    case 'TENT'
+        nPoly = size(param.funDsgn.mat,2) - nReg;
+        tStim = (0:nReg-1).*trDecon;
+    case {'SPMG2' 'SPMG3'}
+        nPoly = size(param.funDsgn.mat,2) - nReg;
+        tStim = 0:nReg-1;
 end
 tStim = [linspace(tStim(1)-(param.trDecon.*nPoly),tStim(1)-param.trDecon,nPoly) tStim];
 imagesc(tStim,tRun,param.funDsgn.mat); colormap gray
@@ -1026,7 +1187,12 @@ ax.XTickLabel(~pInd) = cellstr(num2str(tStim(~pInd)','%0.3f'))';
 clim([-1 1])
 [~,b,~] = fileparts(fileparts(fIn));
 title(b,'interpreter','none')
-xlabel('time after stim onset (s)')
+switch HRmodel
+    case {'TENT' 'TENTzero'}
+        xlabel('time after stim onset (s)')
+    case {'SPMG2' 'SPMG3'}
+        xlabel('regressors of interest')
+end
 ylabel('time after run onset (s)')
 set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')'); 
 savefig(hMat,fMatFig,'compact')
@@ -1042,8 +1208,8 @@ drawnow
 % Fixed-effect model on concatenated runs (separate baselines) %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
 if size(fList,1)>1 && ~param.skipCat
+    dbstack; error('double-check that')
     cmd = {srcAfni};
-    % dbstack; error('double-check that')
     for E = 1:size(fList,2)
 
         %% Define files
@@ -1108,11 +1274,11 @@ if size(fList,1)>1 && ~param.skipCat
     tRun = (0:size(param.funDsgn.mat,1)/nRun-1)+(param.nDummyRemoved-1);
     tRun = repmat(tRun.*param.tr,[1 nRun]);
     if TENTzeroFlag
-        nPoly = size(param.funDsgn.mat,2) - (n-2);
-        tStim = (1:n-2).*trDecon;
+        nPoly = size(param.funDsgn.mat,2) - (nReg-2);
+        tStim = (1:nReg-2).*trDecon;
     else
-        nPoly = size(param.funDsgn.mat,2) - n;
-        tStim = (0:n-1).*trDecon;
+        nPoly = size(param.funDsgn.mat,2) - nReg;
+        tStim = (0:nReg-1).*trDecon;
     end
     tStim = [linspace(tStim(1)-(param.trDecon.*nPoly),tStim(1)-param.trDecon,nPoly) tStim];
     imagesc(tStim,[],param.funDsgn.mat); colormap gray
@@ -1141,7 +1307,7 @@ else
 end
 
 
-function [cmd,n] = afniCmd(fIn,fMask,fStim,nDummy,tr,startSeq,condSeq,trDecon,label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose,nDummyRemoved)
+function [cmd,nReg] = afniCmd(fIn,fMask,fStim,nDummy,tr,startSeq,durSeq,condSeq,HRmodel,label,TENTzeroFlag,fResp,fFit,fResid,fMat,fStat,verbose,nDummyRemoved)
 if ~exist('nDummyRemoved','var'); nDummyRemoved = []; end
 if isempty(nDummyRemoved);        nDummyRemoved = nDummy; warning('param.nDummyRemoved not specified, assuming param.nDummyRemoved = param.nDummy'); end
 if nDummyRemoved && nDummyRemoved~=nDummy; dbstack; error('param.nDummyRemoved specified, but does not match param.nDummy'); end
@@ -1189,25 +1355,41 @@ else
     fprintf(fido,'\n');
 end
 fclose(fido);
-deconWin = min(diff(startSeq(condSeq==1)));
-if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
-    deconWin = ceil(deconWin/trDecon)*trDecon;
-else
-    deconWin = floor(deconWin/trDecon)*trDecon;
-end
-b = 0;
-% c = deconWin-trDecon;
-c = round((deconWin-trDecon)/trDecon)*trDecon;
-n = round( (c-b)/trDecon + 1 );
-% (c-b)/(n-1)
+
+
 k = 1;
-if TENTzeroFlag
-    cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(n) ')'' \'];
-else
-    cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''TENT(' num2str(b) ',' num2str(c) ',' num2str(n) ')'' \'];
+
+switch HRmodel
+    case 'SPMG2'
+        nReg = 2;
+        dur = unique(durSeq); if length(dur)>1; dbstack; error('stim duration cannot be different across trials'); end
+        cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(dur,'%0.3f') ')'' \'];
+    case 'SPMG3'
+        nReg = 3;
+        dur = unique(durSeq); if length(dur)>1; dbstack; error('stim duration cannot be different across trials'); end
+        cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(dur,'%0.3f') ')'' \'];
+    case 'TENTzero'
+        deconWin = min(diff(startSeq(condSeq==1)));
+        if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
+            deconWin = ceil(deconWin/trDecon)*trDecon;
+        else
+            deconWin = floor(deconWin/trDecon)*trDecon;
+        end
+        b = 0;
+        % c = deconWin-trDecon;
+        c = round((deconWin-trDecon)/trDecon)*trDecon;
+        nReg = round( (c-b)/trDecon + 1 );
+        % (c-b)/(n-1)
+        if TENTzeroFlag
+            cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+        else
+            cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''TENT(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+        end
+    otherwise
+        dbstak; error('X');
 end
-cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
-cmd{end+1} = ['-iresp ' num2str(k) ' ' fResp ' \'];
+% cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
+% cmd{end+1} = ['-iresp ' num2str(k) ' ' fResp ' \'];
 cmd{end+1} = ['-fitts ' fFit ' \'];
 cmd{end+1} = ['-errts ' fResid ' \'];
 cmd{end+1} = '-bout \';
