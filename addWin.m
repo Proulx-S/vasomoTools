@@ -9,6 +9,8 @@ if ~exist('y','var'); y = []; end
 
 hold on
 
+Hgram = findobj(H.Children,'type','image');
+
 % winSz = gram.lWin;
 Fs = gram.param.Fs;
 winSz = gram.win(1) + 0.5/Fs;
@@ -41,10 +43,11 @@ if contains(H.Title.String,'timeseries')
         line(xx,y,'Color','m','linewidth',3)
     end
 
-elseif contains(H.Title.String,'spectrogram') || contains(H.Title.String,'coherogram')
+elseif contains(H.Title.String,'spectrogram') || contains(H.Title.String,'coherogram') || sum(abs(Hgram.YData - round(Hgram.YData)))>0
     im = findobj(H.Children,'type','image');
     if isempty(x)
-        x = im.XData(1) - mean(diff(im.XData))/2;
+        % x = im.XData(1) - mean(diff(im.XData))/2;
+        x = 0;
         x = x .* [1 1];
         xx = x + [0 1].*winSz;
     else

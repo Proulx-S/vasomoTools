@@ -1,22 +1,110 @@
-function out = drawMask(ulay,useSynth)
-global srcFs
-% if ~exist('force','var');     force = []; end
+function masks = drawMask(fspec,useSynth,force)
+global srcFs srcAfni
+if ~exist('force','var');     force = []; end
 % if ~exist('verbose','var'); verbose = []; end
-% if isempty(force);            force = 0; end
+if isempty(force);            force = 0; end
 % if isempty(verbose);        verbose = 0; end
 if ~exist('useSynth','var'); useSynth = []; end
 if isempty(useSynth);        useSynth = 0; end
 
 
-ulay
+
+
+if useSynth
+    dbstack; error('double-check that')
+    %%% Start with mask from synthstrip
+    fspec2 = fspec;
+    fSynth = replace(fspec,'_volTs.nii.gz','_volSynthMask.nii.gz');
+    [a,b] = fileparts(replace(fspec2,'.nii.gz',''));
+    if startsWith(b,'cat_av_') && exist(fullfile(a,['av_' b '.nii.gz']),'file')
+        fspec2 = fullfile(a,['av_' b '.nii.gz']);
+        fSynth = replace(fspec2,'_volTs.nii.gz','_volSynthMask.nii.gz');
+    end
+    fMask = replace(fSynth,'_volSynthMask.nii.gz','_volBrainMask.nii.gz');
+
+    if force || ~exist(fSynth,'file') || ~exist(fMask,'file')
+        cmd = {srcFs}; cmd{end+1} = srcAfni;
+        cmd{end+1} = 'echo mri_synthstrip';
+        cmd{end+1} = 'mri_synthstrip \';
+        cmd{end+1} = ['-i ' fspec2 ' \'];
+        cmd{end+1} = ['-m ' fSynth];
+        cmd{end+1} = ['cp ' fSynth ' ' fMask];
+        cmd{end+1} = '3dmask_tool -overwrite \';
+        cmd{end+1} = ['-input ' fMask ' \'];
+        cmd{end+1} = ['-prefix ' fMask ' \'];
+        cmd{end+1} = ['-dilate_input 1'];
+        [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+    end
+
+    %%% Manual drawing
+    % fMaskBids = fMask;
+    if force || ~exist(fMask,'file')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        disp('Edit brain mask for preprocessing,')
+        disp('save it to default name and close window')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        cmd = {srcFs};
+        cmd{end+1} = ['fslview -m single ' fspec ' ' fMask];
+        [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+    end
+else
+
+    %%% Manual drawing
+    fIn = replace(fspec,'_volTs.nii.gz','_volTs-mask.nii.gz');
+    fMask = replace(fspec,'_volTs.nii.gz','_volBrainMask.nii.gz');
+    
+    if force || ~exist(fMask,'file')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        disp('Draw brain mask for preprocessing,')
+        disp('save it to default name and close window')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        cmd = {srcFs};
+        cmd{end+1} = ['fslview -m single ' fspec ' -b 0,800'];
+        [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+        movefile(fIn,fMask)
+    end
+end
+
+% %%% Manual drawing
+% cmd{end+1} = ['fslview -m single ' fspec ' -b 0,800'];
+% 
+% fIn = replace(fspec,'_volTs.nii.gz','_volTs-mask.nii.gz');
+% fMask = replace(fspec,'_volTs.nii.gz','_volBrainMask.nii.gz');
+% fMaskInv = replace(fMask,'_volBrainMask.nii.gz','_volBrainMaskInv.nii.gz');
+% 
+% if force || ~exist(fMask,'file')
+%     disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+%     disp('Draw brain mask for preprocessing,')
+%     disp('save it to default name and close window')
+%     disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+%     [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+%     movefile(fIn,fMask)
+% end
+
+%%% Invert mask
+fMaskInv = replace(fMask,'_volBrainMask.nii.gz','_volBrainMaskInv.nii.gz');
+if force || ~exist(fMaskInv,'file')
+    cmd = {srcAfni};
+    cmd{end+1} = '3dcalc -overwrite \';
+    cmd{end+1} = ['-prefix ' fMaskInv ' \'];
+    cmd{end+1} = ['-a ' fMask ' \'];
+    cmd{end+1} = '-expr ''-(a-1)''';
+    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+end
+
+masks.fMask    = fMask;
+masks.fMaskInv = fMaskInv;
+masks.fUlay    = fspec;
+
+return
 
 %% Image or images to use for creating mask
 if isfield(runSet,'finalFiles')
     fIm = fullfile(runSet.bidsDerivDir,'cat_av_preproc_volTs.nii.gz');
     if exist(fIm,'file'); disp('using preprocessed average'); end
     skipHeadFlag = 0;
-% elseif isfield(runSet,'brMocoFiles')
-% elseif isfield(runSet,'wrMocoFiles')
+    % elseif isfield(runSet,'brMocoFiles')
+    % elseif isfield(runSet,'wrMocoFiles')
 elseif isfield(runSet,'initFiles')
     fIm = fullfile(runSet.initFiles.wd,'cat_av_setPlumb_volTs.nii.gz');
     if exist(fIm,'file'); disp('using unprocessed averages'); end
@@ -54,7 +142,7 @@ if info.useSynth
     cmd{end+1} = ['-i ' fIm ' \'];
     fOut = replace(fIm,'_volTs.nii.gz','_volSynthMask.nii.gz');
     cmd{end+1} = ['-m ' fOut];
-    
+
     fIn = fOut;
     fMask = replace(fIn,'_volSynthMask.nii.gz','_volBrainMask.nii.gz');
     fMaskInv = replace(fIn,'_volSynthMask.nii.gz','_volBrainMaskInv.nii.gz');
@@ -64,7 +152,7 @@ if info.useSynth
     cmd{end+1} = ['-input ' fMask ' \'];
     cmd{end+1} = ['-prefix ' fMask ' \'];
     cmd{end+1} = ['-dilate_input 1'];
-    
+
     cmd{end+1} = 'echo edit brain mask if needed';
     cmd{end+1} = ['fslview ' fIm ' ' fMask];
 
@@ -94,7 +182,7 @@ else
         disp('draw brain mask')
         [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
         movefile(fIn,fMask)
-        
+
         cmd = {srcAfni};
         cmd{end+1} = '3dcalc -overwrite \';
         cmd{end+1} = ['-prefix ' fMaskInv ' \'];
@@ -141,12 +229,6 @@ if ~skipHeadFlag
     volAnat.func.mask.head.mri = MRIread(fOut);
 end
 
-
-
-
-
-
-end
 
 
 

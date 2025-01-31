@@ -1,12 +1,14 @@
 function [out, info] = volPsdFullMt3(do,info,volTs,volAnat,volPsd)
 if isempty(do)
-    do.loadIt = 0;
-    do.doIt   = 1;
-    do.saveIt = 0;
+    do.loadIt  = 0;
+    do.doIt    = 1;
+    do.saveIt  = 0;
+    do.writeIt = 0;
 end
+force = 0;
 
 if ~exist('volAnat','var'); volAnat = []; end
-if ~exist('volPsd','var');   volPsd = []; end % for purpose of a second-step analysis using a mask derived from the first-step analysis
+% if ~exist('volPsd','var');   volPsd = []; end % for purpose of a second-step analysis using a mask derived from the first-step analysis
 
 if ~isfield(info,'K');                   info.K = []        ; end
 if ~isfield(info,'win');               info.win = zeros(0,2); end
@@ -29,7 +31,7 @@ stepLabel = 'full multitaper processing';
 %%%%%%%%%%%%%%%%
 %% House keeping
 %%%%%%%%%%%%%%%%
-if isfield(info,'outDir'); outDir = info.outDir; else, outDir = info.preprocDir; end; if ~exist(outDir,'dir'); mkdir(outDir); end; stepFile = fullfile(outDir,[strjoin({['sub-' info.sub] ['ses-' info.ses] mfilename},'_')]);
+if isfield(info,'outDir'); outDir = info.outDir; elseif isfield(info,'preprocDir'); outDir = info.preprocDir; else outDir = []; end; if ~isempty(outDir) && ~exist(outDir,'dir'); mkdir(outDir); end; if ~isempty(outDir); stepFile = fullfile(outDir,[strjoin({['sub-' info.sub] ['ses-' info.ses] mfilename},'_')]); end
 
 if exist('do','var') && ~isempty(do)
     if isfield(do,'loadIt')  && ~isempty(do.loadIt);   loadIt = do.loadIt;  else,  loadIt=0; end
@@ -130,6 +132,9 @@ else
 
 end
 
+%% Load data
+volTs = MRIload2(volTs);
+
 % %% Add time
 % volTs = addTime(volTs);
 
@@ -165,8 +170,10 @@ taperPerm = info.perm;
 % end
 % volPsd = runFullMT2(volTs,W,K,[winSz winStep],info.onsetList,info.ondurList,[],1,info.skipSvd,[],[],taperPerm,phaseRand);
 extra.keepJ = 1;
-volPsd = runFullMT3(volTs,W,K,[winSz winStep],[],[],[],extra,info.skipSvd,[],[],taperPerm,phaseRand);
-volPsd.volAnat = volAnat;
+for r = 1:length(volTs)
+    volPsd(r) = runFullMT3(volTs(r),W,K,[winSz winStep],[],[],[],extra,info.skipSvd,[],[],taperPerm,phaseRand);
+end
+[volPsd.volAnat] = deal(volAnat);
 
 % phaseRand = 2^2;
 % taperPerm = 2^2;
@@ -181,132 +188,143 @@ if writeIt
 %%%%%%%%%%%%% %%
 disp('writing to nii')
 
-%%% PSD maps
-volPsd.vec = permute(log(volPsd.psd.PSD),[5 6 8 1 2 3 4 7]);
-tmpMean = mean(volPsd.vec,2);
-volPsd.nframes = size(volPsd.vec,1);
-volPsd.tr = mean(diff(volPsd.psd.f))*1000;
-tmp = vec2vol(volPsd);
-tmp.vol(1:10,1:10,1,:) = repmat(permute(tmpMean,[2 3 4 1]),[10 10 1 1]);
-if contains(volTs.fspec,'_volTs.nii.gz')
-    volPsd.psd.fspec = replace(volTs.fspec,'_volTs.nii.gz','_volPsd');
-elseif contains(volTs.fspec,'_fit.nii.gz')
-    volPsd.psd.fspec = replace(volTs.fspec,'_fit.nii.gz','_fitPsd');
-end
-[a,b,~] = fileparts(volPsd.psd.fspec); b = replace(b,'preproc',strjoin({['mask-' volPsd.volAnat.label] ['K-' num2str(volPsd.psd.K)]},'_'));
-volPsd.psd.fspec = fullfile(a,[b '.nii.gz']);
-% volPsd.psd.fspec = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['logPsd']},'_')) '.nii.gz'];
-MRIwrite(tmp,volPsd.psd.fspec);
-disp(volPsd.psd.fspec)
+for r = 1:length(volPsd)
+    %%% PSD maps
+    volPsd(r).vec = permute(log(volPsd(r).psd.PSD),[5 6 8 1 2 3 4 7]);
+    tmpMean = mean(volPsd(r).vec,2);
+    volPsd(r).nframes = size(volPsd(r).vec,1);
+    volPsd(r).tr = mean(diff(volPsd(r).psd.f))*1000;
+    tmp = vec2vol(volPsd(r));
+    tmp.vol(1:10,1:10,1,:) = repmat(permute(tmpMean,[2 3 4 1]),[10 10 1 1]);
+    if contains(volTs(r).fspec,'_volTs.nii.gz')
+        volPsd(r).psd.fspec = replace(volTs(r).fspec,'_volTs.nii.gz','_volPsd');
+    elseif contains(volTs(r).fspec,'_fit.nii.gz')
+        volPsd(r).psd.fspec = replace(volTs(r).fspec,'_fit.nii.gz','_fitPsd');
+    end
+    [a,b,~] = fileparts(volPsd(r).psd.fspec); b = replace(b,'preproc',strjoin({['mask-' volPsd(r).volAnat.label] ['K-' num2str(volPsd(r).psd.K)]},'_'));
+    volPsd(r).psd.fspec = fullfile(a,[b '.nii.gz']);
+    % volPsd(r).psd.fspec = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['logPsd']},'_')) '.nii.gz'];
+    fOut = volPsd(r).psd.fspec;
+    if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+    else; disp(['already done, skipping (' fOut ')']); end
 
-%%% Coherence (first singular vector)
-if isfield(volPsd.svd,'spSV') && ~isempty(volPsd.svd.spSV)
-    volPsd.vec = permute(abs(volPsd.svd.spSV(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
-    volPsd.nframes = size(volPsd.vec,1);
-    volPsd.tr = mean(diff(volPsd.svd.f))*1000;
-    tmp = vec2vol(volPsd);
-    tmp.vol = abs(tmp.vol);
-    tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd.svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    if info.perm
-        tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+    %%% Coherence (first singular vector)
+    if isfield(volPsd(r).svd,'spSV') && ~isempty(volPsd(r).svd.spSV)
+        volPsd(r).vec = permute(abs(volPsd(r).svd.spSV(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
+        volPsd(r).nframes = size(volPsd(r).vec,1);
+        volPsd(r).tr = mean(diff(volPsd(r).svd.f))*1000;
+        tmp = vec2vol(volPsd(r));
+        tmp.vol = abs(tmp.vol);
+        tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd(r).svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        if info.perm
+            tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd(r).svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        end
+        if contains(volTs(r).fspec,'_volTs.nii.gz')
+            volPsd(r).svd.fspec.spSVmag = replace(volTs(r).fspec,'_volTs.nii.gz','_volCohMag');
+        elseif contains(volTs(r).fspec,'_fit.nii.gz')
+            volPsd(r).svd.fspec.spSVmag = replace(volTs(r).fspec,'_fit.nii.gz','_fitCohMag');
+        else
+            dbstack; error('not sure how to name this');
+        end
+        [a,b,~] = fileparts(volPsd(r).svd.fspec.spSVmag); b = replace(b,'preproc',strjoin({['mask-' volPsd(r).volAnat.label] ['K-' num2str(volPsd(r).psd.K)]},'_'));
+        volPsd(r).svd.fspec.spSVmag = fullfile(a,[b '.nii.gz']);
+        fOut = volPsd(r).svd.fspec.spSVmag;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
+
+        tmp = vec2vol(volPsd(r));
+        tmp.vol = angle(tmp.vol);
+        tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd(r).svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        if info.perm
+            tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd(r).svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        end
+        if contains(volTs(r).fspec,'_volTs.nii.gz')
+            volPsd(r).svd.fspec.spSVphase = replace(volTs(r).fspec,'_volTs.nii.gz','_volCohPhase');
+        elseif contains(volTs(r).fspec,'_fit.nii.gz')
+            volPsd(r).svd.fspec.spSVphase = replace(volTs(r).fspec,'_fit.nii.gz','_fitCohPhase');
+        else
+            dbstack; error('not sure how to name this');
+        end
+        [a,b,~] = fileparts(volPsd(r).svd.fspec.spSVphase); b = replace(b,'preproc',strjoin({['mask-' volPsd(r).volAnat.label] ['K-' num2str(volPsd(r).psd.K)]},'_'));
+        volPsd(r).svd.fspec.spSVphase = fullfile(a,[b '.nii.gz']);
+        fOut = volPsd(r).svd.fspec.spSVphase;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
     end
-    if contains(volTs.fspec,'_volTs.nii.gz')
-        volPsd.svd.fspec.spSVmag = replace(volTs.fspec,'_volTs.nii.gz','_volCohMag');
-    elseif contains(volTs.fspec,'_fit.nii.gz')
-        volPsd.svd.fspec.spSVmag = replace(volTs.fspec,'_fit.nii.gz','_fitCohMag');
-    else
-        dbstack; error('not sure how to name this');
+    if isfield(volPsd(r).svd,'spSV_pVal')
+        dbstack; error('double-check that')
+        volPsd(r).vec = permute(volPsd(r).svd.spSV_pVal(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
+        volPsd(r).nframes = size(volPsd(r).vec,1);
+        volPsd(r).tr = mean(diff(volPsd(r).svd.f))*1000;
+        tmp = vec2vol(volPsd(r));
+        tmp.vol(1:10,1:10,1,:)           = 0;
+        tmp.vol(end-9:end,end-9:end,1,:) = 0;
+        volPsd(r).svd.fspec.spSVmag_pVal = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVpVal']},'_')) '.nii.gz'];
+        fOut = volPsd(r).svd.fspec.spSVmag_pVal;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
     end
-    [a,b,~] = fileparts(volPsd.svd.fspec.spSVmag); b = replace(b,'preproc',strjoin({['mask-' volPsd.volAnat.label] ['K-' num2str(volPsd.psd.K)]},'_'));
-    volPsd.svd.fspec.spSVmag = fullfile(a,[b '.nii.gz']);
-    MRIwrite(tmp,volPsd.svd.fspec.spSVmag);
-    disp(volPsd.svd.fspec.spSVmag)
-    
-    tmp = vec2vol(volPsd);
-    tmp.vol = angle(tmp.vol);
-    tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd.svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    if info.perm
-        tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+    if isfield(volPsd(r).svd,'spSV_fdr')
+        dbstack; error('double-check that')
+        volPsd(r).vec = permute(volPsd(r).svd.spSV_fdr(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
+        volPsd(r).nframes = size(volPsd(r).vec,1);
+        volPsd(r).tr = mean(diff(volPsd(r).svd.f))*1000;
+        tmp = vec2vol(volPsd(r));
+        tmp.vol(1:10,1:10,1,:)           = 0;
+        tmp.vol(end-9:end,end-9:end,1,:) = 0;
+        volPsd(r).svd.fspec.spSVmag_fdr = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVfdr']},'_')) '.nii.gz'];
+        fOut = volPsd(r).svd.fspec.spSVmag_fdr;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
     end
-    if contains(volTs.fspec,'_volTs.nii.gz')
-        volPsd.svd.fspec.spSVphase = replace(volTs.fspec,'_volTs.nii.gz','_volCohPhase');
-    elseif contains(volTs.fspec,'_fit.nii.gz')
-        volPsd.svd.fspec.spSVphase = replace(volTs.fspec,'_fit.nii.gz','_fitCohPhase');
-    else
-        dbstack; error('not sure how to name this');
+    if isfield(volPsd(r).svd,'spSV') && isfield(volPsd(r).svd,'spSV_fdr')
+        dbstack; error('double-check that')
+        volPsd(r).vec = permute(volPsd(r).svd.spSV(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
+        thresh = permute(abs(volPsd(r).svd.spSV_pVal(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
+        volPsd(r).vec(thresh>0.05) = 0;
+        volPsd(r).nframes = size(volPsd(r).vec,1);
+        volPsd(r).tr = mean(diff(volPsd(r).svd.f))*1000;
+        tmp = vec2vol(volPsd(r));
+        tmp.vol = abs(tmp.vol);
+        tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd(r).svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd(r).svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        volPsd(r).svd.fspec.spSVmag_pValThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVpValThresh']},'_')) '.nii.gz'];
+        fOut = volPsd(r).svd.fspec.spSVmag_pValThresh;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
+        tmp = vec2vol(volPsd(r));
+        tmp.vol = angle(tmp.vol);
+        tmp.vol(1:10,1:10,1,:) = repmat(permute(volPsd(r).svd.COH(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        volPsd(r).svd.fspec.spSVphase_pValThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-phase'] ['spSVpValThresh']},'_')) '.nii.gz'];
+        fOut = volPsd(r).svd.fspec.spSVphase_pValThresh;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
     end
-    [a,b,~] = fileparts(volPsd.svd.fspec.spSVphase); b = replace(b,'preproc',strjoin({['mask-' volPsd.volAnat.label] ['K-' num2str(volPsd.psd.K)]},'_'));
-    volPsd.svd.fspec.spSVphase = fullfile(a,[b '.nii.gz']);
-    MRIwrite(tmp,volPsd.svd.fspec.spSVphase);
-    disp(volPsd.svd.fspec.spSVphase)
+    if isfield(volPsd(r).svd,'spSV') && isfield(volPsd(r).svd,'spSV_fdr')
+        dbstack; error('double-check that')
+        volPsd(r).vec = permute(volPsd(r).svd.spSV(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
+        thresh = permute(abs(volPsd(r).svd.spSV_fdr(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
+        volPsd(r).vec(thresh>0.05) = 0;
+        volPsd(r).nframes = size(volPsd(r).vec,1);
+        volPsd(r).tr = mean(diff(volPsd(r).svd.f))*1000;
+        tmp = vec2vol(volPsd(r));
+        tmp.vol = abs(tmp.vol);
+        tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd(r).svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd(r).svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        volPsd(r).svd.fspec.spSVmag_fdrThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVfdrThresh']},'_')) '.nii.gz'];
+        fOut = volPsd(r).svd.fspec.spSVmag_fdrThresh;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
+        tmp = vec2vol(volPsd(r));
+        tmp.vol = angle(tmp.vol);
+        tmp.vol(1:10,1:10,1,:) = repmat(permute(volPsd(r).svd.COH(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
+        volPsd(r).svd.fspec.spSVphase_fdrThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-phase'] ['spSVfdrThresh']},'_')) '.nii.gz'];
+        fOut = volPsd(r).svd.fspec.spSVphase_fdrThresh;
+        if force || ~exist(fOut,'file'); MRIwrite(tmp,fOut); disp(fOut)
+        else; disp(['already done, skipping (' fOut ')']); end
+    end
+    volPsd(r).vec = [];
 end
-if isfield(volPsd.svd,'spSV_pVal')
-    dbstack; error('double-check that')
-    volPsd.vec = permute(volPsd.svd.spSV_pVal(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
-    volPsd.nframes = size(volPsd.vec,1);
-    volPsd.tr = mean(diff(volPsd.svd.f))*1000;
-    tmp = vec2vol(volPsd);
-    tmp.vol(1:10,1:10,1,:)           = 0;
-    tmp.vol(end-9:end,end-9:end,1,:) = 0;
-    volPsd.svd.fspec.spSVmag_pVal = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVpVal']},'_')) '.nii.gz'];
-    MRIwrite(tmp,volPsd.svd.fspec.spSVmag_pVal);
-    disp(volPsd.svd.fspec.spSVmag_pVal)
-end
-if isfield(volPsd.svd,'spSV_fdr')
-    dbstack; error('double-check that')
-    volPsd.vec = permute(volPsd.svd.spSV_fdr(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
-    volPsd.nframes = size(volPsd.vec,1);
-    volPsd.tr = mean(diff(volPsd.svd.f))*1000;
-    tmp = vec2vol(volPsd);
-    tmp.vol(1:10,1:10,1,:)           = 0;
-    tmp.vol(end-9:end,end-9:end,1,:) = 0;
-    volPsd.svd.fspec.spSVmag_fdr = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVfdr']},'_')) '.nii.gz'];
-    MRIwrite(tmp,volPsd.svd.fspec.spSVmag_fdr);
-    disp(volPsd.svd.fspec.spSVmag_fdr)
-end
-if isfield(volPsd.svd,'spSV') && isfield(volPsd.svd,'spSV_fdr')
-    dbstack; error('double-check that')
-    volPsd.vec = permute(volPsd.svd.spSV(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
-    thresh = permute(abs(volPsd.svd.spSV_pVal(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
-    volPsd.vec(thresh>0.05) = 0;
-    volPsd.nframes = size(volPsd.vec,1);
-    volPsd.tr = mean(diff(volPsd.svd.f))*1000;
-    tmp = vec2vol(volPsd);
-    tmp.vol = abs(tmp.vol);
-    tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd.svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    volPsd.svd.fspec.spSVmag_pValThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVpValThresh']},'_')) '.nii.gz'];
-    MRIwrite(tmp,volPsd.svd.fspec.spSVmag_pValThresh);
-    disp(volPsd.svd.fspec.spSVmag_pValThresh)
-    tmp = vec2vol(volPsd);
-    tmp.vol = angle(tmp.vol);
-    tmp.vol(1:10,1:10,1,:) = repmat(permute(volPsd.svd.COH(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    volPsd.svd.fspec.spSVphase_pValThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-phase'] ['spSVpValThresh']},'_')) '.nii.gz'];
-    MRIwrite(tmp,volPsd.svd.fspec.spSVphase_pValThresh);
-    disp(volPsd.svd.fspec.spSVphase_pValThresh)
-end
-if isfield(volPsd.svd,'spSV') && isfield(volPsd.svd,'spSV_fdr')
-    dbstack; error('double-check that')
-    volPsd.vec = permute(volPsd.svd.spSV(:,:,:,:,:,:,:,1),[5 6 8 1 2 3 4 7]);
-    thresh = permute(abs(volPsd.svd.spSV_fdr(:,:,:,:,:,:,:,1)),[5 6 8 1 2 3 4 7]);
-    volPsd.vec(thresh>0.05) = 0;
-    volPsd.nframes = size(volPsd.vec,1);
-    volPsd.tr = mean(diff(volPsd.svd.f))*1000;
-    tmp = vec2vol(volPsd);
-    tmp.vol = abs(tmp.vol);
-    tmp.vol(1:10,1:10,1,:)           = repmat(permute(volPsd.svd.COH(:,:,:,:,:,:,:,1)         ,[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    tmp.vol(end-9:end,end-9:end,1,:) = repmat(permute(volPsd.svd.COH_permMean(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    volPsd.svd.fspec.spSVmag_fdrThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-mag'] ['spSVfdrThresh']},'_')) '.nii.gz'];
-    MRIwrite(tmp,volPsd.svd.fspec.spSVmag_fdrThresh);
-    disp(volPsd.svd.fspec.spSVmag_fdrThresh)
-    tmp = vec2vol(volPsd);
-    tmp.vol = angle(tmp.vol);
-    tmp.vol(1:10,1:10,1,:) = repmat(permute(volPsd.svd.COH(:,:,:,:,:,:,:,1),[1 2 3 5 4 6 7 8]),[10 10 1 1]);
-    volPsd.svd.fspec.spSVphase_fdrThresh = [fullfile(info.preprocDir,strjoin({['sub-' info.sub] ['ses-' info.ses] ['part-phase'] ['spSVfdrThresh']},'_')) '.nii.gz'];
-    MRIwrite(tmp,volPsd.svd.fspec.spSVphase_fdrThresh);
-    disp(volPsd.svd.fspec.spSVphase_fdrThresh)
-end
-volPsd.vec = [];
 
 end
 

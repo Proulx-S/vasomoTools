@@ -21,12 +21,11 @@ if iscell(funTs)
 
 
 elseif isstruct(funTs)
-    if isMRI(funTs)
-        wasSubMRI = 0;
-    else
-        if ~isfield(funTs,'mri'); dbstack; error('X'); end
+    if ~isMRI(funTs) && isfield(funTs,'mri')
         funTs = funTs.mri;
         wasSubMRI = 1;
+    else
+        wasSubMRI = 0;
     end
     funTs = vol2vec(funTs);
     for I = 1:numel(funTs)
@@ -37,7 +36,11 @@ elseif isstruct(funTs)
             funTs(I).t = (0:tr:(funTs(I).nframes-1)*tr)';
         end
         [funTs(I).vec,funTs(I).poly] = dtrnd2(funTs(I).vec,funTs(I).t,prcBOLDflag,order);
-        funTs(I).poly.vol2vec = funTs(I).vol2vec;
+        if isfield(funTs(I),'vol2vec')
+            funTs(I).poly.vol2vec = funTs(I).vol2vec;
+        else
+            funTs(I).poly.vol2vec = [];
+        end
     end
     order = size(funTs(I).poly.beta,2)-1;
     funTs = setNiceFieldOrder(funTs,{'vol' 'vol2vec' 'vec' 't' 'poly' 'volInfo' 'vecInfo'});
@@ -52,9 +55,11 @@ elseif isstruct(funTs)
 
 elseif isnumeric(funTs)
     %% Define polynomial regressors
+    if isempty(t); dbstack; error('please provide time vector or 1/Fs in variable t'); end
     if length(t)==1
         tr = t;
-        t = 0:tr:(size(funTs,1)-1)*tr;
+        n = size(funTs,1);
+        t = linspace(0,(n-1)*tr,n);
     end
     X = [];
     if isempty(order)

@@ -1,4 +1,5 @@
-function funPsd = runFullMT3(funTs,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand)
+% function funPsd = runFullMT5(funTs,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,testFlag)
+function funPsd = runFullMT5(volTs,W,K,win,dsgn,mask,skipSVD,skipPSD,verbose)
 % Wrapper for the Chronux's mtspectrumc function for multitaper estimation of
 % pds spectra, compatible with MRI data imported by MRIread.m.
 %
@@ -25,95 +26,102 @@ if ~exist('onsets','var'); onsets = []; end
 if ~exist('ondurs','var'); ondurs = []; end
 if ~exist('taperperm','var'); taperPerm = []; end
 if ~exist('phaseRand','var'); phaseRand = []; end
+if ~exist('testFlag','var');   testFlag = []; end
 if ~isfield(extra,'catFlag'); extra.catFlag = []; end
 if ~isfield(extra,'padTo');     extra.padTo = []; end
+if isempty(testFlag); testFlag = 0; end
 % catFlag = extra.catFlag;
 % padTo   = extra.padTo;
 
-if isempty(onsets)
-    if length(funTs)>1; warning('using first dsgn for all instances of volTs'); end
-    if isfield(funTs(1).dsgn,'onsets')
-        onsets = funTs(1).dsgn.onsets;
-    else
-        onsets = funTs(1).dsgn.onsetList;
+
+
+% if isempty(onsets)
+%     if length(volTs)>1; warning('using first dsgn for all instances of volTs'); end
+%     if isfield(volTs(1),'dsgn')
+%         if isfield(volTs(1).dsgn,'onsets')
+%             onsets = volTs(1).dsgn.onsets;
+%         else
+%             onsets = volTs(1).dsgn.onsetList;
+%         end
+%     elseif isfield(volTs(1),'ts') && isfield(volTs(1).ts,'dsgn')
+%         onsets = volTs(1).ts.dsgn.onsetList;
+%     end
+% end
+% if size(onsets,1)==1; onsets = onsets'; end
+% 
+% if isempty(ondurs)
+%     if isfield(volTs(1),'dsgn')
+%         if isfield(volTs(1).dsgn,'ondurs')
+%             ondurs = volTs(1).dsgn.ondurs;
+%         else
+%             ondurs = volTs(1).dsgn.ondurList;
+%         end
+%     elseif isfield(volTs(1),'ts') && isfield(volTs(1).ts,'dsgn')
+%         ondurs = volTs(1).ts.dsgn.ondurList;
+%     end
+% end
+% if size(ondurs,1)==1; ondurs = ondurs'; end
+
+
+
+if 1
+    % [volTs.volTs.dsgn] = deal(volTs.dsgn);
+    for I = 1:numel(volTs)
+        funPsd(I) = doIt(volTs(I).mri,W,K,win,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
     end
-end
-if size(onsets,1)==1; onsets = onsets'; end
-
-if isempty(ondurs)
-    if isfield(funTs(1).dsgn,'ondurs')
-        ondurs = funTs(1).dsgn.ondurs;
-    else
-        ondurs = funTs(1).dsgn.ondurList;
-    end
-end
-if size(ondurs,1)==1; ondurs = ondurs'; end
+    funPsd = reshape(funPsd,size(volTs));
 
 
-
-% if K==1; skipSVD = true; end
-
-if iscell(funTs)
-    dbstack; error('double-check that')
-    for I = 1:numel(funTs)
-        funPsd{I} = runFullMT2(funTs{I},W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand);
-    end
-elseif isstruct(funTs)
-    dsgn.onsetList = onsets';
-    dsgn.ondurList = ondurs';
-    [funTs.dsgn] = deal(dsgn);
-    for I = 1:numel(funTs)
-        cohFperm = [0 1.1];
-        if isMRI(funTs(I))
-            funPsd(I) = doIt(funTs(I)    ,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
-        elseif isfield(funTs,'chanLabel')
-            % edit isMRI
-
-            funPsd(I) = doIt(funTs(I)    ,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
-        % elseif isMRI(funTs(I).mri)
-        %     if isfield(funTs,'chanLabel')
-        %         mri = funTs(I).mri;
-        %         mri.vol = [];
-        %         mri.vec = funTs(I).vec;
-        %         mri.dsgn = dsgn;
-        %         mri.nFrame  = funTs(I).nFrame;
-        %         mri.nframes = funTs(I).nFrame;
-        %         mri.nDummyRemoved = 0;
-        %         mri.tr = (1/mean(funTs(I).Fs))*1000;
-        %         % mri.t = linspace(0,(mri.nFrame-1)/mean(funTs(I).Fs),mri.nFrame)';
-        %         funPsd(I) = doIt(mri,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
-        %     else
-        %         funPsd(I) = doIt(funTs(I).mri,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
-        %     end
-        else
-            funPsd(I) = doIt(funTs(I).mri,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
-        end
-
-        % % taperPerm = 2^7;
-        % % phaseRand = 0;
-        % for K = [4 8]
-        %     cohFperm = [0 1.1];
-        %     funPsd(I) = doIt(funTs(I),W,K,win,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
-        %     funPsd(I).svd.nPerm = taperPerm;
-        %     % funTs(2:end) = [];
-        %     % save tmp2 -v7.3
-        %     close all
-        %     % f0List = [0 0.00301408 0.0572676 0.072338 0.180845 0.186873 0.277296 0.72338 0.747492 0.940394];
-        %     % f0List = [1.33825 1.46183 1.46484];
-        %     % f0List = [1.33222 1.36538 1.46183];
-        %     % f0List = [0.093465 0.271267 0.60583];
-        %     f0List = [0.0542535 0.60583];
-        %     plotPerm4(funPsd(I).svd,f0List)
-        %     % plotPerm4(funPsd(I).svd)
-        % end
-        % keyboard
-        % % funTs(2:end) = [];
-        % % save tmp -v7.3
-    end
 else
-    dbstack; error('this should not happen')
+    if iscell(volTs)
+        dbstack; error('double-check that')
+        for I = 1:numel(volTs)
+            funPsd{I} = runFullMT2(volTs{I},W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand);
+        end
+    elseif isstruct(volTs)
+        dsgn.onsetList = onsets';
+        dsgn.ondurList = ondurs';
+        [volTs.dsgn] = deal(dsgn);
+        for I = 1:numel(volTs)
+            cohFperm = [0 1.1];
+            if isMRI(volTs(I))
+                funPsd(I) = doIt(volTs(I)    ,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm,testFlag);
+            elseif isfield(volTs,'chanLabel')
+                funPsd(I) = doIt(volTs(I)  ,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm,testFlag);
+            elseif isfield(volTs,'mri')
+                funPsd(I) = doIt(volTs(I).mri,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm,testFlag);
+            elseif isfield(volTs,'ts')
+                funPsd(I) = doIt(volTs(I).ts,W,K,win,onsets,ondurs,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm,testFlag);
+            end
+
+            % % taperPerm = 2^7;
+            % % phaseRand = 0;
+            % for K = [4 8]
+            %     cohFperm = [0 1.1];
+            %     funPsd(I) = doIt(funTs(I),W,K,win,mask,memFlag,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],cohFperm);
+            %     funPsd(I).svd.nPerm = taperPerm;
+            %     % funTs(2:end) = [];
+            %     % save tmp2 -v7.3
+            %     close all
+            %     % f0List = [0 0.00301408 0.0572676 0.072338 0.180845 0.186873 0.277296 0.72338 0.747492 0.940394];
+            %     % f0List = [1.33825 1.46183 1.46484];
+            %     % f0List = [1.33222 1.36538 1.46183];
+            %     % f0List = [0.093465 0.271267 0.60583];
+            %     f0List = [0.0542535 0.60583];
+            %     plotPerm4(funPsd(I).svd,f0List)
+            %     % plotPerm4(funPsd(I).svd)
+            % end
+            % keyboard
+            % % funTs(2:end) = [];
+            % % save tmp -v7.3
+        end
+    else
+        dbstack; error('this should not happen')
+    end
 end
-for I = 1:numel(funTs)
+
+
+for I = 1:numel(volTs)
     fieldList = {'psd' 'psdGram' 'psdTrialGram' 'psdTrialGramMD' 'svd' 'svdGram' 'svdTrialGram' 'svdTrialGramMD'};
     for i = 1:length(fieldList)
         if isfield(funPsd(I),fieldList{i}) && ~isempty(funPsd(I).(fieldList{i}))
@@ -130,15 +138,19 @@ end
 
 
 
-function funPsd = doIt(funTs,W,K,win,onsetList,durList,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,cohF,cohFperm)
-% if length(K)>1; tp = K; K = size(tp,2); else tp = []; end
+function funPsd = doIt(funTs,W,K,win,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,cohF,cohFperm,testFlag)
 tpFlag = false;
 if ~exist('win','var');             win = []; end
-if ~exist('onsetList','var'); onsetList = []; end
-if ~exist('durList','var');     durList = []; end
+if ~exist('dsgn','var');            dsgn = []; end
+onsetList = dsgn.onsetList';
+durList   = dsgn.ondurList';
+% if ~exist('onsetList','var'); onsetList = []; end
+% if ~exist('durList','var');     durList = []; end
+if ~exist('testFlag','var');   testFlag = []; end
 if ~isfield(extra,'padTo');     extra.padTo = []; end
 padTo   = extra.padTo;
 
+if isempty(testFlag); testFlag = 0; end
 
 if isempty(win); win = [inf 0]; end
 windFlag = 0;
@@ -170,19 +182,48 @@ skipTrialGramMD = skipTrialGram;
 %     param.onsetList = [];
 % end
 
+%% Load data
+if (~isfield(funTs,'vec') || isempty(funTs.vec)) && (~isfield(funTs,'vol') || isempty(funTs.vol))
+    funTs = MRIload3(funTs,mask,[],1);
+else
 
-%% Mask
-if ~isempty(mask)
-    funTs = applyMask(funTs,mask);
-    funTs.mask = mask;
+    %% Mask
+    if ~isempty(mask)
+        funTs = applyMask(funTs,mask);
+        funTs.mask = mask;
+    end
 end
 
 %% Assert
 if isfield(funTs,'vec') && ~isempty(funTs.vec); tmp = all(funTs.vec==0,1); else tmp = all(funTs.vol==0,4); end
 if any(tmp(:)); warning('Some voxels are all 0s. Adjust your mask to avoid later problems'); end
 
-%% Set parameters
+%% Complete som stuff
+if isfield(funTs,'tr') && length(funTs.tr)>1
+    funTs.tr = mean(funTs.tr);
+end
+if ~isfield(funTs,'tr') || isempty(funTs.tr) || isnan(funTs.tr)
+    if isfield(funTs,'Fs')
+        funTs.tr = 1/funTs.Fs(1) *1000;
+    else
+        dbstack; error('code that');
+    end
+end
 tr = funTs.tr/1000;
+
+if ~isfield(funTs,'nDummyRemoved')
+    funTs.nDummyRemoved = 0;
+end
+if ~isfield(funTs,'t') || isempty(funTs.t) || any(isnan(funTs.t))
+    n = funTs.nframes;
+    s = tr.*(0+funTs.nDummyRemoved  );
+    e = tr.*(n+funTs.nDummyRemoved-1);
+    funTs.t = linspace(s,e,n)';
+end
+
+
+
+%% Set parameters
 Wflag = ~isempty(W);
 Kflag = ~isempty(K);
 % tpFlag = ~isempty(tp); if tpFlag; Wflag = false; Kflag = false; end
@@ -215,24 +256,26 @@ end
 % param.tapers = [TW K];
 
 
+
+
 %% xgram parameters
 
 %%%%%%% Hack: detect when there is a gap in the time vector, indicating
 %%%%%%% multiple runs where concatenated. Extract that time vector of the
 %%%%%%% first runs to compute windows
-if isfield(funTs,'t') && ~isempty(funTs.t) && max(abs(diff(diff(funTs.t))))/mode(diff(funTs.t))>1.1 && length(funTs.nFrame)>1
+if isfield(funTs,'t') && ~isempty(funTs.t) && all(~isnan(funTs.t)) && max(abs(diff(diff(funTs.t))))/mode(diff(funTs.t))>1.1 && length(funTs.nFrame)>1
     hackFlag = 1;
     nFrame = funTs.nFrame(1);
     onsetList = onsetList(onsetList < funTs.t(nFrame));
 else
     hackFlag = 0;
-    nFrame = funTs.nFrame;
+    nFrame = funTs.nframes;
 end
     
     
 
 if ~skipGram
-    param.win(3) = ceil(nFrame / (param.win(2)));
+    param.win(3) = ceil(nFrame / (param.win(2))); % define in number of volume
     allWin = repmat(1:param.win(1),[param.win(3) 1]);
     allWin = allWin + (((1:param.win(3))-1)*param.win(2))'; % win x t
     allWin(any(allWin>nFrame,2),:) = [];
@@ -261,7 +304,12 @@ if ~skipTrialGram
     % n = max(allWin(:));
     nWin = size(allWin,1);
     nTrial = size(onsetList,1);
-    allWin2 = repmat({zeros(n,nWin)},[nTrial 1]);
+    try
+        allWin2 = repmat({zeros(n,nWin)},[nTrial 1]);
+    catch ME
+        warning(ME.message)
+        keyboard
+    end
     for winInd = 1:nWin
         for trialInd = 1:nTrial
             if trialInd == 1
@@ -318,11 +366,29 @@ if ~skipTrialGram
         allWin2{trialInd} = circshift(allWin2{trialInd},timeShiftVol,1);
     end
 
-    %%% trim
+    %%% trim to data length
     for trialInd = 1:nTrial
         ind = size(allWin2{trialInd},1) - nFrame;
         allWin2{trialInd}(1:ind,:) = [];
     end
+
+    %!!!!!!!!!
+    %!!!!!!!!!
+    %!!!!!!!!!
+    %!!!!!!!!!
+    %%% trim incomplete windows
+    allWin3 = any(cat(3,allWin2{:}),3); % [win X time in trial]
+    ind = strfind(diff(sum(allWin3,1)<mode(sum(allWin3,1))),[-1 0]);
+    if ~isempty(ind)
+        ind = ind(1);
+        for trialInd = 1:nTrial
+            allWin2{trialInd}(:,1:ind) = [];
+        end
+    end
+    %!!!!!!!!!
+    %!!!!!!!!!
+    %!!!!!!!!!
+    %!!!!!!!!!
     
 
     % %%% visualize
@@ -389,14 +455,14 @@ if hackFlag
 end
 
 %% Detect impossible parameter combination and turn analysis off
-for i = 1:length(K)
-    [~,Wtmp,~] = K2W(param.win(1),K(i),0);
-    if Wtmp>0.5
-        warning(['cannot do gram with this parameter combination' newline 'skipping gram and trialGram'])
-        skipGram = 1;
-        skipTrialGram = 1;
-    end
-end
+% for i = 1:length(K)
+%     [~,Wtmp,~] = K2W(param.win(1),K(i),0);
+%     if Wtmp>0.5
+%         warning(['cannot do gram with this parameter combination' newline 'skipping gram and trialGram'])
+%         skipGram = 1;
+%         skipTrialGram = 1;
+%     end
+% end
 
 
 %% initiate stuff
@@ -412,12 +478,11 @@ tmp = strsplit(funTs(1).volInfo,' x '); tmp{4} = 'freq/time'; tmp = strjoin(tmp,
 param.Fs = 1/tr;
 param.complex = 1;
 
-% funTs = vol2vec(funTs);
 
 for sInd = 1:length(funTs)
     %% Get tapers
     if ~isfield(funTs(sInd),'t') || isempty(funTs(sInd).t)
-        funTs(sInd).t = linspace(0,(funTs(sInd).nframes-1)*funTs(sInd).tr/1000,funTs(sInd).nframes)'; % funTs(sInd).t = (0:funTs(sInd).tr/1000:(funTs(sInd).nframes-1)*funTs(sInd).tr/1000)';
+        funTs(sInd).t = linspace(0,(funTs(sInd).nframes-1)*funTs(sInd).tr/1000,funTs(sInd).nframes)';
         funTs(sInd).t = funTs(sInd).t + funTs(sInd).nDummyRemoved*funTs(sInd).tr/1000;
     end
     if ~isfield(funPsd(sInd),'t') || isempty(funPsd(sInd).t)
@@ -429,7 +494,6 @@ for sInd = 1:length(funTs)
 
         %%% full timeseries
         if verbose; disp('getting taper for full timeseries'); end
-        % K   = param.tapers(2);
         Kcur = K(end);
         tr  = funTs(sInd).tr/1000;
         N   = funTs(sInd).nframes;
@@ -444,16 +508,82 @@ for sInd = 1:length(funTs)
                 NFFT = max(2^(nextpow2(N)+pad),N);
             end
         end
+        % tic
         [TP.full.tp,TP.full.eigs,TP.full.tpDC,TP.full.N,TP.full.pad] = getTapers(Kcur,tr,N,funTs(sInd).t,pad);
+        % toc
         TP.full.t = funTs(sInd).t;
-        % [~,funPsd(sInd).psd.f,funPsd(sInd).psd.tp] = mtspectrumc4(funTs(sInd).vec(:,1,:,1), paramPsd,funTs(sInd).t(:,:,:,:,:,1),tp);
+
+
+        % % % % % % % %upsample
+        % % % % % % % fac = 200;
+        % % % % % % % fTot = 0;
+        % % % % % % % t   = [];
+        % % % % % % % tUs = [];
+        % % % % % % % dt  = funTs(sInd).tr/1000;
+        % % % % % % % for r = 1:length(funTs(sInd).nFrame)
+        % % % % % % %     n = funTs(sInd).nFrame(r);
+        % % % % % % %     ind = (1:n) + fTot;
+        % % % % % % %     t = cat(1,t,funTs(sInd).t(ind));
+        % % % % % % %     ts = funTs(sInd).t(ind(1  ));
+        % % % % % % %     te = funTs(sInd).t(ind(end));
+        % % % % % % %     tUs = cat(1,tUs,linspace(ts,te+dt-dt/fac,n*fac)');
+        % % % % % % %     fTot = fTot + n;
+        % % % % % % % end
+        % % % % % % % n  = length(t); nUs  = length(tUs);
+        % % % % % % % dt = dt;        dtUs = dt/fac;
+        % % % % % % % % figure('WindowStyle','docked')
+        % % % % % % % % plot(t); hold on
+        % % % % % % % % plot(tUs)
+        % % % % % % % 
+        % % % % % % % tic
+        % % % % % % % [tpS,eigsS,tpDCS,NS,padXS] = getTapers(5,dtUs,nUs,tUs,pad,'eigs');
+        % % % % % % % toc
+        % % % % % % % tic
+        % % % % % % % [tp,eigs,tpDC,N,padX] = getTapers(5,dtUs,nUs,tUs,pad,'eig');
+        % % % % % % % toc
+        % % % % % % % 
+        % % % % % % % 
+        % % % % % % % figure('WindowStyle','docked')
+        % % % % % % % plot(tpS)
+        % % % % % % % figure('WindowStyle','docked')
+        % % % % % % % plot(tp)
+        % % % % % % % 
+        % % % % % % % 
+        % % % % % % % fac = 2;
+        % % % % % % % t = funTs(sInd).t;
+        % % % % % % % ts = t(1);
+        % % % % % % % te = t(end)+tr;
+        % % % % % % % tus = linspace(ts,te-tr/fac,N*fac)';
+        % % % % % % % (ts-te)/(N-1)
+        % % % % % % % [length(t)
+        % % % % % % % length(tus)/fac]
+        % % % % % % % [mean(diff(t))
+        % % % % % % % mean(diff(tus))*fac]
+        % % % % % % % diff([mean(diff(t))
+        % % % % % % %     mean(diff(tus))*fac])
+        % % % % % % % 
+        % % % % % % % diff(t(1:3))
+        % % % % % % % diff(tus(1:3))
+        % % % % % % % 
+        % % % % % % % 
+        % % % % % % % fac = 2;
+        % % % % % % % t = 0:9; dt = 1; n = 10;
+        % % % % % % % ts = t(1);
+        % % % % % % % te = t(end);
+        % % % % % % % tus = linspace(ts,te+dt-dt/fac,n*fac);
+        % % % % % % % [length(t)
+        % % % % % % % length(tus)/fac]
+        % % % % % % % [mean(diff(t))
+        % % % % % % % mean(diff(tus))*fac]
+        % % % % % % % diff([mean(diff(t))
+        % % % % % % %     mean(diff(tus))*fac])
+
+
 
         %%% time-resolved
         if ~skipGram
             if verbose; disp('getting taper for time-resolved analysis'); end
-            % K   = param.tapers(2);
             Kcur = K(1);
-            % [TW,W,Kcur] = K2W(T,Kcur,verbose);
             tr  = funTs(sInd).tr/1000;
             N   = size(allWin,2);
             if ~isfield(param,'pad') || isempty(param.pad); param.pad = 0; end
@@ -495,8 +625,11 @@ for sInd = 1:length(funTs)
         end
         if ~skipTrialGramMD
             %%%% Missing data tapers (experimental)
-            Kcur = K(2);
-            % K   = param.tapers(2);
+            if length(K)>1
+                Kcur = K(2);
+            else
+                Kcur = K;
+            end
             tr  = funTs(sInd).tr/1000;
             t   = funTs(sInd).t;
             t   = t(allWinTrialLock(1,:));
@@ -514,29 +647,6 @@ for sInd = 1:length(funTs)
             end
             [TP.trialGramMD.tp,TP.trialGramMD.eigs,TP.trialGramMD.tpDC,TP.trialGramMD.N,TP.trialGramMD.pad] = getTapers(Kcur,tr,N,t,pad);
             TP.trialGramMD.t = t;
-            
-            
-            % if verbose; disp('getting taper for trial-locked analysis'); end
-            % %%% Defining KE cross-trial tapers as K regular taper per E
-            % %%% events (trials)
-            % K   = param.tapers(2);
-            % tr  = funTs(sInd).tr/1000;
-            % N   = size(allWin,2);
-            % TP.trialGram = getTapers(K,tr,N);
-            % E = length(param.onsetList);
-            % % eval(['TP.trialGram = blkdiag(' strjoin(repmat({'TP.trialGram'},1,E),',') ');']);
-            % eval(['TP.trialGram = reshape(blkdiag(' strjoin(repmat({'TP.trialGram'},1,E),',') '),[N*E K E]);']);
-            % % TPx = nan(size(funTs(sInd).t,1),size(TP.trialGram,2));
-            % % TPx(allWinTrialLock(1,:),:) = TP.trialGram;
-            % % plot(funTs(sInd).t,TPx)
-            %
-            %
-            % %%% Defining missing data tapers
-            % % if verbose; disp('getting taper for trial-locked analysis'); end
-            % % K   = param.tapers(2);
-            % % tr  = funTs(sInd).tr/1000;
-            % % N   = false(1,funTs(sInd).nframes); N(allWinTrialLock(1,:)) = true; % here N is a logical vector specifying included data, producing tapers appropriate for timeseries with missing data
-            % % TP.trialGram = getTapers(K,tr,N);
         else
             TP.trialGramMD.tp   = [];
             TP.trialGramMD.eigs = [];
@@ -582,60 +692,12 @@ for sInd = 1:length(funTs)
         param.Kf = [];
     end
     
-    % tic
     [...
         funPsd.psd ,funPsd.psdGram ,funPsd.psdTrialGram ,funPsd.psdTrialGramMD ,...
         funPsd.svd ,funPsd.svdGram ,funPsd.svdTrialGram ,funPsd.svdTrialGramMD ,...
         funPsd.harm,funPsd.harmGram,funPsd.harmTrialGram,funPsd.harmTrialGramMD,...
         funPsd.svdXfreq]...
-        = computeAll(funTs,TP,param,windFlag,skip,verbose);
-    % disp('+++++')
-    % toc
-    % disp('+++++')
-    % %% Compute with fourrier domain phase randomization
-    % tic
-    % if phaseRand
-    %     dbstack; error('double check that')
-    %     % cohF = [0 0.2];
-    %     nf = nnz(funPsd.svd.f>=cohFperm(1) & funPsd.svd.f<=cohFperm(2));
-    %     funTsShuf = funTs;
-    %     % sz = size(funPsd.svd.u,1:5); sz(3) = nf;
-    %     % funPsd.svd.uPhaseRand = zeros([size(funPsd.svd.u,1:5) phaseRand],'single');
-    %     sz = size(funPsd.svd.s,1:5); sz(3) = nf;
-    %     funPsd.svd.sPhaseRand = zeros([sz phaseRand],'single');
-    %     % sz = size(funPsd.svd.v,1:5); sz(3) = nf;
-    %     % funPsd.svd.vPhaseRand = zeros([sz phaseRand],'single');
-    %     sz = size(funPsd.svd.coh,1:5); sz(3) = nf;
-    %     funPsd.svd.cohPhaseRand = zeros([sz phaseRand],'single');
-    %     % sz = size(funPsd.svdGram.u,1:5); sz(3) = nf;
-    %     % funPsd.svdGram.uPhaseRand = zeros([sz phaseRand],'single');
-    %     % sz = size(funPsd.svdGram.s,1:5); sz(3) = nf;
-    %     % funPsd.svdGram.sPhaseRand = zeros([sz phaseRand],'single');
-    %     % sz = size(funPsd.svdGram.v,1:5); sz(3) = nf;
-    %     % funPsd.svdGram.vPhaseRand = zeros([sz phaseRand],'single');
-    %     % sz = size(funPsd.svdGram.coh,1:5); sz(3) = nf;
-    %     % funPsd.svdGram.cohPhaseRand = zeros([sz phaseRand],'single');
-    %     for phaseRandInd = 1:phaseRand
-    %         disp(['phase randomization ' num2str(phaseRandInd) '/' num2str(phaseRand)])
-    %         [X,Y] = pol2cart(rand(size(funTs(sInd).vec)).*(2*pi),abs(fft(funTs(sInd).vec,[],1)));
-    %         funTsShuf(sInd).vec = ifft(complex(X,Y));
-    %         paramTmp = param; paramTmp.win = [inf inf];
-    %         [~,~,svd,svdGram] = computeAll(funTsShuf,TP,szPsd,1,skipSVD,nBloc,avTapers,paramPsd,paramSvd,0,tr,paramTmp,allWin,paramPsdGram,paramSvdGram,[],cohFperm,[]);
-    %         % funPsdShuf = computeAll(funTsShuf,funPsd,szPsd,1,skipSVD,nBloc,avTapers,paramPsd,paramSvd,0,sInd,tr,param,allWin,paramPsdGram,paramSvdGram);
-    %         % funPsd.svd.uPhaseRand(:,:,:,:,:,phaseRandInd) = svd.u;
-    %         funPsd.svd.sPhaseRand(:,:,:,:,:,phaseRandInd) = svd.s;
-    %         % funPsd.svd.vPhaseRand(:,:,:,:,:,phaseRandInd) = svd.v;
-    %         funPsd.svd.cohPhaseRand(:,:,:,:,:,phaseRandInd) = svd.coh;
-    %         % funPsd.svdGram.uPhaseRand(:,:,:,:,:,phaseRandInd) = svdGram.u;
-    %         % funPsd.svdGram.sPhaseRand(:,:,:,:,:,phaseRandInd) = svdGram.s;
-    %         % funPsd.svdGram.vPhaseRand(:,:,:,:,:,phaseRandInd) = svdGram.v;
-    %         % funPsd.svdGram.cohPhaseRand(:,:,:,:,:,phaseRandInd) = svdGram.coh;
-    %     end
-    % end
-    % disp('+++++')
-    % toc
-    % disp('+++++')
-
+        = computeAll(funTs,TP,param,windFlag,skip,verbose,testFlag);
 
 
     %% Sort outputs
@@ -749,28 +811,29 @@ for sInd = 1:length(funTs)
 end
 
 
-function [psd,psdGram,psdTrialGram,psdTrialGramMD,svd,svdGram,svdTrialGram,svdTrialGramMD,harm,harmGram,harmTrialGram,harmTrialGramMD,svdXfreq] = computeAll(funTs,TP,param,windFlag,skip,verbose)
+function [psd,psdGram,psdTrialGram,psdTrialGramMD,svd,svdGram,svdTrialGram,svdTrialGramMD,harm,harmGram,harmTrialGram,harmTrialGramMD,svdXfreq] = computeAll(funTs,TP,param,windFlag,skip,verbose,testFlag)
 if ~exist('nShuf','var');         nShuf = []; end
 if ~exist('nRun','var');           nRun = []; end
 if ~exist('cohFrange','var'); cohFrange = []; end
+if ~exist('testFlag','var');   testFlag = []; end
+
 if isempty(nShuf);         nShuf = 0; end
 if isempty(nRun);           nRun = 1; end
 if isempty(cohFrange); cohFrange = [0 inf]; end
+if isempty(testFlag);   testFlag = 0; end
 dtrndTsFlag  = 1;
 dtrndWinFlag = 0;
 dtrndWinOrd  = 0;
 
 
 
-% skip.gram = any(ismember(param.win(2),[0 inf nan]));
+
 for runInd = 1:nRun
     if verbose && nRun>1; disp(['---Run ' num2str(runInd) '/' num2str(nRun) '---']); end
 
     Fs = param.Fs;
     if ~isfield(funTs,'vec') && isfield(funTs,'vol') && isempty(funTs.vol) && isfield(funTs,'vol2vec') && ~isempty(funTs.vol2vec)
         funTs = MRIload2(funTs);
-    % elseif ( ~isfield(funTs,'vec') || isempty(funTs.vec) )  && isfield(funTs,'vol') && ~isempty(funTs.vol)
-    %     funTs = MRIload2(funTs);
     end
     funTs = vol2vec(funTs);
 
@@ -779,7 +842,6 @@ for runInd = 1:nRun
     %% Detrend %%
     %%%%%%%%%%%%%
     if dtrndTsFlag
-        % funTs.vec = detrend(funTs.vec);
         funTs = dtrnd2(funTs);
     end
 
@@ -852,18 +914,7 @@ for runInd = 1:nRun
     d = permute(d,[4 5 3 1 6 2 7 8]);
     tp = tp;
     tt = t;
-    % J = getJ3(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-    % J4 = getJ4(d,tp,t,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-    % {size(J) size(J4)}'
-    % max(abs(abs(J(:)) - abs(J4(:))))
-    % max(abs(angle(J(:)) - angle(J4(:))))
-    
-    [J,JFFT] = getJ4(d,tp,tt,f);
-    J = J/Fs; JFFT = JFFT/Fs;
-    % {size(J) size(JFFT)}'
-    % max(abs(abs(J(:)) - abs(JFFT(:))))
-    % max(abs(wrapToPi(angle(J(:)) - angle(JFFT(:)))))
-    %                         [N      E       R     K       F      V     W]
+    J = getJ4(d,tp,tt,f)/Fs;% [N E R K F V W]
 
     %%% Compute psd
     if param.keepJ
@@ -876,30 +927,32 @@ for runInd = 1:nRun
     % %%%% at all frequencies
     % [linePwr,lineF,lineP] = getLinePwr(J,tp,Fs);
     %%%% at specified frequencies
-    if isfield(funTs,'dsgn') && isfield(funTs.dsgn,'onsetList') && ~isempty(funTs.dsgn.onsetList)
-        fStim = 1/mean(diff(funTs.dsgn.onsetList));
-        hInd = 1:floor(Fs/2/fStim);
+    if isfield(param,'onsetList') && ~isempty(param.onsetList)
+        if max(abs(diff(diff(param.onsetList))))>0.000001; keyboard; end
+        fStim = 1/mean(diff(param.onsetList));
+        hInd = 1:min(floor(Fs/2/fStim),10);
         fStim = permute(fStim.*hInd,[1 3 4 5 2 6 7]);
-        % Jstim = getJ3(d,tp,tt,fStim,1)/Fs; % [time x trial x run x taper x freq x vox x window]
-        [Jstim,JstimFFT] = getJ4(d,tp,tt,fStim,1); % [time x trial x run x taper x freq x vox x window]
-        Jstim = Jstim/Fs; JstimFFT = JstimFFT/Fs;
-        % {size(Jstim) size(JstimFFT)}'
-        % max(abs(abs(Jstim(:)) - abs(JstimFFT(:))))
-        % max(abs(wrapToPi(angle(Jstim(:)) - angle(JstimFFT(:)))))
-
-        % J  = getJ3(d,tp,t,fStim,1)/Fs; % [time x trial x run x taper x freq x vox x window]
-        % J4 = getJ4(d,tp,t,fStim)/Fs; % [time x trial x run x taper x freq x vox x window]
-        % {size(J) size(J4)}'
-        % max(abs(abs(J(:)) - abs(J4(:))))
-        % max(abs(angle(J(:)) - angle(J4(:))))
-
+        Jstim = getJ4(d,tp,tt,fStim,1)/Fs; % [time x trial x run x taper x freq x vox x window] % [N E R K F V W]
+        
+        % JstimX = getJ4(d,tp,tt,fStim)/Fs; % [time x trial x run x taper x freq x vox x window] % [N E R K F V W]
+        % Jx = getJ4(d,tp,tt,f,1)/Fs;% [N E R K F V W]
+        % J1 = getJ4(d,tp,tt,fStim,1)/Fs; % [time x trial x run x taper x freq x vox x window] % [N E R K F V W]
+        % J0 = getJ4(d,tp,tt,fStim,0)/Fs; % [time x trial x run x taper x freq x vox x window] % [N E R K F V W]
+        
         [linePwrStim,lineFstim,linePstim] = getLinePwr(Jstim,tp,Fs);
+
+        res.full.harm.label   = 'stimFreq';
+        res.full.harm.linePwr = linePwrStim; clear linePwrStim
+        res.full.harm.lineF   = lineFstim;   clear lineFstim
+        res.full.harm.lineP   = linePstim;   clear linePstim
+        res.full.harm.f       = fStim;       clear fStim
+    else
+        res.full.harm.label   = '';
+        res.full.harm.linePwr = [];
+        res.full.harm.lineF   = [];
+        res.full.harm.lineP   = [];
+        res.full.harm.f       = [];
     end
-    res.full.harm.label   = 'stimFreq';
-    res.full.harm.linePwr = linePwrStim; clear linePwrStim
-    res.full.harm.lineF   = lineFstim;   clear lineFstim
-    res.full.harm.lineP   = linePstim;   clear linePstim
-    res.full.harm.f       = fStim;       clear fStim
     
 
     % %%% Reconstruct harmonic signal fit
@@ -911,185 +964,6 @@ for runInd = 1:nRun
     % %%%% at voxel-specific frequencies (based on p-values and threshold alpha)
     % ts = getLineTs(A,f,0.05,p,N,Fs);
     
-
-    %%% Compute line power (adapted from Jackob, not completed)
-    %%
-    % % % % % % % % % % % % size(J);    % [time x trial x run x taper x freq x vox x window] % my J here is equivalent to Jackob's J (/autofs/space/takoyaki_001/users/proulxs/vsmU19/fmri_linespec_JD.m)
-    % % % % % % % % % % % % %             [N      E       R     K       F      V     W     ]
-    % % % % % % % % % % % % size(tp);   % [time x 1     x 1   x taper                      ]
-    % % % % % % % % % % % % %             [N      1       1     K       1      1     1     ]
-    % % % % % % % % % % % % size(tpDC); % [1    x 1     x 1   x taper                      ]
-    % % % % % % % % % % % % %             [1      1       1     K       1      1     1     ]
-    % % % % % % % % % % % % lineJ   = sum(tpDC.*J,4) ./ sum(tpDC.^2); % line power is simply the scaled complex-valued Fourrier coefficients summed across tapers
-    % % % % % % % % % % % % linePwr = lineJ*Fs; % From Jackob: "Correct for normalization (double check this)"
-    % % % % % % % % % % % % linePwr = conj(linePwr) .* linePwr;
-    % % % % % % % % % % % % linePwr = linePwr / (2*W); % From Jackob: "%Divide by full bandwidth to get line height"
-    % % % % % % % % % % % % % figure('WindowStyle','docked');
-    % % % % % % % % % % % % % plot(squeeze(f),squeeze(mean(linePwr,6)))
-    % % % % % % % % % % % % 
-    % % % % % % % % % % % % %%% Compute line power stats
-    % % % % % % % % % % % % %%%% F thresh
-    % % % % % % % % % % % % df1 = 2;
-    % % % % % % % % % % % % df2 = 2*K-2;
-    % % % % % % % % % % % % Fthresh=finv(1-0.05,df1,df2);
-    % % % % % % % % % % % % %%%% F
-    % % % % % % % % % % % % % Jrs = J - tpDC.*res.full.lineJ; % this is what would be equivalent to Jackob's code
-    % % % % % % % % % % % % Fde = J - lineJ./sum(tpDC.^2).*tpDC; % but this feels better to me to keep J and lineJ equivalent
-    % % % % % % % % % % % % Fde = sum(conj(Fde).*Fde,4);
-    % % % % % % % % % % % % F   = (K-1) .* (conj(lineJ).*lineJ) .* sum(tpDC.^2) ./ Fde;
-    % % % % % % % % % % % % %%%% p
-    % % % % % % % % % % % % p = fcdf(F,df1,df2,'upper');
-    % % % % % % % % % % % % % figure('WindowStyle','docked');
-    % % % % % % % % % % % % % plot(squeeze(f),squeeze(mean(F,6)))
-    % % % % % % % % % % % % 
-    % % % % % % % % % % % % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % % % % % % % % % % % % %% Excerpt from Jackob Duckworth for computing line power %%
-    % % % % % % % % % % % % % see /autofs/space/takoyaki_001/users/proulxs/vsmU19/fmri_linespec_JD.m)
-    % % % % % % % % % % % % %!!!!!!!!!!!!!!!!!!!!!!!!
-    % % % % % % % % % % % % %!!!!!!!!!!!!!!!!!!!!!!!!
-    % % % % % % % % % % % % %!!!!!!!!!!!!!!!!!!!!!!!!
-    % % % % % % % % % % % % % %%% dimensionality reduction (extracted from Jackob Duckworth)
-    % % % % % % % % % % % % % data = vfMRI_tmp.volTs(run).mri.vec;
-    % % % % % % % % % % % % % if size(data,1) > size(data,2)
-    % % % % % % % % % % % % %     data = data';
-    % % % % % % % % % % % % % end
-    % % % % % % % % % % % % % data_mean = data - mean(data,2);
-    % % % % % % % % % % % % % [U,S,V]=svd(data_mean,0);
-    % % % % % % % % % % % % % sig_modes = round(size(data,1)/2); %Start with only half the modes as test.
-    % % % % % % % % % % % % % toplot.sig_modes = sig_modes;
-    % % % % % % % % % % % % % Un=single(U(:,1:sig_modes));
-    % % % % % % % % % % % % % Sn=single(S(1:sig_modes,1:sig_modes));
-    % % % % % % % % % % % % % Vn=single(V(:,1:sig_modes));
-    % % % % % % % % % % % % % scores = Un*Sn;
-    % % % % % % % % % % % % % %%% normalization factor
-    % % % % % % % % % % % % % tapers_FT = fft(tapers,nfft)/Fs;
-    % % % % % % % % % % % % % tapers_FT = tapers_FT(1,:);
-    % % % % % % % % % % % % % t_norm = sum(tapers_FT.^2);
-    % % % % % % % % % % % % % %%% line power computation
-    % % % % % % % % % % % % % taperedFFT = complex(zeros(length(f),ntapers(2),size(Vn,2)));
-    % % % % % % % % % % % % % for i = 1:size(Vn,2) % Iterate over modes (when dimensionality reduction is used, voxels when not)
-    % % % % % % % % % % % % %     J = mtfftc(Vn(:,i),tapers,nfft,Fs);
-    % % % % % % % % % % % % %     J = J(findx,:,:);
-    % % % % % % % % % % % % %     taperedFFT(:,:,i) = J;
-    % % % % % % % % % % % % % end
-    % % % % % % % % % % % % % % Jacob's normalization factor (here integrated into getTapers.m)
-    % % % % % % % % % % % % % tapers_FT = fft(tapers,nfft)/Fs;
-    % % % % % % % % % % % % % tapers_FT = tapers_FT(1,:);
-    % % % % % % % % % % % % % t_norm = sum(tapers_FT.^2);
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % A = zeros(length(f),size(taperedFFT,3),'single'); % taperedFFT seems to be J
-    % % % % % % % % % % % % % A = complex(A);
-    % % % % % % % % % % % % % for k = 1:ntapers(2)
-    % % % % % % % % % % % % %     A = A + tapers_FT(k).*squeeze(taperedFFT(:,k,:));
-    % % % % % % % % % % % % % end
-    % % % % % % % % % % % % % A = A./t_norm;
-    % % % % % % % % % % % % % mu = scores*A';
-    % % % % % % % % % % % % % toplot.amp = mu;
-    % % % % % % % % % % % % % toplot.amp=toplot.amp*Fs;% Correct for normalization (double check this)
-    % % % % % % % % % % % % % Extpowr_vals = abs(toplot.amp).^2;
-    % % % % % % % % % % % % % Extpowr_vals = Extpowr_vals./(2*Delta_f); %Divide by full bandwidth to get line height
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % % CALCULATE F-STATISTICS
-    % % % % % % % % % % % % % N = length(Tvec);
-    % % % % % % % % % % % % % p = 0.05; % Significance level for f-test
-    % % % % % % % % % % % % % p= p/length(Tvec); % ??? WHY DIVIDE p BY length(Tvec), Bonferroni ???
-    % % % % % % % % % % % % % sig=finv(1-p,2,2*ntapers(2)-2);
-    % % % % % % % % % % % % % toplot.F_stat_sig = sig;
-    % % % % % % % % % % % % % disp(['Calculating F-Statistics at significance level ',num2str(p),' F_sig = ',num2str(sig)])
-    % % % % % % % % % % % % % % All frequencies.
-    % % % % % % % % % % % % % Fde = zeros(size(mu),'single');
-    % % % % % % % % % % % % % for k = 1:ntapers(2)
-    % % % % % % % % % % % % %     z = scores*squeeze(taperedFFT(:,k,:))' - mu*tapers_FT(k);
-    % % % % % % % % % % % % %     Fde = Fde + conj(z).*z;
-    % % % % % % % % % % % % % end
-    % % % % % % % % % % % % % F = (size(taperedFFT,2)-1)*(conj(mu).*mu)*t_norm./Fde; % Space x freq. Plot this in multi-tab figure!
-    % % % % % % % % % % % % % toplot.F_stat = F;
-    % % % % % % % % % % % % % % [Fval,A,f,sig] = ftestc(data,params,p,plt); % from Chronux
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % % Stim frequencies.
-    % % % % % % % % % % % % % F_stim = F(:,f_stim_loc);
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % % CALCULATE RESIDUAL SPECTRUM
-    % % % % % % % % % % % % % % Already have F-values and Amplitudes
-    % % % % % % % % % % % % % %From fitlinesc.m
-    % % % % % % % % % % % % % fmax = findpeaks(F',sig); %This is the chronux findpeaks
-    % % % % % % % % % % % % % C = size(F,1); %Channels
-    % % % % % % % % % % % % % freqs=cell(1,C);
-    % % % % % % % % % % % % % Amps=cell(1,C);
-    % % % % % % % % % % % % % data_reconstruct = Un*Sn*Vn';
-    % % % % % % % % % % % % % datafit = data_reconstruct';
-    % % % % % % % % % % % % % %%
-    % % % % % % % % % % % % % clearvars i
-    % % % % % % % % % % % % % A = toplot.amp';
-    % % % % % % % % % % % % % for ch=1:C
-    % % % % % % % % % % % % %     fsig=f(fmax(ch).loc);
-    % % % % % % % % % % % % %     freqs{ch}=fsig; %List of significant frequencies
-    % % % % % % % % % % % % %     Amps{ch}=toplot.amp(ch,fmax(ch).loc); %Pick out significant amp from list of all amps
-    % % % % % % % % % % % % %     Nf=length(fsig);
-    % % % % % % % % % % % % %     datafit(:,ch)=exp(i*2*pi*(0:N-1)'*fsig/Fs)*A(fmax(ch).loc,ch)+exp(-i*2*pi*(0:N-1)'*fsig/Fs)*conj(A(fmax(ch).loc,ch));
-    % % % % % % % % % % % % %     %These are the sinewaves. Only subtract if there were significant sine components.
-    % % % % % % % % % % % % % end
-    % % % % % % % % % % % % % data_nolines = data_reconstruct' - datafit;
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % %Save significant extracted amplitudes.
-    % % % % % % % % % % % % % %Iterate over freqs variable - save significantly extracted
-    % % % % % % % % % % % % % %amplitudes at each stim frequency. Just do a loop for now.
-    % % % % % % % % % % % % % sig_Amps = NaN(size(toplot.amp,1),length(f_stim));
-    % % % % % % % % % % % % % Stim_lowBW = f_stim - Delta_f;
-    % % % % % % % % % % % % % Stim_highBW = f_stim + Delta_f;
-    % % % % % % % % % % % % % for ii = 1:length(freqs)
-    % % % % % % % % % % % % %     if ~isempty(freqs{ii}) %If there were significant line components detected for this pixel.
-    % % % % % % % % % % % % %         freqs_tmp = freqs{ii};
-    % % % % % % % % % % % % %         for jj = 1:length(freqs_tmp) %Iterate over frequency values
-    % % % % % % % % % % % % %             freq_val_tmp = freqs_tmp(jj);
-    % % % % % % % % % % % % %             Amp_tmp = Amps{ii};
-    % % % % % % % % % % % % %             Amp_tmp = Amp_tmp(jj);
-    % % % % % % % % % % % % %             check_low = freq_val_tmp > Stim_lowBW;
-    % % % % % % % % % % % % %             check_high = freq_val_tmp < Stim_highBW;
-    % % % % % % % % % % % % %             isfreq = find(and(check_low,check_high));
-    % % % % % % % % % % % % %             if ~isempty(isfreq)
-    % % % % % % % % % % % % %                 sig_Amps(ii,isfreq) = (abs(Amp_tmp).^2)./(2*Delta_f);
-    % % % % % % % % % % % % %             end
-    % % % % % % % % % % % % %         end
-    % % % % % % % % % % % % %     end
-    % % % % % % % % % % % % % end
-    % % % % % % % % % % % % % toplot.sig_Amps = sig_Amps; %Average over ~NaN values here at each frequency to plot summary figure.
-    % % % % % % % % % % % % % %Could also count how many pixels have significant line components -> some area-locking metric.
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % params.tapers = ntapers;
-    % % % % % % % % % % % % % params.Fs = Fs;
-    % % % % % % % % % % % % % params.pad = 2;
-    % % % % % % % % % % % % % [Stot,f]=mtspectrumc(data_mean',params);
-    % % % % % % % % % % % % % [Sresid,f]=mtspectrumc(data_nolines,params);
-    % % % % % % % % % % % % % toplot.resid_f = f;
-    % % % % % % % % % % % % % toplot.avgResid = mean(Sresid,2);
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % % hold on
-    % % % % % % % % % % % % % % plot(f,log10(mean(Stot,2)))
-    % % % % % % % % % % % % % % figure(summaryfig);
-    % % % % % % % % % % % % % % yyaxis left
-    % % % % % % % % % % % % % hold on
-    % % % % % % % % % % % % % plot(f,log10(mean(Sresid,2)),'m--');
-    % % % % % % % % % % % % % 
-    % % % % % % % % % % % % % %Plot f-statistic summary
-    % % % % % % % % % % % % % F95 = prctile(toplot.F_stat,95,1);
-    % % % % % % % % % % % % % F5 = prctile(toplot.F_stat,5,1);
-    % % % % % % % % % % % % % Favg = mean(toplot.F_stat,1);
-    % % % % % % % % % % % % % h.tab(11) = uitab(h.tabgroup,'Title','F-Stat');
-    % % % % % % % % % % % % % h.axes(11) = axes('Parent',h.tab(11));
-    % % % % % % % % % % % % % hp = plot(toplot.f, Favg); hp.Color = [0 0 0 1]; hold on;
-    % % % % % % % % % % % % % hp2 = plot(toplot.f,F95); hp2.Color = [0 0 0 0.2];
-    % % % % % % % % % % % % % hp3 = plot(toplot.f,F5); hp3.Color = [0 0 0 0.2];
-    % % % % % % % % % % % % % yline(sig);
-    % % % % % % % % % % % % % ylim([0 20])
-    % % % % % % % % % % % % % xlabel('Frequency (Hz)','Interpreter','latex');
-    % % % % % % % % % % % % % ylabel('F-statistic value','Interpreter','latex');
-    % % % % % % % % % % % % % title({'F-statistic', 'Average over pixels, 95th 5th percentile'},'Interpreter','latex');
-    % % % % % % % % % % % % % %!!!!!!!!!!!!!!!!!!!!!!!!
-    % % % % % % % % % % % % % %!!!!!!!!!!!!!!!!!!!!!!!!
-    % % % % % % % % % % % % % %!!!!!!!!!!!!!!!!!!!!!!!!
-    % % % % % % % % % % % % %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%
 
     %%% Compute coherence
     if K > 1
@@ -1298,19 +1172,9 @@ for runInd = 1:nRun
             end
             tp = tp;
             tt = t; % adjust t here for sub-tr stimulus onsets
-            % J = getJ3(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % J4 = getJ4(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % {size(J) size(J4)}'
-            % max(abs(abs(J(:)) - abs(J4(:))))
-            % max(abs(angle(J(:)) - angle(J4(:))))
 
-            [J,JFFT] = getJ4(d,tp,tt,f);
-            J = J/Fs; JFFT = JFFT/Fs;
-            % {size(J) size(JFFT)}'
-            % max(abs(abs(J(:)) - abs(JFFT(:))))
-            % max(abs(wrapToPi(angle(J(:)) - angle(JFFT(:)))))
-            %                         [N      E       R     K       F      V     W]
-
+            J = getJ4(d,tp,tt,f,[],testFlag)/Fs; % [N E R K F V W]
+            
             %%% Compute psd at each trial
             res.gram.PSD(:,:,:,:,:,:,wInd)    = mean(  conj(J).*J  ,4);
 
@@ -1431,7 +1295,6 @@ for runInd = 1:nRun
             d = permute(d,[4 5 3 1 6 2 7 8]); %[time x trial x run x taper x freq x vox x window x mode]
             if dtrndWinFlag
                 d = detrend(d,dtrndWinOrd);
-                % d = d - mean(d,1);
             end
             tp = tp;
 
@@ -1440,19 +1303,9 @@ for runInd = 1:nRun
             if windFlag; onsetList(1) = []; end
             tt = t + tWin(1,:) - onsetList;
 
-            % J = getJ3(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % J4 = getJ4(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % {size(J) size(J4)}'
-            % max(abs(abs(J(:)) - abs(J4(:))))
-            % max(abs(angle(J(:)) - angle(J4(:))))
+            J = getJ4(d,tp,tt,f,[],testFlag)/Fs; % [N E R K F V W]
 
-            [J,JFFT] = getJ4(d,tp,tt,f);
-            J = J/Fs; JFFT = JFFT/Fs;
-            % {size(J) size(JFFT)}'
-            % max(abs(abs(J(:)) - abs(JFFT(:))))
-            % max(abs(wrapToPi(angle(J(:)) - angle(JFFT(:)))))
-            %                         [N      E       R     K       F      V     W]
-
+            
             %%% Compute psd at each trial
             res.trialGram.PSD(:,:,:,:,:,:,wInd,:)    = mean(  conj(J).*J  ,4); % Compute power then average across tapers...
             %%% Compute psd averaged across trials
@@ -1565,7 +1418,6 @@ for runInd = 1:nRun
     tic
     disp('trial-locked time-resolved analysis (using missing data tapers)')
     %[time x trial x run x taper x freq x vox x window x mode]
-    %[   7       2     1       3      5     8       20]
     if ~skip.trialGramMD
         %%% tapers
         tp   = permute(TP.trialGramMD.tp  ,[1 3 4 2 5 6 7 8]); % tapers[time x trial x run x taper x freq x vox x window x mode]
@@ -1634,45 +1486,22 @@ for runInd = 1:nRun
             d = reshape(d,[V 1 R Nw E]); % [vox x taper x run x time x trial]
             if dtrndWinFlag
                 d = permute(detrend(permute(d,[4 1 2 3 5 6 7 8]),dtrndWinOrd),[2 3 4 1 5 6 7 8]); % detrend on a trial-by-trial basis
-                % d = d - mean(d,5); % demean on a trial-by-trial basis
             end
             d = reshape(d,[V 1 R Nw*E]); % [vox x taper x run x time]
             d = permute(d,[4 5 3 2 6 1 7 8]); % [time x trial x run x taper x freq x vox x window]
-            
-            % d = funTs.vec(ind,:,:,:);         % [time  x vox x taper x run               x window]
-            % d = permute(d,[1 5 4 3 6 2 7 8]); % [time x trial x run x taper x freq x vox x window]
             tp = tp;
 
             
             %%% Using normal time (incoherent phase averaging across trials, but phase coherency can be generated by stimulus design)
             tt = t;
-            % Jold = getJ3(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % tTmp  = permute(reshape(permute(t ,[3 4 5 6 7 8 1 2]),[R 1 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
-            % dTmp  = permute(reshape(permute(d ,[3 4 5 6 7 8 1 2]),[R 1 1 V 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
-            % tpTmp = permute(reshape(permute(tp,[3 4 5 6 7 8 1 2]),[1 K 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
-            % fTmp  = permute(reshape(permute(f ,[3 4 5 6 7 8 1 2]),[1 1 F 1 1 1 1   1]),[7 8 1 2 3 4 5 6]);
-            % J = getJ3(dTmp,tpTmp,tTmp,fTmp)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % J4 = getJ4(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % {size(J) size(J4)}'
-            % max(abs(abs(J(:)) - abs(J4(:))))
-            % max(abs(angle(J(:)) - angle(J4(:))))
-
-
+            
             ttTmp = permute(reshape(permute(tt ,[3 4 5 6 7 8 1 2]),[R 1 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             dTmp  = permute(reshape(permute(d ,[3 4 5 6 7 8 1 2]),[R 1 1 V 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             tpTmp = permute(reshape(permute(tp,[3 4 5 6 7 8 1 2]),[1 K 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             fTmp  = permute(reshape(permute(f ,[3 4 5 6 7 8 1 2]),[1 1 F 1 1 1 1   1]),[7 8 1 2 3 4 5 6]);
-            [J,JFFT] = getJ4(dTmp,tpTmp,ttTmp,fTmp);
-            J = sum(J,2)/Fs; JFFT = sum(JFFT,2)/Fs;
-            % {size(J) size(JFFT)}'
-            % max(abs(abs(J(:)) - abs(JFFT(:))))
-            % max(abs(wrapToPi(angle(J(:)) - angle(JFFT(:)))))
-            % %                         [N      E       R     K       F      V     W]
+            J = getJ4(dTmp,tpTmp,ttTmp,fTmp,[],testFlag)/Fs; % [N E R K F V W]
+            J = sum(J,2);
 
-            % {size(J) size(Jold)}'
-            % max(abs(abs(J(:)) - abs(Jold(:))))
-            % max(abs(wrapToPi(angle(J(:)) - angle(Jold(:)))))
-            
 
             %%%% Compute psd
             res.trialGramMD.PSD(:,:,:,:,:,:,wInd)    = mean(  conj(J).*J  ,4);
@@ -1700,27 +1529,12 @@ for runInd = 1:nRun
             %%% Now adjusting time for phase coherent cross-trial averaging
             tt = reshape(reshape(t,Nw,E) - onsets,Nw*E,1); % aligning the time vector to 0 at stimulus onset effectively enforces coherent phase averaging across trials
 
-            % Jold = getJ3(d,tp,tt,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % J4 = getJ4(d,tp,ttPC,f)/Fs; % [time x trial x run x taper x freq x vox x window]
-            % {size(J) size(J4)}'
-            % max(abs(abs(J(:)) - abs(J4(:))))
-            % max(abs(angle(J(:)) - angle(J4(:))))
-
             ttTmp = permute(reshape(permute(tt ,[3 4 5 6 7 8 1 2]),[R 1 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             dTmp  = permute(reshape(permute(d ,[3 4 5 6 7 8 1 2]),[R 1 1 V 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             tpTmp = permute(reshape(permute(tp,[3 4 5 6 7 8 1 2]),[1 K 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             fTmp  = permute(reshape(permute(f ,[3 4 5 6 7 8 1 2]),[1 1 F 1 1 1 1   1]),[7 8 1 2 3 4 5 6]);
-            [J,JFFT] = getJ4(dTmp,tpTmp,ttTmp,fTmp);
-            J = sum(J,2)/Fs; JFFT = sum(JFFT,2)/Fs;
-            % {size(J) size(JFFT)}'
-            % max(abs(abs(J(:)) - abs(JFFT(:))))
-            % max(abs(wrapToPi(angle(J(:)) - angle(JFFT(:)))))
-            % [N      E       R     K       F      V     W]
-
-            % {size(J) size(Jold)}'
-            % max(abs(abs(J(:)) - abs(Jold(:))))
-            % max(abs(wrapToPi(angle(J(:)) - angle(Jold(:)))))
-            
+            J = getJ4(dTmp,tpTmp,ttTmp,fTmp,[],testFlag)/Fs; % [N E R K F V W]
+            J = sum(J,2);
 
             %%%% Compute psd
             res.trialGramMD.PSDepc(:,:,:,:,:,:,wInd)    = mean(  conj(J).*J  ,4);

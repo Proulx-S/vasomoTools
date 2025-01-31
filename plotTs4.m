@@ -1,15 +1,14 @@
-function [ax,F] = plotTs3(H,volTs,volResp,dsgn,mask,respQthresh)
+function [ax,F,volTs,volResp] = plotTs4(H,volTs,volResp,dsgn,mask,thresh)
 
 if ~exist('H','var');                      H = []; end
 if isempty(H);                             H = figure('WindowStyle','docked'); end
 if ~exist('onsets','var');            onsets = []; end
 if ~exist('ondurs','var');            ondurs = []; end
 if ~exist('roiInd','var');            roiInd = []; end
-if ~exist('respQthresh','var');  respQthresh = []; end
+if ~exist('thresh','var');            thresh = []; end
 if ~exist('volAnat','var');          volAnat = []; end
 if ~exist('mask','var');                mask = []; end
 if ~exist('dsgn','var');                dsgn = []; end
-if isempty(respQthresh);         respQthresh = 1; end % respQthresh = 1 means don't threshold
 if isempty(volAnat);                  volRoi = [];
                                      volMask = [];
 elseif ~isempty(roiInd)
@@ -71,6 +70,13 @@ hold on
 % end
 % hold on
 
+%%% Load volTs if not loaded already
+if ~isempty(volTs)
+    if isempty(volTs.vol) && (~isfield(volTs,'vec') || isempty(volTs.vec))
+        volTs = MRIload3(volTs);
+    end
+end
+
 
 %%% average or loop across space
 
@@ -95,6 +101,13 @@ else
         fMask = [];
         mask = logical(mask);
     end
+    if ~isempty(fMask)
+        [~,b,~] = fileparts(replace(fMask,'.nii.gz',''));
+        mskStr = ['voxSel:' b '==1'];
+    else
+        mskStr = 'voxSel:?';
+    end
+    
     
     if ~isempty(volTs)
         if isMRI(volTs)
@@ -110,18 +123,40 @@ else
 end
 
 %%%% stat thresh
-if respQthresh==0; respQthresh = 0.05; end % respQthresh = 0 does not mean anything, reverts to default 0.05
-if respQthresh~=inf && respQthresh~=1
-    mask = mask & volResp.Fq.vol<respQthresh;
+if ~isempty(thresh)
+    if ischar(thresh.map) || isempty(thresh.map.vol)
+        thresh.map = MRIload3(thresh.map,[],[],0);
+    end
+    if thresh.sign<0
+        signLabel = '<=';
+        thresh.mask = thresh.map.vol<=thresh.val;
+    else
+        signLabel = '>=';
+        thresh.mask = thresh.map.vol>=thresh.val;
+    end
+    mask = mask & thresh.mask;
+
+
+    [~,b,~] = fileparts(replace(thresh.map.fspec,'.nii.gz',''));
+    mskStr = [mskStr '&' b signLabel num2str(thresh.val,'%0.3f')];
 end
+% if thresh==0; thresh = 0.05; end % respQthresh = 0 does not mean anything, reverts to default 0.05
+% if thresh~=inf && thresh~=1
+%     if ischar(volResp.fs.fFullQ)
+%         volResp.fs.fFullQ = MRIload3(volResp.fs.fFullQ,[],[],0);
+%     end
+%     mask = mask & volResp.fs.fFullQ.vol<thresh;
+% end
 
 legH = {};
 if ~isempty(volTs)
-    %%% average across runs
-    volTs.vol = mean(volTs.vol,5);
-
     %%% average across voxels
     volTs = vol2vec(volTs,mask,1);
+    volTs.vec = mean(volTs.vec,2);
+    
+    %%% average across runs
+    volTs.vec = mean(volTs.vec,4);
+
     t = volTs.t;
     ts = mean(volTs.vec,2);
 
@@ -137,7 +172,7 @@ else
 end
 
 %% Add response if available
-if ~isempty(volResp)
+if ~isempty(volResp) && isfield(volResp,'fs') && isfield(volResp.fs,'fRespTs') && ~isempty(volResp.fs.fRespTs)
     hold on
     if length(volResp)>1 && isstruct(volResp) && ~isMRI(volResp)
         for i = 1:length(volResp)
@@ -146,24 +181,28 @@ if ~isempty(volResp)
             % volResp(1).ts.vol(:,:,:,:,:,i) = mri.vol; clear mri
         end
         volResp(2:end) = [];
-        if isfield(volResp.ts,'vec')
-            volResp.ts = rmfield(volResp.ts,'vec');
+        if isfield(volResp.fs.fRespTs,'vec')
+            volResp.fs.fRespTs = rmfield(volResp.fs.fRespTs,'vec');
         end
 
     else
-        if isempty(volResp.ts.vol)
-            mri = MRIread(volResp.ts.fspec);
-            volResp.ts.vol = mri.vol; clear mri
-            if isfield(volResp.ts,'vec')
-                volResp.ts = rmfield(volResp.ts,'vec');
-            end
+        if ischar(volResp.fs.fRespTs)
+            volResp.fs.fRespTs = MRIload3(volResp.fs.fRespTs,mask,[],0);
         end
+
+        % mri = MRIread(volResp.fs.fRespTs.fspec);
+        % volResp.fs.fRespTs.vol = mri.vol; clear mri
+        % if isfield(volResp.fs.fRespTs,'vec')
+        %     volResp.fs.fRespTs = rmfield(volResp.fs.fRespTs,'vec');
+        % end
     end
-    volResp.ts = vol2vec(volResp.ts,mask);
-    tResp = volResp.ts.t; if ~isempty(dsgn) && ~isempty(volTs); tResp = tResp + dsgn.onsetList(1); end
-    tsResp = mean(volResp.ts.vec,2);
-    if size(volResp.ts.vec,4)>1
-        tsRespEr = std(tsResp,[],4)./sqrt(size(volResp.ts.vec,4));
+    if ~isfield(volResp.fs.fRespTs,'vec') || isempty(volResp.fs.fRespTs.vec)
+        volResp.fs.fRespTs = vol2vec(volResp.fs.fRespTs,mask);
+    end
+    tResp = volResp.fs.fRespTs.t; if ~isempty(dsgn) && ~isempty(volTs); tResp = tResp + dsgn.onsetList(1); end
+    tsResp = mean(volResp.fs.fRespTs.vec,2);
+    if size(volResp.fs.fRespTs.vec,4)>1
+        tsRespEr = std(tsResp,[],4)./sqrt(size(volResp.fs.fRespTs.vec,4));
         tsResp   = mean(tsResp,4);
     end
     
@@ -215,8 +254,8 @@ if ~isempty(volTs)
     T = volTs.nframes.*volTs.tr/1000;
     xlim([0 T])
 elseif ~isempty(volResp)
-    T = volResp.ts.nframes.*volResp.ts.tr/1000;
-    xlim([0 T-volResp.ts.tr/1000])
+    T = volResp.fs.fRespTs.nframes.*volResp.fs.fRespTs.tr/1000;
+    xlim([0 T-volResp.fs.fRespTs.tr/1000])
 else
     dbstack; error('X');
 end
@@ -226,22 +265,19 @@ paramStr = {['T=' num2str(T,'%0.2f') 'sec']};
 if ~isempty(ondurs)
     paramStr{end+1} = ['dur=' num2str(mean(ondurs)) 'sec'];
 end
-if ~isempty(fMask)
-    if exist(fMask,'file')
-        [~,b] = fileparts(replace(fMask,'.nii.gz','')); b = strsplit(b,'_'); b = b{end};
-        paramStr{end+1} = ['mask:' b];
-    else
-        paramStr{end+1} = ['mask:' strjoin(fMask,'+')];
-    end
-% elseif ~isempty(volRoi)
-%     dbstack; error('code that');
-end
+paramStr{end+1} = mskStr;
+% if ~isempty(fMask)
+%     if exist(fMask,'file')
+%         [~,b] = fileparts(replace(fMask,'.nii.gz','')); b = strsplit(b,'_'); b = b{end};
+%         paramStr{end+1} = ['mask:' b];
+%     else
+%         paramStr{end+1} = ['mask:' strjoin(fMask,'+')];
+%     end
+% % elseif ~isempty(volRoi)
+% %     dbstack; error('code that');
+% end
 
-if respQthresh~=inf && respQthresh~=1
-    title(['timeseries (' strjoin(paramStr,'; ') ') averaged across voxels with Q<=' num2str(respQthresh,'%0.2f')])
-else
-    title(['timeseries (' strjoin(paramStr,'; ') ')'])
-end
+title(['timeseries (' strjoin(paramStr,'; ') ')'],'Interpreter','none')
 
 
 if isempty(dsgn)

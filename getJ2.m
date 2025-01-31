@@ -14,7 +14,8 @@ if Wt~=1 && Wd~=Wt; dbstack; end; W = Wd;
 % tp2 = reshape(  tp .* exp(-f.*t(:,e)*2*pi*1i)                   ,[N 1*R*K*F*1*Wt]);
 % d2  = reshape(  d(:,e,:,:,:,:,:,:) - mean(d(:,e,:,:,:,:,:,:),1) ,[N 1*R*1*1*V*W ]); % removing the mean here
 tp2 = reshape(  tp .* exp(-f.*t*2*pi*1i)  ,[N Et*R*K*F*1*Wt]);
-d2  = reshape(  d - mean(d,1)             ,[N E*R*1*1*V*W]); % removing the mean here
+d2  = reshape(  d                         ,[N E* R*1*1*V*W ]); 
+% d2  = reshape(  d - mean(d,1)             ,[N E* R*1*1*V*W ]); % removing the mean here
 
 
 d2 = permute(d2,[2 1]);

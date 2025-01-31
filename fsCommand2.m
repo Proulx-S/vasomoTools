@@ -82,6 +82,7 @@ end
 for rc = 1:length(runCondStimList)
     stimCondLabel = runCondStimList{rc};
     if ~isfield(runCond,runCondStimList{rc}); continue; end
+    if ~isfield(runCond.(stimCondLabel).volTsSes,'volResp'); continue; end
     volResp = cat(1,runCond.(stimCondLabel).volTsSes.volResp);
     
     ses = [volResp.ts]; ses = {ses.fspec}'; [~,ses] = fileparts(fileparts(ses)); ses = cellstr(ses); for i = 1:size(ses,1); ses{i} = strsplit(ses{i},'_'); ses{i} = ses{i}{contains(ses{i},'ses-')}; end
@@ -122,6 +123,7 @@ if ~runFlag
     for rc = 1:length(runCondStimList)
         stimCondLabel = runCondStimList{rc};
         if ~isfield(runCond,runCondStimList{rc}); continue; end
+        if ~isfield(runCond.(stimCondLabel).volTsSub,'volResp'); continue; end
         volResp = cat(1,runCond.(stimCondLabel).volTsSub.volResp);
 
         ses = [volResp.ts]; ses = {ses.fspec}'; [~,ses] = fileparts(fileparts(ses)); ses = cellstr(ses); for i = 1:size(ses,1); ses{i} = strsplit(ses{i},'_'); ses{i} = ses{i}{contains(ses{i},'ses-')}; end
@@ -181,6 +183,7 @@ end
 for rc = 1:length(runCondStimList)
     stimCondLabel = runCondStimList{rc};
     if ~isfield(runCond,runCondStimList{rc}); continue; end
+    if ~isfield(runCond.(stimCondLabel).volTsSes,'volResp'); continue; end
     volResp = cat(1,runCond.(stimCondLabel).volTsSes.volResp);
     
     ses = [volResp.ts]; ses = {ses.fspec}'; [~,ses] = fileparts(fileparts(ses)); ses = cellstr(ses); for i = 1:size(ses,1); ses{i} = strsplit(ses{i},'_'); ses{i} = ses{i}{contains(ses{i},'ses-')}; end
@@ -211,6 +214,7 @@ if ~runFlag
     for rc = 1:length(runCondStimList)
         stimCondLabel = runCondStimList{rc};
         if ~isfield(runCond,runCondStimList{rc}); continue; end
+        if ~isfield(runCond.(stimCondLabel).volTsSub,'volResp'); continue; end
         volResp = cat(1,runCond.(stimCondLabel).volTsSub.volResp);
         
         ses = [volResp.ts]; ses = {ses.fspec}'; [~,ses] = fileparts(fileparts(ses)); ses = cellstr(ses); for i = 1:size(ses,1); ses{i} = strsplit(ses{i},'_'); ses{i} = ses{i}{contains(ses{i},'ses-')}; end

@@ -1,4 +1,4 @@
-function [ax,F,hLine] = plotSpec3(H,volPsd,metricLabel,dsgn,mask,volResp,respQthresh,tWin)
+function [ax,F,hLine,volPsd] = plotSpec4(H,volPsd,metricLabel,dsgn,mask,thresh,tWin)
 if ~exist('H','var'); H = [];                             end
 if isempty(H);        H = figure('WindowStyle','docked'); end
 
@@ -7,11 +7,10 @@ if isempty(H);        H = figure('WindowStyle','docked'); end
 if ~exist('tWin','var');                                     tWin = []; end
 if ~exist('metricLabel','var');                       metricLabel = []; end
 if ~exist('volTs','var');                                   volTs = []; end
-if ~exist('respQthresh','var');                       respQthresh = []; end
+if ~exist('thresh','var');                                 thresh = []; end
 if ~exist('dsgn','var');                                     dsgn = []; end
 if ~exist('mask','var');                                     mask = []; end
 if isempty(metricLabel);                              metricLabel = 'psd'; end % 'psd' 'coh'
-if isempty(respQthresh) && strcmp(metricLabel,'psd'); respQthresh = 1; end % 'psd' 'coh'
 % threshAvFlag = ismember(metricLabel,{'psd' 'psdEPC'}) && ~isempty(volTs) && isfield(volTs,'resp') && ~isempty(respQthresh) && respQthresh~=inf && respQthresh~=1;
 
 % Get volPsd
@@ -92,7 +91,10 @@ end
 
 
 
-
+if ismember(metricLabel,{'coh' 'cohEPC' 'cohEK'})
+    if ~isempty(mask); warning('the provided mask is replaced by the one used for coherence analysis'); end
+    fMask  = volPsd.svd.param.mask;
+end
 switch metricLabel
     case 'psd'
         %% average across space
@@ -101,18 +103,48 @@ switch metricLabel
             mask = getCropMask(volPsd);
         else
             if isMRI(mask)
+                fMask = mask.fspec;
                 mask = logical(mask.vol);
-            else
+            elseif ischar(mask)
+                fMask = mask;
                 mask = MRIread(mask);
                 mask = logical(mask.vol);
+            else
+                fMask = [];
             end
-            mask = mask & getCropMask(volPsd);
+            mask = mask & getCropMask(volPsd(1));
+
+            if ~isempty(fMask)
+                [~,b,~] = fileparts(replace(fMask,'.nii.gz',''));
+                mskStr = ['voxSel:' b '==1'];
+            else
+                mskStr = 'voxSel:?';
+            end
+            
         end
         %%% stat thresh
-        if respQthresh==0; respQthresh = 0.05; end % respQthresh = 0 does not mean anything, reverts to default 0.05
-        if respQthresh~=inf && respQthresh~=1
-            mask = mask & volResp.Fq.vol<respQthresh;
+        if ~isempty(thresh)
+            if ischar(thresh.map) || isempty(thresh.map.vol)
+                thresh.map = MRIload3(thresh.map,[],[],0);
+            end
+            if thresh.sign<0
+                signLabel = '<=';
+                thresh.mask = thresh.map.vol<=thresh.val;
+            else
+                signLabel = '>=';
+                thresh.mask = thresh.map.vol>=thresh.val;
+            end
+            mask = mask & thresh.mask;
+
+
+            [~,b,~] = fileparts(replace(thresh.map.fspec,'.nii.gz',''));
+            mskStr = [mskStr '&' b signLabel num2str(thresh.val,'%0.3f')];
         end
+
+        % if thresh==0; thresh = 0.05; end % respQthresh = 0 does not mean anything, reverts to default 0.05
+        % if thresh~=inf && thresh~=1
+        %     mask = mask & volResp.fs.fFullQ.vol<thresh;
+        % end
         %%% apply
         if any(size(spc,[1:2 4 7 8])~=1); dbstack; error('something unexpected here'); end
         spc = spc(:,:,:,:,:,mask(volPsd.vol2vec),:,:);
@@ -140,6 +172,13 @@ switch metricLabel
         if any(size(spc,[1 2 4 6:7])~=1); dbstack; error('something unexpected here'); end
         spc = permute(mean(spc(:,:,:,:,:,:,:,m),3),[5 1 2 3 4 6 7 8]);
         f = permute(mt.f,[5 1 2 3 4 6 7 8]);
+
+        if ~isempty(fMask) && ischar(fMask)
+            [~,b,~] = fileparts(replace(fMask,'.nii.gz',''));
+            mskStr = ['voxSel:' b '==1'];
+        else
+            mskStr = 'voxSel:?';
+        end
     otherwise
         dbstack; error('code trhat')
 end
@@ -203,17 +242,21 @@ K = mt.K;
 T = mt.T;
 [TW,W] = K2W(T,K,0);
 
-paramStr = ['(K=' num2str(K) '; 2W=' num2str(W*2,'%0.4f') 'Hz; T=' num2str(T,'%0.2f') 'sec; TW=' num2str(TW) ')'];
-switch metricLabel
-    case 'psd'
-        if respQthresh~=inf && respQthresh~=1
-            title(['spectrum ' paramStr ' cross-vox (Q<=' num2str(respQthresh,'%0.2f') ') mean'])
-        else
-            title(['spectrum ' paramStr ' cross-vox mean'])
-        end
-    case 'coh'
-        title(['coherence spectrum ' paramStr])
-end
+
+paramStr = {['K=' num2str(K)] ['2W=' num2str(W*2,'%0.4f') 'Hz'] ['T=' num2str(T,'%0.2f') 'sec'] ['TW=' num2str(TW)]};
+paramStr{end+1} = mskStr;
+% switch metricLabel
+%     case 'psd'
+        title(['spectrum (' strjoin(paramStr,'; ') ')'],'Interpreter','none')
+        % title(['spectrum ' paramStr ' cross-vox (Q<=' num2str(thresh,'%0.2f') ') mean'])
+        % if thresh~=inf && thresh~=1
+        %     title(['spectrum ' paramStr ' cross-vox (Q<=' num2str(thresh,'%0.2f') ') mean'])
+        % else
+        %     title(['spectrum ' paramStr ' cross-vox mean'])
+        % end
+%     case 'coh'
+%         title(['coherence spectrum ' paramStr])
+% end
 
 yLim = [yLim'; spc(f>0.01)];
 yLim = [min(yLim) max(yLim)];

@@ -1,13 +1,14 @@
-function plotSpecAll2(volPsd,volTs,volResp,dsgn,fMask,fUlay,Q)
+function [volPsd,volTs,volResp,volAct] = plotSpecAll3(volPsd,volTs,volResp,volAct,dsgn,fMask,fUlay,Q)
 saveFlag = 0;
 
 
 if ~exist('volTs','var');     volTs = []; end
 if ~exist('volResp','var'); volResp = []; end
+if ~exist('volAct','var');   volAct = []; end
 if ~exist('Q','var');             Q = []; end
 if ~exist('dsgn','var');       dsgn = []; end
 if ~exist('fMask','var');     fMask = []; end
-if isempty(Q); Q = 1; end % respQthresh = 1 means don't threshold
+if isempty(Q); Q = 0.05; end % respQthresh = 1 means don't threshold
 if isempty(dsgn)
     if isfield(volPsd,'dsgn')
             dsgn = volPsd.dsgn;
@@ -20,18 +21,33 @@ if ~isempty(volTs)
 end
 
 
+if ~isempty(volAct)
+    if ischar(volAct.fs.fFullQ)
+        volAct.fs.fFullQ = MRIload2(volAct.fs.fFullQ);
+    end
+    thresh.map  = volAct.fs.fFullQ;
+else
+    if ischar(volResp.fs.fFullQ)
+        volResp.fs.fFullQ = MRIload2(volResp.fs.fFullQ);
+    end
+    thresh.map  = volResp.fs.fFullQ;
+end
+thresh.val  = Q;
+thresh.sign = -1; % -1->smaller than thresh passes; +1->greater than thresh passes
+
+
 
 Fpsd = figure('WindowStyle','docked');
 HtPsd = tiledlayout(8,1); HtPsd.TileSpacing = 'tight'; HtPsd.Padding = 'tight';
 axPsd = {};
-axPsd{end+1} = plotTs3(      HtPsd,volTs,volResp                ,dsgn,fMask        ,Q   );
-axPsd{end+1} = plotSpec3(    HtPsd,volPsd,'psd'                 ,dsgn,fMask,volResp,Q,[]);
-axPsd{end+1} = plotSpecGram3(HtPsd,volPsd,'gram'       ,'psd'   ,dsgn,fMask,volResp,Q   );
-axPsd{end+1} = plotSpecGram3(HtPsd,volPsd,'trialGram'  ,'psd'   ,dsgn,fMask,volResp,Q   );
-axPsd{end+1} = plotSpecGram3(HtPsd,volPsd,'trialGram'  ,'psdEPC',dsgn,fMask,volResp,Q   );
-axPsd{end+1} = nexttile;
-axPsd{end+1} = plotSpecGram3(HtPsd,volPsd,'trialGramMD','psd'   ,dsgn,fMask,volResp,Q   );
-axPsd{end+1} = plotSpecGram3(HtPsd,volPsd,'trialGramMD','psdEPC',dsgn,fMask,volResp,Q   );
+[axPsd{end+1},~,  volTs ,volResp] = plotTs4(      HtPsd,volTs,volResp                ,dsgn,fMask,thresh);
+[axPsd{end+1},~,~,volPsd        ] = plotSpec4(    HtPsd,volPsd              ,'psd'   ,dsgn,fMask,thresh);
+axPsd{end+1}                      = plotSpecGram4(HtPsd,volPsd,'gram'       ,'psd'   ,dsgn,fMask,thresh);
+axPsd{end+1}                      = plotSpecGram4(HtPsd,volPsd,'trialGram'  ,'psd'   ,dsgn,fMask,thresh);
+axPsd{end+1}                      = plotSpecGram4(HtPsd,volPsd,'trialGram'  ,'psdEPC',dsgn,fMask,thresh);
+axPsd{end+1}                      = nexttile;
+axPsd{end+1}                      = plotSpecGram4(HtPsd,volPsd,'trialGramMD','psd'   ,dsgn,fMask,thresh);
+axPsd{end+1}                      = plotSpecGram4(HtPsd,volPsd,'trialGramMD','psdEPC',dsgn,fMask,thresh);
 % axPsd{end+1} = plotSpecGram(volPsd,'trialGramMD','psd'   ,HtPsd,volTs,respQthresh);
 % axPsd{end+1} = plotSpecGram(volPsd,'trialGramMD','psdEPC',HtPsd,volTs,respQthresh);
 % % cLim = get([axPsd{3:5}],'CLim'); cLim = cat(1,cLim{:}); cLim = [min(cLim(:)) max(cLim(:))];
@@ -55,14 +71,14 @@ if volPsd.param.tapers(2)~=1
     Fcoh = figure('WindowStyle','docked');
     HtCoh = tiledlayout(8,1); HtCoh.TileSpacing = 'tight'; HtCoh.Padding = 'tight';
     axCoh = {};
-    axCoh{end+1} = plotTs3(      HtCoh,volTs,volResp                ,dsgn,fMask        ,Q   );
-    axCoh{end+1} = plotSpec3(    HtCoh,volPsd,'coh'                 ,dsgn,fMask,volResp,Q,[]);
-    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'gram'       ,'coh'   ,dsgn,fMask,volResp,Q   );
-    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'coh'   ,dsgn,fMask,volResp,Q   );
-    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEPC',dsgn,fMask,volResp,Q   );
-    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEK' ,dsgn,fMask,volResp,Q   );
-    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGramMD','coh'   ,dsgn,fMask,volResp,Q   );
-    axCoh{end+1} = plotSpecGram3(HtCoh,volPsd,'trialGramMD','cohEPC',dsgn,fMask,volResp,Q   );
+    [axCoh{end+1},~,  volTs ,volResp] = plotTs4(      HtCoh,volTs,volResp                ,dsgn,fMask,thresh);
+    [axCoh{end+1},~,~,volPsd        ] = plotSpec4(    HtCoh,volPsd              ,'coh'   ,dsgn             );
+    axCoh{end+1}                      = plotSpecGram4(HtCoh,volPsd,'gram'       ,'coh'   ,dsgn             );
+    axCoh{end+1}                      = plotSpecGram4(HtCoh,volPsd,'trialGram'  ,'coh'   ,dsgn             );
+    axCoh{end+1}                      = plotSpecGram4(HtCoh,volPsd,'trialGram'  ,'cohEPC',dsgn             );
+    axCoh{end+1}                      = plotSpecGram3(HtCoh,volPsd,'trialGram'  ,'cohEK' ,dsgn             );
+    axCoh{end+1}                      = plotSpecGram4(HtCoh,volPsd,'trialGramMD','coh'   ,dsgn             );
+    axCoh{end+1}                      = plotSpecGram4(HtCoh,volPsd,'trialGramMD','cohEPC',dsgn             );
 end
 
 
