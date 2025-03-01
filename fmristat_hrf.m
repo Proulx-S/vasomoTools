@@ -12,6 +12,10 @@ function [y,hrf_parameters] = fmristat_hrf(t,hrf_parameters)
 
 if ~exist('hrf_parameters','var') || isempty(hrf_parameters)
     hrf_parameters=[5.4 5.2 10.8 7.35 0.35];
+    if ~exist('t','var') || isempty(t)
+        y = hrf_parameters;
+        return
+    end
 end
 
 % t=(0:240)/10;
