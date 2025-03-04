@@ -1,4 +1,4 @@
-function [y,hrf_parameters] = fmristat_hrf(t,hrf_parameters)
+function [y,hrf_parameters,y1,y2] = fmristat_hrf(t,hrf_parameters)
 % https://www.math.mcgill.ca/keith/fmristat/
 % 
 % The hrf is modeled as the difference of two gamma density functions (Glover, G.H. (1999). "Deconvolution of impulse response in event-related BOLD fMRI." NeuroImage, 9:416-429). The parameters of the hrf are specified by a row vector whose elements are:
@@ -19,8 +19,15 @@ if ~exist('hrf_parameters','var') || isempty(hrf_parameters)
 end
 
 % t=(0:240)/10;
-hrf0=fmridesign(t,0,[1 0],[],hrf_parameters);
+if nargout>2
+   [hrf0,hrf01,hrf02]=fmridesign(t,0,[1 0],[],hrf_parameters);
+   y1=hrf01.X(:,1,1,1);
+   y2=hrf02.X(:,1,1,1);
+else
+   hrf0=fmridesign(t,0,[1 0],[],hrf_parameters);
+end
 y=hrf0.X(:,1,1,1);
+
 % plot(t,squeeze(hrf0.X(:,1,1,1)),'LineWidth',2)
 % xlabel('time (seconds)')
 % ylabel('hrf')
@@ -32,7 +39,7 @@ end
 
 
 
-function X_cache=fmridesign(frametimes,slicetimes,events,S, ...
+function [X_cache,X_cache1,X_cache2]=fmridesign(frametimes,slicetimes,events,S, ...
    hrf_parameters,shift)
 
 %FMRIDESIGN makes a set of design matrices for fmrilm.
@@ -237,6 +244,8 @@ if size(shift,1)==1
 end
 
 eventmatrix=zeros(numtimes,numresponses,4);
+eventmatrix1=zeros(numtimes,numresponses,4);
+eventmatrix2=zeros(numtimes,numresponses,4);
 nd=41;
 X_cache.W=zeros(nd,numresponses,5);
 
@@ -280,15 +289,41 @@ for k=1:numresponses
          gamma2=min(abs(time-peak2))==abs(time-peak2);
          d_gamma2=zeros(numlags,1);
       end
-      hrf=gamma1-dip*gamma2;
-      d_hrf=d_gamma1-dip*d_gamma2;
+      hrf1=gamma1;
+      hrf2=-dip*gamma2;
+      hrf=hrf1+hrf2;
+      d_hrf1=d_gamma1;
+      d_hrf2=-dip*d_gamma2;
+      d_hrf=d_hrf1+d_hrf2;
    end
+   HS1=[hrf1 d_hrf1]/sum(hrf);
+   HS2=[hrf2 d_hrf2]/sum(hrf);
    HS=[hrf d_hrf]/sum(hrf);
+   temp1=conv2(response(:,k),HS1);
+   eventmatrix1(:,k,1:2)=temp1(1:numtimes,:);
+   temp2=conv2(response(:,k),HS2);
+   eventmatrix2(:,k,1:2)=temp2(1:numtimes,:);
    temp=conv2(response(:,k),HS);
    eventmatrix(:,k,1:2)=temp(1:numtimes,:);
    
+   
+   % %%% Linearly interpolate gamma1, defined at times time, to the times in frametimes
+   % %%% and store the result in X_cache.HRFg1
+   % X_cache.HRFg1 = interp1(time,gamma1/sum(hrf),frametimes,'linear',0);
+
+   % %%% Linearly interpolate gamma2, defined at times time, to the times in frametimes
+   % %%% and store the result in X_cache.HRFg2
+   % X_cache.HRFg2 = interp1(time,-dip*gamma2/sum(hrf),frametimes,'linear',0);
+   % %%% Linearly interpolate HRFfull, defined at times time, to the times in frametimes
+   % %%% and store the result in X_cache.HRFfull     
+   % X_cache.HRFfull = interp1(time,(gamma1-dip*gamma2)/sum(hrf),frametimes,'linear',0);
+
+
+   
    % Shifted hrfs:
    H=zeros(numlags,nd);
+   H1=zeros(numlags,nd);
+   H2=zeros(numlags,nd);
    delta=((1:nd)-1)/(nd-1)*(Delta2-Delta1)+Delta1;
    for id=1:nd
       if isstruct(hrf_parameters)
@@ -307,8 +342,12 @@ for k=1:numresponses
             gamma2=min(abs(t-peak2))==abs(t-peak2);
          end
          hrf=gamma1-dip*gamma2;
+         hrf1 = gamma1;
+         hrf2 = -dip*gamma2;
       end
-      H(:,id)=hrf/sum(hrf);
+      H(:,id) =hrf/sum(hrf);
+      H1(:,id)=hrf1/sum(hrf);
+      H2(:,id)=hrf2/sum(hrf);
    end
    
    % Taylor coefs:
@@ -333,23 +372,35 @@ for k=1:numresponses
    X_cache.W(:,k,3:4)=WS;
    X_cache.W(:,k,5)=delta';
    
-   if ~all(WS(:,1)>0)
-      fprintf(['Warning: use only for magnitudes, not delays \n first coef not positive for stimulus ' num2str(k)]);
-   end
+   % if ~all(WS(:,1)>0)
+   %    fprintf(['Warning: use only for magnitudes, not delays \n first coef not positive for stimulus ' num2str(k)]);
+   % end
    cubic_coef=pinv([delta' delta'.^3])*(WS(:,2)./WS(:,1));
-   if prod(cubic_coef)<0
-      fprintf(['\nWarning: use only for magnitudes, not delays \n svd ratio not invertible for stimulus ' num2str(k)]);
-   end
+   % if prod(cubic_coef)<0
+   %    fprintf(['\nWarning: use only for magnitudes, not delays \n svd ratio not invertible for stimulus ' num2str(k)]);
+   % end
 end 
 
 X_cache.X=zeros(n,numresponses,4,numslices);
+if nargout>1
+   X_cache1.X=zeros(n,numresponses,4,numslices);
+   X_cache2.X=zeros(n,numresponses,4,numslices);
+end
 
 for slice = 1:numslices
    subtime=ceil((frametimes+slicetimes(slice)-startime)/dt)+1;
    X_cache.X(:,:,:,slice)=eventmatrix(subtime,:,:);
+   if nargout>1
+      X_cache1.X(:,:,:,slice)=eventmatrix1(subtime,:,:);
+      X_cache2.X(:,:,:,slice)=eventmatrix2(subtime,:,:);
+   end
 end
 
 X_cache.TR=(max(frametimes)-min(frametimes))/(length(frametimes)-1);
+if nargout>1
+   X_cache1.TR=(max(frametimes)-min(frametimes))/(length(frametimes)-1);
+   X_cache2.TR=(max(frametimes)-min(frametimes))/(length(frametimes)-1);
+end
 
 return
 
