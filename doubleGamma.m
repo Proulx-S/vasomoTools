@@ -27,19 +27,37 @@ end
 
 amp1  = hrf_parameters(1);
 peak1 = hrf_parameters(2);
-fwhm1 = hrf_parameters(3);
+fwhm1 = hrf_parameters(3); if fwhm1==0; fwhm1 = eps; end
 amp2  = hrf_parameters(4);
 peak2 = hrf_parameters(5);
-fwhm2 = hrf_parameters(6);
+fwhm2 = hrf_parameters(6); if fwhm2==0; fwhm2 = eps; end
 
-alpha1=peak1^2/fwhm1^2*8*log(2);
-beta1=fwhm1^2/peak1/8/log(2);
-gamma1=(t/peak1).^alpha1.*exp(-(t-peak1)./beta1);
-gamma1 = gamma1/max(gamma1);
 
-alpha2=peak2^2/fwhm2^2*8*log(2);
-beta2=fwhm2^2/peak2/8/log(2);
-gamma2=(t/peak2).^alpha2.*exp(-(t-peak2)./beta2);
-gamma2 = gamma2/max(gamma2);
 
-y = amp1*gamma1 + amp2*gamma2;
+y = 0;
+if amp1~=0
+    alpha1=peak1^2/fwhm1^2*8*log(2);
+    beta1=fwhm1^2/peak1/8/log(2);
+    gamma1=(t/peak1).^alpha1.*exp(-(t-peak1)./beta1);
+    gamma1 = gamma1./max(abs(gamma1));
+    % y = y + amp1*gamma1/max(gamma1);
+    y = y + amp1*gamma1;
+end
+
+if amp2~=0
+    alpha2=peak2^2/fwhm2^2*8*log(2);
+    beta2=fwhm2^2/peak2/8/log(2);
+    gamma2=(t/peak2).^alpha2.*exp(-(t-peak2)./beta2);
+    gamma2 = gamma2./max(abs(gamma2));
+    % y = y + amp2*gamma2/max(gamma2);
+    y = y + amp2*gamma2;
+end
+
+% y = y./sum(y)
+
+% if amp1~=0
+%     y = y.*amp1;
+% else
+%     y = y.*amp2;
+% end
+
