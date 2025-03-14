@@ -26,7 +26,9 @@ switch varInfo.class
             end
         end
     case {'double', 'single', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64',...
-        'datetime', 'logical','duration'}
+        'datetime', 'logical','duration',...
+        'matlab.ui.Figure'}
     otherwise
+        % keyboard
         dbstack; error('code that');
 end

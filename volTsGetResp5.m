@@ -236,21 +236,21 @@ param.nDummyRemoved = volTs(1).nFrameOrig - volTs(1).nFrame;
 % param.nDummyRemoved = param.nDummy;
 
 if ~all(diff([volTs.tr])<0.01); dbstack; error('runs have different tr'); end
-tr = mean([volTs.tr])/1000;
+tr = [volTs.tr]./1000;
 
 
 % param.trDecon = tr;
 param.trDecon = dsgn.dt;
-if tr ~= dsgn.dt
+if mean(tr) ~= dsgn.dt
     % if isfield(dsgn,'onsetList')
         % diff(dsgn.onsetList)
         % dsgn.onsetList / tr
 
         warning(strjoin({''...
-        ['volume TR   =  ' sprintf('%7.6f ',tr) 'sec']...
+        ['volume TR   =  ' sprintf('%7.6f ',mean(tr)) 'sec']...
         ['stim dt     =  ' sprintf('%7.6f ',dsgn.dt) 'sec']...
         ['stim onsets = [' sprintf('%7.3f ',dsgn.onsetList) ']sec']...
-        ['            = [' sprintf('%7.3f ',(dsgn.onsetList / tr)) ']vol']...
+        ['            = [' sprintf('%7.3f ',(dsgn.onsetList / mean(tr))) ']vol']...
         ['Defaulting to deconvolution TR = ' num2str(param.trDecon,'%7.6f') 'sec']},newline))
     % else
     %     diff(volTs.dsgn.onsetList)
@@ -330,11 +330,7 @@ switch info.dataSetLabel
             param.dryRun = info.dryRun;
         end
         param.nFrame = [volTs.nFrame]';
-        % if isMRI(mask)
-        %     [volResp,volRespCat,~,param_getResp] = getAct2(volTs,dsgn,mask.fspec,param,forceThis,verboseThis);
-        % else
-            [volResp,volRespCat,~,param_getResp] = getAct2(volTs,dsgn,fMask,param,forceThis,verboseThis);
-        % end
+        [volResp,volRespCat,~,param_getResp] = getAct3(volTs,dsgn,fMask,param,forceThis,verboseThis);
         volRespCat.afni.param = param_getResp;
         for R = 1:size(volResp,1)
             volResp(R,1).afni.param = param_getResp;

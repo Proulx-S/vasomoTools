@@ -6,8 +6,10 @@ classdef runDsgn
       task      % [str] label
       onsetList % [num] onset time of each event/trial, in seconds (trigger time = 0)
       ondurList % [num] duration of each event/trial, in seconds
-      dt        % [num] time grid on which events/trials were defined (not sure it's usefull)
+      dt        % [num] time grid on which events/trials were defined (not sure it's usefull, should probably be the default tr for response shape estimation with afni's 3dDeconvolve)
       cond      % [int] index of event/trial condition (0 is special for null event/trial, other conditions should be increments of 1)
       condLabel % [cellstr] event/trial condition labels (indices corresponds to values of cond)
+      condK     % [int] number of event/trial conditions
+      nReg      % [i] number of regressors
    end
 end

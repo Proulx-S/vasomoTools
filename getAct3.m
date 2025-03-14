@@ -1,4 +1,4 @@
-function [fRun,fSes,fSes_echoCat,param] = getAct2(volTs,dsgn,fMask,param,force,verbose)
+function [fRun,fSes,fSes_echoCat,param] = getAct3(volTs,dsgn,fMask,param,force,verbose)
 % see /autofs/space/takoyaki_001/users/proulxs/tools/vasomoTools/getResp2.m
 fSes_echoCat = [];
 % global srcAfni srcFs
@@ -42,7 +42,7 @@ if isempty(fMask)
         fMask = volTs.vol2vec;
     end
 else
-    fMask
+    fMask;
 end
 if ~all(diff([volTs.tr])<0.01); dbstack; error('runs have different tr'); end
 
@@ -65,7 +65,7 @@ else
         param.funDsgn.k = 2;
     end
 end
-param.tr = mean([volTs.tr])/1000;
+param.tr = [volTs.tr]./1000;
 param.dsgn = dsgn;
 
 
@@ -1563,6 +1563,14 @@ if param.skipCat && param.skipRun
     param.skipRun = 0;
 end
 
+
+%% %%%%%
+% Mask %
+%%%%%%%%
+mriMask = MRIread(fMask);
+mriMask.vol([1:5 end-4:end],:              ) = 0;
+mriMask.vol(:              ,[1:5 end-4:end]) = 0;
+
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Fixed-effect model on individual runs %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
@@ -1579,12 +1587,19 @@ else
             fOut = char(fIn);
             if ~exist(fileparts(fOut),'dir'); mkdir(fileparts(fOut)); end
 
-            fStat   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.nii.gz']);
-            fFit    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_fit.nii.gz']);
-            fResid  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_resid.nii.gz']);
+            fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_stats.nii.gz']);
+            fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_fit.nii.gz'  ]);
+            fResid = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_resid.nii.gz']);
+            fMask  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_mask.nii.gz' ]);
+            mriMask.fspec = fMask; MRIwrite(mriMask,fMask);
             switch HRmodel
                 case {'TENT' 'TENTzero'}
-                    fResp   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_resp.nii.gz']);
+                    fResp    = cell(size(param.dsgn.condLabel));
+                    fRespStd = cell(size(param.dsgn.condLabel));
+                    for k = 1:param.dsgn.condK
+                        fResp{k}    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respAv.nii.gz']);
+                        fRespStd{k} = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respSd.nii.gz']);
+                    end
                 case {'SPMG2' 'SPMG3'}
                 otherwise
                     dbstack; error('figure that out')
@@ -1595,21 +1610,31 @@ else
                 fMat    = [tmpName '_stats.xmat.1D' ];
                 fMatFig = [tmpName '_stats.xmat.fig'];
             else
-                fStim   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_startTime.1D']);
-                fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.xmat.1D']);
-                fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.xmat.fig']);
+                fStim   = cell(size(param.dsgn.condLabel));
+                for k = 1:param.dsgn.condK
+                    fStim{k} = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_startTime.1D']);
+                end
+                fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_stats.xmat.1D']);
+                fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_stats.xmat.fig']);
             end
+
+            curParam = param;
+            curParam.nFrame = param.nFrame(R);
+            curParam.tr     = param.tr(R);
+            
 
 
             fRun(R,E).fIn     = fIn;
             fRun(R,E).fFit    = fFit;
             fRun(R,E).fResid  = fResid;
             fRun(R,E).fStat   = fStat;
+            fRun(R,E).fMask   = fMask;
             fRun(R,E).fMat    = fMat;
             fRun(R,E).fMatFig = fMatFig;
             switch HRmodel
                 case {'TENT' 'TENTzero'}
-                    fRun(R,E).fResp   = fResp;
+                    fRun(R,E).fResp    = fResp;
+                    fRun(R,E).fRespStd = fRespStd;
                 case {'SPMG2' 'SPMG3'}
                 otherwise
                     dbstack; error('figure that out')
@@ -1627,7 +1652,7 @@ else
 
             switch HRmodel
                 case {'TENT' 'TENTzero'}
-                    [cmdTmpTmp,param.funDsgn.nReg] = afniCmd2(fIn,fMask,fStim,param.nDummyIgnore,param.tr,startSeq,durSeq,condSeq,HRmodel,param.dsgn.condLabel,[],fResp,fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved,param.trDecon,param.dryRun);
+                    [cmdTmpTmp,param.dsgn.nReg] = afniCmd2(fIn,fStim,fMask,curParam,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,param.dryRun);
                     % [cmdTmpTmp,param.funDsgn.nReg] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,durSeq,condSeq,HRmodel,param.funDsgn.label,[],fResp,fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved,param.trDecon,param.dryRun);
                 case {'SPMG2' 'SPMG3'}
                     dbstack; error('double-check')
@@ -1641,11 +1666,11 @@ else
 
             if ~exist(fStat,'file') || force
                 cmdTmp = [cmdTmp cmdTmpTmp];
-                if exist('fResp','var') && ~isempty(fResp); cmdTmp{end+1} = ['echo ''   ''' fResp]; end
+                if exist('fResp','var') && ~isempty(fResp); cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fResp),' ')]; end
                 cmdTmp{end+1} = ['echo ''   ''' fStat];
                 cmdTmp{end+1} = ['echo ''   ''' fMat];
             else
-                if exist('fResp','var') && ~isempty(fResp); cmdTmp{end+1} = ['echo ''   ''' fResp]; end
+                if exist('fResp','var') && ~isempty(fResp); cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fResp),' ')]; end
                 cmdTmp{end+1} = ['echo ''   ''' fStat];
                 cmdTmp{end+1} = ['echo ''   ''' fMat];
                 cmdTmp{end+1} = 'echo ''   ''already done, skipping';
@@ -1661,29 +1686,29 @@ else
     [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
 
 
-    %% Get per-trial dsgn matrix
-    switch HRmodel
-        case {'TENT' 'TENTzero'}
-            condSeqX = 1:length(condSeq);
-            for R = 1:size(fList,1)
-                fIn = fList(R,E);
-                fOut = char(fIn);
-                fMatPerTrial = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.xmatPerTrial.1D']);
-                [cmdXmat,paramX.funDsgn.nReg] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,durSeq,condSeqX,HRmodel,param.funDsgn.label,param,fResp,fFit,fResid,fMatPerTrial,fStat,verbose,param.nDummyRemoved,param.trDecon,1,param.nFrame(R));
-                cmdXmat{end} = [cmdXmat{end} ' > /dev/null 2>&1']; cmdXmat = [{srcAfni} cmdXmat];
-                if force || ~exist(fMatPerTrial,'file')
-                    system(strjoin(cmdXmat,newline));
-                end
-                cmdX = {srcAfni}; cmdX{end+1} = ['1dcat ' fMatPerTrial];
-                [~,cmdoutX] = system(strjoin(cmdX,newline));
-                param.perTrialXmat(R).f = fMatPerTrial;
-                param.perTrialXmat(R).mat  = str2num(cmdoutX);
-                param.perTrialXmat(R).nReg = paramX.funDsgn.nReg;
-            end
-        case {'SPMG2' 'SPMG3'}
-        otherwise
-            dbstack; error('figure that out')
-    end
+    % %% Get per-trial dsgn matrix
+    % switch HRmodel
+    %     case {'TENT' 'TENTzero'}
+    %         condSeqX = 1:length(condSeq);
+    %         for R = 1:size(fList,1)
+    %             fIn = fList(R,E);
+    %             fOut = char(fIn);
+    %             fMatPerTrial = fullfile(fileparts(replace(fOut,'.nii.gz','')),['cond-visOn_model-' HRmodel '_stats.xmatPerTrial.1D']);
+    %             [cmdXmat,paramX.funDsgn.nReg] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,durSeq,condSeqX,HRmodel,param.funDsgn.label,param,fResp,fFit,fResid,fMatPerTrial,fStat,verbose,param.nDummyRemoved,param.trDecon,1,param.nFrame(R));
+    %             cmdXmat{end} = [cmdXmat{end} ' > /dev/null 2>&1']; cmdXmat = [{srcAfni} cmdXmat];
+    %             if force || ~exist(fMatPerTrial,'file')
+    %                 system(strjoin(cmdXmat,newline));
+    %             end
+    %             cmdX = {srcAfni}; cmdX{end+1} = ['1dcat ' fMatPerTrial];
+    %             [~,cmdoutX] = system(strjoin(cmdX,newline));
+    %             param.perTrialXmat(R).f = fMatPerTrial;
+    %             param.perTrialXmat(R).mat  = str2num(cmdoutX);
+    %             param.perTrialXmat(R).nReg = paramX.funDsgn.nReg;
+    %         end
+    %     case {'SPMG2' 'SPMG3'}
+    %     otherwise
+    %         dbstack; error('figure that out')
+    % end
 
 
     
@@ -1786,173 +1811,109 @@ else
 end
 
 
-function [cmd,nReg] = afniCmd2(fIn,fMask,fStim,nDummyIgnore,tr,startSeq,durSeq,condSeq,HRmodel,label,param,fResp,fFit,fResid,fMat,fStat,verbose,nDummyRemoved,trDecon,dryRun,nFrame)
-% nDummyRemoved [int]: number of initial frames that are already removed from the
+function [cmd,nReg] = afniCmd2(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,dryRun)
+% function [cmd,nReg] = afniCmd2(fIn,fMask,fStim,nDummyIgnore,tr,startSeq,durSeq,condSeq,HRmodel,label,param,fResp,fFit,fResid,fMat,fStat,verbose,nDummyRemoved,trDecon,dryRun,nFrame)
+% param.nDummyRemoved [int]: number of initial frames that are already removed from the
 % timeseries. The stimulus timeseries must therefore be adjusted
 % accordingly.
-% nDummyIgnore [int]: number of initial frames to ignore from the input
+% param.nDummyIgnore [int]: number of initial frames to ignore from the input
 % timeseries. Only frames after these will be feed to 3dDeconvolve using
 % the [nDummyIgnore..$] notation.
 % nDummy [int]: total number of dummy initial frames
-nDummy = nDummyIgnore + nDummyRemoved;
+tr      = param.tr;
+trDecon = param.trDecon;
+nDummy = param.nDummyIgnore + param.nDummyRemoved;
 fIn = cellstr(fIn);
-% if ~exist('nDummyRemoved','var'); nDummyRemoved = []; end
-% if isempty(nDummyRemoved);        nDummyRemoved = nDummy; warning('param.nDummyRemoved not specified, assuming param.nDummyRemoved = param.nDummy'); end
-% if nDummyRemoved && nDummyRemoved~=nDummy; dbstack; error('param.nDummyRemoved specified, but does not match param.nDummy'); end
-% if ~exist('nFrame','var'); nFrame = []; end
-% if ~exist('param','var');   param = []; end
 cmd = {'3dDeconvolve -overwrite \'};
 % cmdTmp{end+1} = ['-force_TR ' num2str(trStim) ' \'];
 if ~dryRun
-    cmd{end+1} = ['-input ' sprintf(['%s[' num2str(nDummyIgnore) '..$] '],fIn{:}) ' \'];
+    cmd{end+1} = ['-input ' sprintf(['%s[' num2str(param.nDummyIgnore) '..$] '],fIn{:}) ' \'];
     if ~isempty(fMask)
         cmd{end+1} = ['-mask ' fMask ' \'];
     end
 else
+    dbstack; error('code that')
     if isempty(nFrame)
         nFrame = MRIread(fIn{1},1); nFrame = nFrame.nframes;
     end
     cmd{end+1} = ['-nodata ' num2str(nFrame) ' ' num2str(tr,'%0.16f') ' \'];
 end
 cmd{end+1} = '-polort A \';
-% if ~exist('trMri','var') || isempty(trMri) || ~exist('nFrame','var') || isempty(nFrame)
-if isempty(tr)
-    mri = MRIread(fIn{1},1);
-    tr = mri.tr/1000;
-end
-
-% nFrame = mri.nframes;
-% end
-% trMri = 3;
 cmd{end+1} = ['-stim_times_subtract ' num2str(tr*nDummy,'%f') ' \'];
 
-if isempty(param)
-    % Old way
-    cmd{end+1} = '-num_stimts 1 \';
-    cmd{end+1} = ['-stim_label 1 ' char(label) ' \'];
+% New way (only implemented for dry runs so far)
+dsgn = param.dsgn;
+nRegAll = [];
+cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK) ' \'];
+for k = 1:dsgn.condK
+    cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
 
     % write design to file
-    fido = fopen(fStim, 'w');
-    if iscell(fIn)
-        for i = 1:length(fIn)
-            fprintf(fido,'%.3f ',startSeq(condSeq==1));
-            fprintf(fido,'\n');
-        end
-    else
-        fprintf(fido,'%.3f ',startSeq(condSeq==1));
+    if dryRun
+        fStim = [tempname '_startTime.1D' ];
+    end
+    fido = fopen(fStim{k}, 'w');
+    if ~iscell(fIn); dbstack; error('fIn must be type cell'); end
+    for i = 1:length(fIn)
+        fprintf(fido,'%.3f ',dsgn.onsetList((k-1)==dsgn.cond));
         fprintf(fido,'\n');
     end
     fclose(fido);
 
 
-    k = 1;
+    % k = 1;
 
-    switch HRmodel
+    switch param.model
         case 'SPMG2'
+            dbstack; error('double-check that')
             nReg = 2;
             if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
             cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
         case 'SPMG3'
+            dbstack; error('double-check that')
             nReg = 3;
             if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
             cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
+        case 'TENT'
+            dbstack; error('code that')
         case 'TENTzero'
-            deconWin = min(diff(startSeq(condSeq==1)));
+            eTime     = dsgn.onsetList(dsgn.cond==(k-1));
+            eTimeNext = find(dsgn.cond==(k-1))+1;
+            if eTimeNext(end) > length(dsgn.onsetList)
+                eTimeNext(end) = [];
+                eTimeNext = dsgn.onsetList(eTimeNext);
+                eTimeNext(end+1) = (param.nFrame + param.nDummyRemoved) * tr;
+            else
+                eTimeNext = dsgn.onsetList(eTimeNext);
+            end
+            deconWin = min(eTimeNext - eTime);
             if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
                 deconWin = ceil(deconWin/trDecon)*trDecon;
             else
                 deconWin = floor(deconWin/trDecon)*trDecon;
             end
             b = 0;
-            % c = deconWin-trDecon;
             c = round((deconWin-trDecon)/trDecon)*trDecon;
-            % (c-b)/(n-1)
             nReg = round( (c-b)/trDecon + 1 );
-            cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+            % (c-b)/(nReg-1)
+            cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
             nReg = nReg - 2;
-            cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
             if ~dryRun
-                cmd{end+1} = ['-iresp ' num2str(k) ' ' fResp ' \'];
+                cmd{end+1} = ['-iresp ' num2str(k) ' ' fResp{k}    ' \'];
+                cmd{end+1} = ['-sresp ' num2str(k) ' ' fRespStd{k} ' \'];
             end
+            nRegAll(k) = nReg;
         otherwise
             dbstak; error('X');
     end
+end
+nReg = nRegAll;
+cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
 
-else
-    % New way (only implemented for dry runs so far)
-    stimCondList  = sort(unique(condSeq))';
-    stimCondLabel = replace(cellstr(num2str(stimCondList,'Trial%i')),' ','');
-    nRegAll = [];
-    cmd{end+1} = ['-num_stimts ' num2str(length(stimCondList)) ' \'];
-    for k = 1:length(stimCondList)
-        cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(label) stimCondLabel{k}] ' \'];
-
-        % write design to file
-        if dryRun
-            fStim = [tempname '_startTime.1D' ];
-        else
-            dbstack; error('code that')
-        end
-        fido = fopen(fStim, 'w');
-        if iscell(fIn)
-            for i = 1:length(fIn)
-                fprintf(fido,'%.3f ',startSeq(stimCondList(k)==condSeq));
-                fprintf(fido,'\n');
-            end
-        else
-            fprintf(fido,'%.3f ',startSeq(stimCondList(k)==condSeq));
-            fprintf(fido,'\n');
-        end
-        fclose(fido);
-
-
-        % k = 1;
-
-        switch HRmodel
-            case 'SPMG2'
-                dbstack; error('double-check that')
-                nReg = 2;
-                if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
-            case 'SPMG3'
-                dbstack; error('double-check that')
-                nReg = 3;
-                if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
-            case 'TENT'
-                dbstack; error('code that')
-            case 'TENTzero'
-                deconWin = min(diff(startSeq));
-                % deconWin = min(diff(startSeq(condSeq==1)));
-                if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
-                    deconWin = ceil(deconWin/trDecon)*trDecon;
-                else
-                    deconWin = floor(deconWin/trDecon)*trDecon;
-                end
-                b = 0;
-                % c = deconWin-trDecon;
-                c = round((deconWin-trDecon)/trDecon)*trDecon;
-                % (c-b)/(n-1)
-                nReg = round( (c-b)/trDecon + 1 );
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
-                nReg = nReg - 2;
-                if ~dryRun
-                    cmd{end+1} = ['-iresp ' num2str(k) ' ' fResp ' \'];
-                end
-                nRegAll(k) = nReg;
-            otherwise
-                dbstak; error('X');
-        end
-    end
-    nReg = nRegAll;
-    cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
-
-    if dryRun
-        % fMat = replace(fMat,'_stats.xmat.1D','_stats.xmatPerTrial.1D');
-        % fMat  = [tempname '_stats.xmat.1D'];
-    else
-        dbstack; error('code that')
-    end
+if dryRun
+    dbstack; error('code that')
+    fMat = replace(fMat,'_stats.xmat.1D','_stats.xmatPerTrial.1D');
+    fMat  = [tempname '_stats.xmat.1D'];    
 end
 
 
@@ -1961,7 +1922,7 @@ end
 if ~dryRun
     cmd{end+1} = ['-fitts ' fFit ' \'];
     cmd{end+1} = ['-errts ' fResid ' \'];
-    cmd{end+1} = '-bout \';
+    cmd{end+1} = '-bout -fout -tout \';
 end
 % cmdTmp{end+1} = ['-TR_times ' num2str(trStim) ' \'];
 cmd{end+1} = ['-x1D ' fMat ' \'];
