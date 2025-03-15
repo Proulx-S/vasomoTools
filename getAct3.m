@@ -123,27 +123,32 @@ if ~isfield(param,'model') || isempty(param.model); param.model = 'SPMG2'; end
 verboseThis = verbose;
 if ~isempty(fRun)
     for R = 1:size(fRun,1)
-        fRun(R,1) = plotDsgnMat(fRun(R,1),param,fVolTs(R,1),volTs(R,1),verboseThis);
+        paramCur = param; paramCur.nFrame = paramCur.nFrame(R); paramCur.tr = paramCur.tr(R);
+        fRun(R,1) = plotDsgnMat(fRun(R,1),paramCur,fVolTs(R,1),volTs(R,1),verboseThis);
     end
 end
 if ~isempty(fSes)
+    dbstack; error('double-check that')
     fSes = plotDsgnMat(fSes,param,fVolTs,volTs,verboseThis);
 end
 
 %% Refactor
 if ~isempty(fRun)
     for R = 1:size(fRun,1)
+        tmp(R,1).afni = fRun(R,1);
         if isfield(fRun,'fResp')
-            tmp(R,1).afni = rmfield(fRun(R,1),'fResp');
+            % tmp(R,1).afni = rmfield(fRun(R,1),'fResp');
             tmp(R,1).fs.fRespTs = fRun(R,1).fResp;
-        else
-            tmp(R,1).afni = fRun(R,1);
         end
-        tmp(R,1).fs.fMask   = fMask;
+        if isfield(fRun,'fRespStd')
+            tmp(R,1).fs.fRespTsTrialSd = fRun(R,1).fRespStd;
+        end
+        tmp(R,1).fs.fMask = fRun(R,1).fMask;
     end
     fRun = tmp; clear tmp
 end
 if ~isempty(fSes)
+    dbstack; error('double-check that')
     if isfield(fSes,'fResp')
         tmp.afni = rmfield(fSes,'fResp');
         tmp.fs.fRespTs = fSes.fResp;
@@ -163,6 +168,7 @@ else
     f = [];
 end
 if ~isempty(fSes)
+    dbstack; error('double-check that')
     f = [f; fSes];
 end
 % if ~isempty(fRun) && ~isempty(fSes)
@@ -198,49 +204,60 @@ end
 disp('Simplifying stat outputs')
 forceThis = force;
 if ~isempty(f)
-    cmd = {srcAfni};
+    cmd = {};
+    if exist('srcAfni','var') && ~isempty(srcAfni); cmd{end+1} = srcAfni; end
     for i = 1:numel(f)
-        %%% Fstat
-        fIn = f(i).afni.fStat;
-        fOut = replace(fIn,'_stats.nii.gz','_fullFval.nii.gz');
-        f(i).fs.fFullF = fOut;
-        if forceThis || ~exist(fOut,'file')
-            cmd{end+1} = '3dbucket -overwrite \';
-            cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = [fIn '[Full_Fstat]'];
+        for k = 0:param.dsgn.condK % 0 for the full model and following integer for each event conditions
+            fIn = f(i).afni.fStat;
+            %%% Fstat
+            fOut = replace(fIn,'_stats.nii.gz','_fVal.nii.gz');
+            if k==0 % full-model
+            else    % individual conditions of the model
+                fOut = replace(fOut,'cond-FULL',['cond-' param.dsgn.condLabel{k}]);
+            end
+            f(i).fs.fCondF{k+1,1} = fOut;
+            if forceThis || ~exist(fOut,'file')
+                cmd{end+1} = '3dbucket -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                if k==0 % full-model
+                    cmd{end+1} = [fIn '[Full_Fstat]'];
+                else    % individual conditions of the model
+                    cmd{end+1} = [fIn '[' param.dsgn.task '_' param.dsgn.condLabel{k} '_Fstat]'];
+                end
+            end
+            
+            fIn   = fOut;
+            %%%% also get p-val
+            fOut  = replace(fIn,'_fVal.nii.gz','_fValP.nii.gz');
+            f(i).fs.fCondF_pVal = fOut;
+            if force || ~exist(fOut,'file')
+                cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' fIn ')'];
+                cmd{end+1} = 'df1=$(echo $df | awk ''{print $(NF-1)}'')';
+                cmd{end+1} = 'df2=$(echo $df | awk ''{print $NF}'')';
+                cmd{end+1} = '3dcalc -overwrite \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = ['-a ' fIn ' \'];
+                cmd{end+1} = '-expr "1-stat2cdf(a,4,$df1,$df2,0)" 2> /dev/null';
+            end
+            %%%%% also get q-val (fdr)
+            fOut  = replace(fIn,'_fVal.nii.gz','_fValQ.nii.gz');
+            fMask = f(i).afni.fMask;
+            f(i).fs.fCondF_qVal = fOut;
+            if force || ~exist(fOut,'file')
+                cmd{end+1} = '3dFDR -overwrite -qval \';
+                cmd{end+1} = ['-prefix ' fOut ' \'];
+                cmd{end+1} = ['-input '  fIn ' \'];
+                cmd{end+1} = ['-mask '   fMask];
+                % cmd{end+1} = '3dbucket -overwrite \';
+                % cmd{end+1} = ['-prefix ' fOut ' \'];
+                % cmd{end+1} = [fOut '[FDRq:' param.dsgn.task '_' param.dsgn.condLabel{k} '_Fstat]'];
+            end
         end
-
-        %%% Pval
-        fIn  = f(i).fs.fFullF;
-        fOut = replace(fIn,'_fullFval.nii.gz','_fullPval.nii.gz');
-        f(i).fs.fFullP = fOut;
-        if force || ~exist(fOut,'file')
-            cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' fIn ')'];
-            cmd{end+1} = 'df1=$(echo $df | awk ''{print $(NF-1)}'')';
-            cmd{end+1} = 'df2=$(echo $df | awk ''{print $NF}'')';
-            cmd{end+1} = '3dcalc -overwrite \';
-            cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = ['-a ' fIn ' \'];
-            cmd{end+1} = '-expr "1-stat2cdf(a,4,$df1,$df2,0)" 2> /dev/null';
-        end
-
-        %%% Qval (fdr)
-        fIn = f(i).afni.fStat;
-        fOut = replace(fIn,'_stats.nii.gz','_fullQval.nii.gz');
-        f(i).fs.fFullQ = fOut;
-        if force || ~exist(fOut,'file')
-            cmd{end+1} = '3dFDR -overwrite -qval \';
-            cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = ['-input ' fIn ' \'];
-            cmd{end+1} = ['-mask '  fMask];
-            cmd{end+1} = '3dbucket -overwrite \';
-            cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = [fOut '[FDRq:Full_Fstat]'];
-        end
-
+        
         %%% Coef
         switch param.model
             case {'SPMG2'}
+                dbstack; error('code that')
                 fIn = f(i).afni.fStat;
                 fOut = replace(fIn,'_stats.nii.gz','_coef.nii.gz');
                 f(i).fs.fCoef = fOut;
@@ -1587,10 +1604,10 @@ else
             fOut = char(fIn);
             if ~exist(fileparts(fOut),'dir'); mkdir(fileparts(fOut)); end
 
-            fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_stats.nii.gz']);
-            fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_fit.nii.gz'  ]);
-            fResid = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_resid.nii.gz']);
-            fMask  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_mask.nii.gz' ]);
+            fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.nii.gz']);
+            fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz'  ]);
+            fResid = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_resid.nii.gz']);
+            fMask  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_mask.nii.gz' ]);
             mriMask.fspec = fMask; MRIwrite(mriMask,fMask);
             switch HRmodel
                 case {'TENT' 'TENTzero'}
@@ -1614,8 +1631,8 @@ else
                 for k = 1:param.dsgn.condK
                     fStim{k} = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_startTime.1D']);
                 end
-                fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_stats.xmat.1D']);
-                fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_model-' HRmodel '_stats.xmat.fig']);
+                fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.1D']);
+                fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.fig']);
             end
 
             curParam = param;

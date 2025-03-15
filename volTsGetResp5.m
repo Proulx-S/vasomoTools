@@ -1,4 +1,4 @@
-function [out1, out2, out3, out4, info] = volTsGetResp4(do,info,volTs,dsgn,volAnat,force,verbose)
+function [out1, out2, out3, out4, info] = volTsGetResp5(do,info,volTs,dsgn,volAnat,force,verbose)
 % global srcAfni
 % Assuming same dsgn and volAnat for every run
 if isempty(do)
@@ -330,7 +330,7 @@ switch info.dataSetLabel
             param.dryRun = info.dryRun;
         end
         param.nFrame = [volTs.nFrame]';
-        [volResp,volRespCat,~,param_getResp] = getAct3(volTs,dsgn,fMask,param,forceThis,verboseThis);
+        [volResp,volRespCat,~,param_getResp] = getAct4(volTs,dsgn,fMask,param,forceThis,verboseThis);
         volRespCat.afni.param = param_getResp;
         for R = 1:size(volResp,1)
             volResp(R,1).afni.param = param_getResp;

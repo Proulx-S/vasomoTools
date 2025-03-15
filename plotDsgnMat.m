@@ -10,11 +10,12 @@ if isempty(saveFalg);        saveFalg = 1 ; end
 % Extract and plot design matrix
 hMat = figure('Visible','off');
 % hMat = figure('WindowStyle','docked');
-cmdX = {srcAfni};
-cmdX{end+1} = ['1dcat ' fMat(1).fMat];
+cmdX = {};
+if ~isempty(srcAfni); cmdX{end+1} = {srcAfni}; end
+cmdX{end+1} = ['1dcat ' char(fMat(1).fMat)];
 [~,cmdout] = system(strjoin(cmdX,newline));
 mat = str2num(cmdout);
-nReg  = param.funDsgn.nReg;
+nReg  = sum(param.dsgn.nReg);
 nPoly = size(mat,2) - nReg;
 tStim = 0:(size(mat,2)-1);
 tStim = tStim-nPoly;
