@@ -239,44 +239,16 @@ if ~all(diff([volTs.tr])<0.01); dbstack; error('runs have different tr'); end
 tr = [volTs.tr]./1000;
 
 
-% param.trDecon = tr;
-param.trDecon = dsgn.dt;
-if mean(tr) ~= dsgn.dt
-    % if isfield(dsgn,'onsetList')
-        % diff(dsgn.onsetList)
-        % dsgn.onsetList / tr
-
-        warning(strjoin({''...
+if mean(tr) == dsgn.dt
+    param.trDecon = mean(tr);
+else
+    param.trDecon = dsgn.dt;
+    warning(strjoin({''...
         ['volume TR   =  ' sprintf('%7.6f ',mean(tr)) 'sec']...
         ['stim dt     =  ' sprintf('%7.6f ',dsgn.dt) 'sec']...
         ['stim onsets = [' sprintf('%7.3f ',dsgn.onsetList) ']sec']...
         ['            = [' sprintf('%7.3f ',(dsgn.onsetList / mean(tr))) ']vol']...
-        ['Defaulting to deconvolution TR = ' num2str(param.trDecon,'%7.6f') 'sec']},newline))
-    % else
-    %     diff(volTs.dsgn.onsetList)
-    %     volTs.dsgn.onsetList / (volTs.tr/1000)
-    %     volTs.dsgn.onsetList / volTs.dsgn.dt
-    %     % volTs.dsgn.onsetList / volTs.dsgn.dt - round(volTs.dsgn.onsetList / volTs.dsgn.dt)
-    % 
-    %     tError = (volTs.dsgn.onsetList(end) / (volTs.tr/1000) - volTs.dsgn.onsetList(end) / (volTs.dsgn.dt)) * 1000;
-    % 
-    %     warning(strjoin({''...
-    %     ['volume TR   =  ' sprintf('%7.3f ',volTs.tr) 'ms']...
-    %     ['stim dt     =  ' sprintf('%7.3f ',volTs.dsgn.dt*1000) 'ms']...
-    %     ['stim onsets = [' sprintf('%7.0f ',volTs.dsgn.onsetList*1000) ']ms']...
-    %     ['            = [' sprintf('%7.3f ',(volTs.dsgn.onsetList / (volTs.tr/1000))) ']vol']...
-    %     ''...
-    %     [num2str(tError) 'ms error by the last onset']},newline))
-    % 
-    %     if abs(tError)<10
-    %         param.trDecon = volTs.dsgn.dt;
-    %     else
-    %         dbstack; error('timing problem here')
-    %     end
-    % 
-
-        
-    % end
+        ['Defaulting to stim dt (not TR) for deconvolution = ' num2str(param.trDecon,'%7.6f') 'sec']},newline))
 end
 
 
