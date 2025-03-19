@@ -302,7 +302,7 @@ switch info.dataSetLabel
             param.dryRun = info.dryRun;
         end
         param.nFrame = [volTs.nFrame]';
-        [volResp,volRespCat,~,param_getResp] = getAct4(volTs,dsgn,fMask,param,forceThis,verboseThis);
+        [volResp,volRespCat,~,param_getResp] = getRespAndAct(volTs,dsgn,fMask,param,forceThis,verboseThis);
         volRespCat.afni.param = param_getResp;
         for R = 1:size(volResp,1)
             volResp(R,1).afni.param = param_getResp;
