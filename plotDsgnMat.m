@@ -1,4 +1,4 @@
-function [fMat,hMat,xMat] = plotDsgnMat(fMat,volTs,verbose,saveFalg)
+function [xMat,hMat] = plotDsgnMat(fMat,verbose,saveFalg)
 % Reads
 
 
@@ -30,12 +30,17 @@ switch param.model
         % nPoly = size(mat,2) - param.funDsgn.nReg;
         % tStim = (0:param.funDsgn.nReg-1).*param.trDecon;
         % tStim = [linspace(tStim(1)-(param.trDecon.*nPoly),tStim(1)-param.trDecon,nPoly) tStim];
-    case {'SPMG2' 'SPMG3'}
-        tStim = tStim + 1;
+    case 'SPMG2'
+        % tStim = tStim + 1;
+    otherwise
+        dbstack; error('code that');
 end
 % tRun = 0:size(mat,1)-1;
 
+
 h = imagesc(mat); colormap gray
+
+% yaxis time after run onset
 for R = 1:length(param.nFrame)
     iRun(:,R) = [1 param.nFrame(R)-param.nDummyIgnore];
     if R == 1
@@ -50,26 +55,54 @@ h.Parent.YTickLabel = cellstr(num2str(tRun(:),'%0.3f'));
 ylabel('time after run onset (s)');
 
 
-
-pInd = false([1 size(mat,2)]);
-pInd(1:nPoly) = true;
-param.dsgn.condLabel
-h.Parent.XTick = tStim;
-ax.XTickLabel(pInd) = cell(1,nnz(pInd));
+% xaxis time after stim onset and baselines
 switch param.model
     case {'TENTzero' 'TENT'}
-        ax.XTickLabel(~pInd) = cellstr(num2str(tStim(~pInd)','%0.3f'))';
-        xlabel('time after stim onset (s)')
-    case {'SPMG2' 'SPMG3'}
-        ax.XTickLabel(~pInd) = cellstr(num2str(tStim(~pInd)','%i'))';
-        xlabel('regressors index')
+        for k = 1:length(param.dsgn.condLabel)
+            iStim{k} = 1:param.dsgn.nReg(k);
+            if k == 1
+                iStims{k} = iStim{k};
+            else
+                iStims{k} = iStim{k} + iStims{k-1}(end);
+            end
+        end
+        switch param.model
+            case 'TENTzero'
+                tStim = [iStim{:}].*param.trDecon;
+            case 'TENT'
+                tStim = ([iStim{:}]-1).*param.trDecon;
+        end
+        iStim = [iStims{:}]; clear iStims
+    case 'SPMG2'
+        iStim = tStim(tStim>=0)+1;
+    otherwise
+        error('code that')
+end
+pInd = false([1 size(mat,2)]);
+pInd(1:nPoly) = true;
+iStim = iStim+nnz(pInd);
+
+h.Parent.XTick = iStim;
+switch param.model
+    case {'TENTzero' 'TENT'}
+        h.Parent.XTickLabel = cellstr(num2str(tStim','%0.3f'));
+        h.Parent.XTickLabelRotation = 45;
+        xlabel('time after stim onset (s)');
+
+    case 'SPMG2'
+        h.Parent.XTickLabel = {};
+        xlabel('regressors')
+    otherwise
+        error('code that')
 end
 clim([-1 1])
-[~,b,~] = fileparts(fileparts(fMat.fIn(1:length(fMat))));
+
+
+[~,b,~] = fileparts(fileparts(fMat.fStat));
 title(b,'interpreter','none')
 set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
 if saveFalg
-    savefig(hMat,fMat(1).fMatFig,'compact')
+    savefig(hMat,fMat.fMatFig,'compact')
 end
 if verbose>0
     hMat.Visible = 'on';
@@ -78,10 +111,6 @@ else
     close(hMat)
 end
 drawnow
-
-
-[fMat.fMatFig] = deal(fMat(1).fMatFig);
-
 
 xMat.mat   = mat;
 xMat.tRun  = tRun';
