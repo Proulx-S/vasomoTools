@@ -1,22 +1,24 @@
-function [fMat,hMat,xMat] = plotDsgnMat(fMat,param,fVolTs,volTs,verbose,saveFalg)
-global srcAfni
+function [fMat,hMat,xMat] = plotDsgnMat(fMat,volTs,verbose,saveFalg)
+% Reads
+
+
+global src
 if ~exist('verbose','var'); verbose = []; end
 if isempty(verbose);        verbose = 0 ; end
-if ~exist('volTs','var'); volTs = []; end
+if ~exist('volTs','var');     volTs = []; end
 if ~exist('saveFalg','var'); saveFalg = []; end
 if isempty(saveFalg);        saveFalg = 1 ; end
-
+param = fMat.param;
 
 % Extract and plot design matrix
 hMat = figure('Visible','off');
 % hMat = figure('WindowStyle','docked');
-cmdX = {};
-if ~isempty(srcAfni); cmdX{end+1} = {srcAfni}; end
+cmdX = {src.afni};
 cmdX{end+1} = ['1dcat ' char(fMat(1).fMat)];
 [~,cmdout] = system(strjoin(cmdX,newline));
 mat = str2num(cmdout);
-nReg  = sum(param.dsgn.nReg);
-nPoly = size(mat,2) - nReg;
+nReg  = param.dsgn.nReg;
+nPoly = size(mat,2) - sum(nReg);
 tStim = 0:(size(mat,2)-1);
 tStim = tStim-nPoly;
 switch param.model
@@ -31,39 +33,28 @@ switch param.model
     case {'SPMG2' 'SPMG3'}
         tStim = tStim + 1;
 end
-tRun = 0:size(mat,1)-1;
+% tRun = 0:size(mat,1)-1;
 
-if exist('volTs','var') && ~isempty(volTs)
-    tRun = tRun.*param.tr;
-    tRunStart = 0;
-    for r = 1:length(volTs)
-        tRunStart(end+1) = tRunStart(end) + volTs(r).nFrame;
+h = imagesc(mat); colormap gray
+for R = 1:length(param.nFrame)
+    iRun(:,R) = [1 param.nFrame(R)-param.nDummyIgnore];
+    if R == 1
+        iSes(:,R) = iRun(:,R);
+    else
+        iSes(:,R) = iRun(:,R) + sum(param.nFrame(1:R-1));
     end
-    tRunStart(end) = [];
-    tRunEnd   = tRunStart + [volTs.nFrame] - 1;
-    tRunStart = tRunStart.*param.tr;
-    tRunEnd   = tRunEnd  .*param.tr;
-
-    tLabel = [repmat((param.nDummyRemoved - 1)*param.tr,size(tRunStart)) [volTs.nFrame]-1.*param.tr];
-    [t,b]  = sort([tRunStart tRunEnd]);
-    tLabel = tLabel(b);
-
-    h = imagesc(tStim,tRun,mat); colormap gray
-    h.Parent.YTick = t;
-    h.Parent.YTickLabel = cellstr(num2str(tLabel','%0.3f'));
-    ylabel('time after run onset (s)');
-else
-    imagesc(tStim,tRun,mat); colormap gray
-    ylabel('volume index');
+    tRun(:,R) = (iRun(:,R) + param.nDummyRemoved + param.nDummyIgnore -1) .* param.tr(R);
 end
-
+h.Parent.YTick = iSes(:);
+h.Parent.YTickLabel = cellstr(num2str(tRun(:),'%0.3f'));
+ylabel('time after run onset (s)');
 
 
 
 pInd = false([1 size(mat,2)]);
 pInd(1:nPoly) = true;
-ax = gca;
-ax.XTick = tStim;
+param.dsgn.condLabel
+h.Parent.XTick = tStim;
 ax.XTickLabel(pInd) = cell(1,nnz(pInd));
 switch param.model
     case {'TENTzero' 'TENT'}
@@ -74,10 +65,8 @@ switch param.model
         xlabel('regressors index')
 end
 clim([-1 1])
-if ~isempty(fVolTs)
-    [~,b,~] = fileparts(fileparts(fVolTs(1:length(fMat))));
-    title(b,'interpreter','none')
-end
+[~,b,~] = fileparts(fileparts(fMat.fIn(1:length(fMat))));
+title(b,'interpreter','none')
 set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
 if saveFalg
     savefig(hMat,fMat(1).fMatFig,'compact')
