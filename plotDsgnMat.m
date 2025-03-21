@@ -1,18 +1,13 @@
-function [xMat,hMat] = plotDsgnMat(fMat,verbose,saveFalg)
-% Reads
-
-
+function [xMat,hMat] = plotDsgnMat(fMat,force,verbose)
 global src
 if ~exist('verbose','var'); verbose = []; end
 if isempty(verbose);        verbose = 0 ; end
-if ~exist('volTs','var');     volTs = []; end
-if ~exist('saveFalg','var'); saveFalg = []; end
-if isempty(saveFalg);        saveFalg = 1 ; end
+if ~exist('force','var');   force = []; end
+if isempty(force);          force = 0 ; end
 param = fMat.param;
+if diff(param.nDummyRemoved)>0; dbstack; error('nDummyRemoved cannot be different across runs'); end
 
-% Extract and plot design matrix
-hMat = figure('Visible','off');
-% hMat = figure('WindowStyle','docked');
+%% Extract design matrix
 cmdX = {src.afni};
 cmdX{end+1} = ['1dcat ' char(fMat(1).fMat)];
 [~,cmdout] = system(strjoin(cmdX,newline));
@@ -35,24 +30,18 @@ switch param.model
     otherwise
         dbstack; error('code that');
 end
-% tRun = 0:size(mat,1)-1;
 
-
-h = imagesc(mat); colormap gray
 
 % yaxis time after run onset
-for R = 1:length(param.nFrame)
-    iRun(:,R) = [1 param.nFrame(R)-param.nDummyIgnore];
-    if R == 1
-        iSes(:,R) = iRun(:,R);
+for r = 1:length(param.nFrame)
+    iRun(:,r) = [1 param.nFrame(r)-param.nDummyIgnore];
+    if r == 1
+        iSes(:,r) = iRun(:,r);
     else
-        iSes(:,R) = iRun(:,R) + sum(param.nFrame(1:R-1));
+        iSes(:,r) = iRun(:,r) + sum(param.nFrame(1:r-1));
     end
-    tRun(:,R) = (iRun(:,R) + param.nDummyRemoved + param.nDummyIgnore -1) .* param.tr(R);
+    tRun(:,r) = (iRun(:,r) + param.nDummyRemoved(r) + param.nDummyIgnore -1) .* param.tr(r);
 end
-h.Parent.YTick = iSes(:);
-h.Parent.YTickLabel = cellstr(num2str(tRun(:),'%0.3f'));
-ylabel('time after run onset (s)');
 
 
 % xaxis time after stim onset and baselines
@@ -82,36 +71,42 @@ pInd = false([1 size(mat,2)]);
 pInd(1:nPoly) = true;
 iStim = iStim+nnz(pInd);
 
-h.Parent.XTick = iStim;
-switch param.model
-    case {'TENTzero' 'TENT'}
-        h.Parent.XTickLabel = cellstr(num2str(tStim','%0.3f'));
-        h.Parent.XTickLabelRotation = 45;
-        xlabel('time after stim onset (s)');
 
-    case 'SPMG2'
-        h.Parent.XTickLabel = {};
-        xlabel('regressors')
-    otherwise
-        error('code that')
-end
-clim([-1 1])
+%% Plot design matrix
+if force || ~exist(fMat.fMatFig,'file')
+    hMat = figure('Visible','off');
+    h = imagesc(mat); colormap gray
+    h.Parent.YTick = iSes(:);
+    h.Parent.YTickLabel = cellstr(num2str(tRun(:),'%0.3f'));
+    ylabel('time after run onset (s)');
+    h.Parent.XTick = iStim;
+    switch param.model
+        case {'TENTzero' 'TENT'}
+            h.Parent.XTickLabel = cellstr(num2str(tStim','%0.3f'));
+            h.Parent.XTickLabelRotation = 45;
+            xlabel('time after stim onset (s)');
+        case 'SPMG2'
+            h.Parent.XTickLabel = {};
+            xlabel('regressors')
+        otherwise
+            error('code that')
+    end
+    clim([-1 1])
 
-
-[~,b,~] = fileparts(fileparts(fMat.fStat));
-title(b,'interpreter','none')
-set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
-if saveFalg
+    [~,b,~] = fileparts(fileparts(fMat.fStat));
+    title(b,'interpreter','none')
+    set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
     savefig(hMat,fMat.fMatFig,'compact')
+    if verbose>0
+        hMat.Visible = 'on';
+        hMat.WindowStyle = 'docked';
+    else
+        close(hMat)
+    end
+    drawnow
 end
-if verbose>0
-    hMat.Visible = 'on';
-    hMat.WindowStyle = 'docked';
-else
-    close(hMat)
-end
-drawnow
 
+%% Output design matrix
 xMat.mat   = mat;
 xMat.tRun  = tRun';
 xMat.tStim = tStim;

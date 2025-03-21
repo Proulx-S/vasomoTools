@@ -104,17 +104,18 @@ end
 
 %% Plot design matrices
 verboseThis = verbose;
+forceThis   = force;
 for r = 1:R
-    fRespRun(r,1).xMat = plotDsgnMat(fRespRun(r,1),verboseThis);
+    fRespRun(r,1).xMat = plotDsgnMat(fRespRun(r,1),forceThis,verboseThis);
 end
 if R>1
-    fRespCat.xMat      = plotDsgnMat(fRespCat,verboseThis);
+    fRespCat.xMat      = plotDsgnMat(fRespCat     ,forceThis,verboseThis);
 end
 for r = 1:R
-    fActRun(r,1).xMat = plotDsgnMat(fActRun(r,1),verboseThis);
+    fActRun(r,1).xMat = plotDsgnMat(fActRun(r,1),forceThis,verboseThis);
 end
 if R>1
-    fActCat.xMat      = plotDsgnMat(fActCat,verboseThis);
+    fActCat.xMat      = plotDsgnMat(fActCat     ,forceThis,verboseThis);
 end
 
 
