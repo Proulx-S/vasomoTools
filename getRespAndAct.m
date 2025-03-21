@@ -512,7 +512,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         end
         cmd{end+1} = ['-nodata ' num2str(nFrame) ' ' num2str(tr,'%0.16f') ' \'];
     end
-    cmd{end+1} = '-polort A \';
+    cmd{end+1} = '-polort A -local_times \';
     cmd{end+1} = ['-stim_times_subtract ' num2str(mean(tr.*nDummy),'%f') ' \'];
     
     % Set design
@@ -602,7 +602,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         if ~isempty(fResid)
             cmd{end+1} = ['-errts ' fResid ' \'];
         end
-        cmd{end+1} = '-bout -fout -tout \';
+        cmd{end+1} = '-bout -fout \';
     end
     cmd{end+1} = ['-x1D ' fMat ' \'];
     if ~dryRun
