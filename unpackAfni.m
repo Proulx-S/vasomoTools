@@ -209,9 +209,9 @@ end
 %% Run system commands
 if length(cmd)>1
     if verbose
-        [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
+        [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error('x');    end
     else
-        [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
+        [status,cmdout] = system(strjoin(cmd,newline));         if status || isempty(cmdout); dbstack; error(cmdout); end
     end
     disp(' done')
 else

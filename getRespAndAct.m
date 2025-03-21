@@ -127,7 +127,11 @@ fRespRun = unpackAfni(fRespRun,[],forceThis,verboseThis);
 fActRun  = unpackAfni(fActRun, [],forceThis,verboseThis);
 if R>1
     fRespCat = unpackAfni(fRespCat,[],forceThis,verboseThis);
-    fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
+    try
+        fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
+    catch
+        keyboard
+    end
 else
     fRespCat = fRespRun; fRespCat.r = 0;
     fActCat  = fActRun;  fActCat.r = 0;
@@ -521,6 +525,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     nRegAll = [];
     cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK) ' \'];
     kList = sort(unique(dsgn.cond));
+    cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
     for k = 1:dsgn.condK
         cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
 
@@ -580,8 +585,6 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
                     cmd{end+1} = ['-sresp ' num2str(k) ' ' fRespStd{k} ' \'];
                 end
                 nRegAll(k) = nReg;
-
-                cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
             otherwise
                 dbstak; error('X');
         end
