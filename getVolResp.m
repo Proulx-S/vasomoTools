@@ -1,4 +1,4 @@
-function [fRespCat,fRespRun,fActCat,fActRun,info] = getVolResp(info,volTs,dsgn,volAnat,force,verbose)
+function volResp = getVolResp(info,volTs,dsgn,volAnat,force,verbose)
 
 %% Mask
 if isstruct(volAnat) && isfield(volAnat,'f')
@@ -114,3 +114,9 @@ if isfield(info,'dryRun')
 end
 param.nFrame = [volTs.nFrame]';
 [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct(volTs,dsgn,fMask,param,forceThis,verboseThis);
+volResp.respCat = fRespCat;
+volResp.respRun = fRespRun;
+volResp.actCat = fActCat;
+volResp.actRun = fActRun;
+
+

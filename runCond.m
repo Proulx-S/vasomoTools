@@ -36,6 +36,7 @@ classdef runCond
       vSize         % [run x dim]
       % Data [run x 1]
       volTs
+      volResp
       volPsd
       volAnat
       bhvr   
