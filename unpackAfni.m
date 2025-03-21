@@ -289,13 +289,15 @@ for k = 1:fRes.param.dsgn.condK
             end
 
             % Adjusting relative to principal vector
-            rho   = abs(mriCoef.vol);                         % Magnitude
-            if ~nullFlag
-                theta = wrapToPi(angle(mriCoef.vol) - angle(v));  % Phase
+            rho   = abs(mriCoef.vol);                            % Magnitude
+            if nullFlag
+                theta =          angle(mriCoef.vol)            ; % Phase uncorrected
+            else
+                theta = wrapToPi(angle(mriCoef.vol) - angle(v)); % Phase
             end
             mriPol = mriCoef; mriPol.fspec = fOutPolar;
-            mriPol.vol(:,:,:,1) = rho;                         % Magnitude
-            mriPol.vol(:,:,:,2) = theta;                       % Phase
+            mriPol.vol(:,:,:,1) = rho;                           % Magnitude
+            mriPol.vol(:,:,:,2) = theta;                         % Phase
             MRIwrite(mriPol,fOutPolar);
 
             mriCoef.fspec = fOutCoef;

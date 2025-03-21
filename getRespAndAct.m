@@ -127,11 +127,7 @@ fRespRun = unpackAfni(fRespRun,[],forceThis,verboseThis);
 fActRun  = unpackAfni(fActRun, [],forceThis,verboseThis);
 if R>1
     fRespCat = unpackAfni(fRespCat,[],forceThis,verboseThis);
-    try
-        fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
-    catch
-        keyboard
-    end
+    fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
 else
     fRespCat = fRespRun; fRespCat.r = 0;
     fActCat  = fActRun;  fActCat.r = 0;
