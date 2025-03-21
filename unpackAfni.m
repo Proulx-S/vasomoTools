@@ -7,7 +7,7 @@ if isempty(force);     force = 0; end
 if isempty(verbose); verbose = 0; end        
 if numel(fRes)>1
     for i = 1:numel(fRes)
-        fRes(i) = unpackAfni(fRes(i),fMask,force,verbose);
+        fRes(i).stats = unpackAfni(fRes(i),fMask,force,verbose);
     end
     return;
 end
@@ -19,7 +19,6 @@ if isempty(fMask)
 else
     stats.fMask = fMask;
 end
-
 stats.model    = fRes.param.model;
 stats.task     = fRes.param.dsgn.task;
 stats.condList = fRes.param.dsgn.condLabel;
@@ -155,7 +154,7 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
     else    % individual conditions of the model
         fOut = replace(fIn,'_stats.nii.gz','_fVal.nii.gz');
         fOut = replace(fOut,'cond-FULL',['cond-' stats.condList{k}]);
-        stats.fCondF{k,1} = fOut;
+        stats.fCondF{1,k} = fOut;
     end
     if force || ~exist(fOut,'file')
         cmd{end+1} = '3dbucket -overwrite \';
@@ -173,9 +172,9 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
         fOut = replace(fIn,'_fVal.nii.gz','_fValP.nii.gz');
         stats.fFullF_pVal = fOut;
     else    % individual conditions of the model
-        fIn  = stats.fCondF{k,1};
+        fIn  = stats.fCondF{1,k};
         fOut = replace(fIn,'_fVal.nii.gz','_fValP.nii.gz');
-        stats.fCondF_pVal{k,1} = fOut;
+        stats.fCondF_pVal{1,k} = fOut;
     end
     if force || ~exist(fOut,'file')
         cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' fIn ')'];
@@ -193,32 +192,15 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
         fOut = replace(fIn,'_fVal.nii.gz','_fValQ.nii.gz');
         stats.fFullF_qVal      = fOut;
     else    % individual conditions of the model
-        fIn  = stats.fCondF{k,1};
+        fIn  = stats.fCondF{1,k};
         fOut = replace(fIn,'_fVal.nii.gz','_fValQ.nii.gz');
-        stats.fCondF_qVal{k,1} = fOut;
+        stats.fCondF_qVal{1,k} = fOut;
     end
     if force || ~exist(fOut,'file')
         cmd{end+1} = '3dFDR -overwrite -qval \';
         cmd{end+1} = ['-prefix ' fOut ' \'];
         cmd{end+1} = ['-input ' fIn ' \'];
         cmd{end+1} = ['-mask ' fMask];
-    end
-
-    %% Transform coefficients
-    switch fRes.param.model
-        case {'SPMG2'}
-            % dbstack; error('code that')
-            % fIn = fRes.fStat;
-            % fOut = replace(fIn,'_stats.nii.gz','_coef.nii.gz');
-            % stats.fCoef = fOut;
-            % if force || ~exist(fOut,'file')
-            %     cmd{end+1} = '3dbucket -overwrite \';
-            %     cmd{end+1} = ['-prefix ' fOut ' \'];
-            %     cmd{end+1} = [fIn '[' param.funDsgn.label '#0_Coef,' param.funDsgn.label '#1_Coef]'];
-            % end
-        case {'TENT' 'TENTzero'}
-        otherwise
-            dbstack; error('code that');
     end
 end
 
@@ -235,3 +217,85 @@ if length(cmd)>1
 else
     disp(' already done, skipping')
 end
+
+
+
+%% Transform coefficients -- from the double gamma fit, find the main vector (principal response delay across voxels) and adjust accordingly
+for k = 1:fRes.param.dsgn.condK
+    if fRes.r==0 && strcmp(fRes.param.model,'SPMG2') % only for analysis on catenated runs for sufficient precision in delay estimation
+        
+        % Extract coefficients
+        fIn = fRes.fStat;
+        fOut = replace(fIn,'cond-FULL',['cond-' stats.condList{k}]);
+        fOut = replace(fOut,'_stats.nii.gz','_coefs.nii.gz');
+        stats.fCondCoef{1,k} = fOut;
+        if force || ~exist(fOut,'file')
+            cmd = {src.afni};
+            cmd{end+1} = '3dbucket -overwrite \';
+            cmd{end+1} = ['-prefix ' fOut ' \'];
+            cmd{end+1} = [fIn '[' stats.task '_' stats.condList{k} '#0_Coef,' stats.task '_' stats.condList{k} '#1_Coef]'];
+            [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
+        end
+        
+        % Convert to complex values
+        fIn = fOut;
+        fFig = replace(fIn,'.nii.gz','MainVector.fig');        
+        stats.fCondCoef_mainVector{1,k} = fFig;
+        fOutPolar = replace(fIn,'_coefs.nii.gz','_polar.nii.gz');
+        stats.fCondPolar{1,k} = fOutPolar;
+        fOutCoef = replace(fIn,'_coefs.nii.gz','_coefsAdj.nii.gz');
+        stats.fCondCoef_adj{1,k} = fOutCoef;
+        if force || ~exist(fOutPolar,'file') || ~exist(fOutCoef,'file') || ~exist(fFig,'file')
+            mriCoef = MRIread(fIn);
+            mriCoef.vol = complex(mriCoef.vol(:,:,:,1), mriCoef.vol(:,:,:,2));
+            
+            % Get slope (main vector) of the data from significant voxels
+            mriQ = MRIread(stats.fCondF_qVal{1,k});
+            mask = mriQ.vol<0.05;
+            slp = real(mriCoef.vol(mask))\imag(mriCoef.vol(mask));
+            v = complex(1,slp); v = v./abs(v);
+
+            % Visualize the main response vector with individual voxels
+            hFig = figure('Visible','off');
+            scatter(real(mriCoef.vol(mask)),imag(mriCoef.vol(mask)),'.k'); hold on;
+            lim = [-1 1].*max(abs([real(mriCoef.vol(mask)); imag(mriCoef.vol(mask))]));
+            line(lim,lim.*slp,'Color','r');
+            xlim(lim); ylim(lim); grid on; ax = gca; ax.DataAspectRatio = [1 1 1];
+            xlabel('Real'); ylabel('Imaginary');
+            legend('Voxels','Main Vector');
+            [a,b,~] = fileparts(replace(fIn,'.nii.gz',''));
+            [~,a,~] = fileparts(a);
+            title([a newline b],'Interpreter','none');
+            % and save
+            set(hFig, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
+            savefig(hFig, fFig, 'compact');
+            if verbose > 0
+                hFig.Visible = 'on';
+                hFig.WindowStyle = 'docked';
+                drawnow
+            else
+                close(hFig);
+            end
+
+            % Adjusting relative to principal vector
+            rho   = abs(mriCoef.vol);                         % Magnitude
+            theta = wrapToPi(angle(mriCoef.vol) - angle(v));  % Phase
+            mriPol = mriCoef; mriPol.fspec = fOutPolar;
+            mriPol.vol(:,:,:,1) = rho;                         % Magnitude
+            mriPol.vol(:,:,:,2) = theta;                       % Phase
+            MRIwrite(mriPol,fOutPolar);
+
+            mriCoef.fspec = fOutCoef;
+            [mriCoef.vol(:,:,:,1),mriCoef.vol(:,:,:,2)] = pol2cart(theta,rho);
+            MRIwrite(mriCoef,fOutCoef);
+        end    
+    else
+        stats.fCondCoef{1,k}            = '';
+        stats.fCondCoef_mainVector{1,k} = '';
+        stats.fCondPolar{1,k}           = '';
+        stats.fCondCoef_adj{1,k}        = '';
+    end
+end
+
+%% Output
+fRes.stats = stats;

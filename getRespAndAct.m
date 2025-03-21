@@ -1,11 +1,8 @@
-function [fRun,fSes,fSes_echoCat,param] = getRespAndAct(volTs,dsgn,fMask,param,force,verbose)
-% see /autofs/space/takoyaki_001/users/proulxs/tools/vasomoTools/getResp2.m
-fSes_echoCat = [];
-% global srcAfni srcFs
+function [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct(volTs,dsgn,fMask,param,force,verbose)
 if ~exist('force','var');     force = []; end
 if ~exist('verbose','var'); verbose = []; end
 if ~exist('dsgn','var');       dsgn = []; end
-if ~exist('fMask','var');   fMask = []; end
+if ~exist('fMask','var');     fMask = []; end
 if isempty(force);     force = 0; end
 if isempty(verbose); verbose = 0; end
 if isempty(dsgn)
@@ -15,18 +12,25 @@ if isempty(dsgn)
         error('badly specified dsgn')
     end
 end
-if ~isfield(param,'skipMov'); param.skipMov = []; end
-if ~isfield(param,'skipCat'); param.skipCat = []; end
-if ~isfield(param,'skipRun'); param.skipRun = []; end
+% if ~isfield(param,'skipMov'); param.skipMov = []; end
+% if ~isfield(param,'skipCat'); param.skipCat = []; end
+% if ~isfield(param,'skipRun'); param.skipRun = []; end
 if ~isfield(param,'dryRun'); param.dryRun = []; end
-if isempty(param.skipMov); param.skipMov = 0; end
-if isempty(param.skipCat); param.skipCat = 0; end
-if isempty(param.skipRun); param.skipRun = 0; end
+% if isempty(param.skipMov); param.skipMov = 0; end
+% if isempty(param.skipCat); param.skipCat = 0; end
+% if isempty(param.skipRun); param.skipRun = 0; end
 if isempty(param.dryRun); param.dryRun = 0; end
 
 %% Data files
 if ~isempty(volTs)
-    fVolTs = {volTs.fspec}';
+    if isfield(volTs,'fspec')
+        fVolTs = {volTs.fspec}';
+    else
+        fVolTs = cell(size(volTs));
+        for r = 1:length(volTs)
+            fVolTs{r,1} = volTs(r).mri.fspec;
+        end
+    end
     for i = 1:length(fVolTs)
         if ~exist(fVolTs{i},'file'); dbstack; error('write file to disk aka code lazy bum'); end
     end
@@ -41,8 +45,6 @@ if isempty(fMask)
     if isfield(volTs,'vol2vec')
         fMask = volTs.vol2vec;
     end
-else
-    fMask;
 end
 if ~all(diff([volTs.tr])<0.01); dbstack; error('runs have different tr'); end
 
@@ -53,7 +55,9 @@ end
 if ~isempty(dsgn.cond)
     k = sort(unique(dsgn.cond)); if any(diff(k)-1); dbstack; error('cond indices are not monotonically increasing'); end
     dsgn.condLabel = repmat({'stim'},size(k));
-    dsgn.condLabel{k==0} = 'catch';
+    if any(k==0)
+        dsgn.condLabel{k==0} = 'catch';
+    end
     dsgn.condK = length(k);
 else
     dbstack; error('double-check')
@@ -65,7 +69,7 @@ else
         param.funDsgn.k = 2;
     end
 end
-param.tr = [volTs.tr]./1000;
+param.tr = [volTs.tr]'./1000;
 param.dsgn = dsgn;
 
 
@@ -73,293 +77,60 @@ param.dsgn = dsgn;
 param.model = 'TENTzero';
 % On each run
 R = size(fVolTs,1);
+clear fRespRun
 for r = 1:R
     fRespRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
 end
 % On catenated runs
-fRespCat = [];
 if R>1
-    fRespCat = runAfni(fVolTs,[0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    fRespCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
 end
 
 %% Run afni's 3dDeconvolve for double-gamma response amplitude (and delay)
-%  'SPMG1'       = 1 parameter SPM gamma variate basis function
-%      exp(-t)*(A1*t^P1-A2*t^P2) where
-%    A1 = 0.0083333333  P1 = 5  (main positive lobe)
-%    A2 = 1.274527e-13  P2 = 15 (undershoot part)
-%    This function is NOT normalized to have peak=1!
-% 'SPMG2'       = 2 parameter SPM: gamma variate + d/dt derivative
-%    [For backward compatibility: 'SPMG' == 'SPMG2']
-%  'SPMG3'       = 3 parameter SPM basis function set
-%            ==> ** The SPMGx functions now can take an optional
-%                   (duration) argument, specifying that the primal
-%                    SPM basis functions should be convolved with
-%                     a square wave 'duration' seconds long and then
-%                  be normalized to have peak absolute value = 1;
-%                  e.g., 'SPMG3(20)' for a 20 second duration with
-%                  three basis function.  [28 Apr 2009]
-%               ** Note that 'SPMG1(0)' will produce the usual
-%                     'SPMG1' wavefunction shape, but normalized to
-%                   have peak value = 1 (for example).
 param.model = 'SPMG2';
 % On each run
 R = size(fVolTs,1);
+clear fActRun
 for r = 1:R
     fActRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
 end
 % On catenated runs
-fActCat = [];
 if R>1
-    fActCat = runAfni(fVolTs,[0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    fActCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
 end
-
-
 
 
 
 
 %% Plot design matrices
 verboseThis = verbose;
-if ~isempty(fRespCat)
-    [fRespCat.xMat,~] = plotDsgnMat(fRespCat,verboseThis);
+for r = 1:R
+    fRespRun(r,1).xMat = plotDsgnMat(fRespRun(r,1),verboseThis);
+end
+if R>1
+    fRespCat.xMat      = plotDsgnMat(fRespCat,verboseThis);
 end
 for r = 1:R
-    [fRespRun(r,1).xMat,~] = plotDsgnMat(fRespRun(r,1),verboseThis);
+    fActRun(r,1).xMat = plotDsgnMat(fActRun(r,1),verboseThis);
 end
-if ~isempty(fActCat)
-    [fActCat.xMat,~] = plotDsgnMat(fActCat,verboseThis);
-end
-for r = 1:R
-    [fActRun(r,1).xMat,~] = plotDsgnMat(fActRun(r,1),verboseThis);
+if R>1
+    fActCat.xMat      = plotDsgnMat(fActCat,verboseThis);
 end
 
 
 
 %% Refactor
-save tmp fRespRun fRespCat fActRun fActCat
-load tmp
-tmp = unpackAfni(fRespRun,[],1,1);
-fRespCat
-fActCat
-
-
-
-% if ~isempty(fRun)
-%     for R = 1:size(fRun,1)
-%         tmp(R,1).afni = fRun(R,1);
-%         if isfield(fRun,'fResp')
-%             % tmp(R,1).afni = rmfield(fRun(R,1),'fResp');
-%             tmp(R,1).fs.fRespTs = fRun(R,1).fResp;
-%         end
-%         if isfield(fRun,'fRespStd')
-%             tmp(R,1).fs.fRespTsTrialSd = fRun(R,1).fRespStd;
-%         end
-%         tmp(R,1).fs.fMask = fRun(R,1).fMask;
-%     end
-%     fRun = tmp; clear tmp
-% end
-% if ~isempty(fSes)
-%     dbstack; error('double-check that')
-%     if isfield(fSes,'fResp')
-%         tmp.afni = rmfield(fSes,'fResp');
-%         tmp.fs.fRespTs = fSes.fResp;
-%     else
-%         tmp.afni = fSes;
-%     end
-%     tmp.fs.fMask   = fMask;
-%     fSes = tmp; clear tmp
-% end
-% nEcho = size(fVolTs,2);
-% nRun = size(fVolTs,1);
-
-
-% if ~isempty(fRun)
-%     f = fRun;
-% else
-%     f = [];
-% end
-% if ~isempty(fSes)
-%     dbstack; error('double-check that')
-%     f = [f; fSes];
-% end
-% % if ~isempty(fRun) && ~isempty(fSes)
-% %     f = [fRun; fSes];
-% % else
-% %     f = [];
-% %     dbstack; error('X');
-% % end
-
-
-% %
-% %
-% %
-% % if ~isempty(fSes)
-% %     fSes = plotDsgnMat(fSes,param,fVolTs,volTs,verboseThis);
-% %     if isfield(fSes,'fResp')
-% %         tmp.afni = rmfield(fSes,'fResp');
-% %         if ~isempty(fSes.fResp)
-% %             tmp.fs.fRespTs = fSes.fResp;
-% %         end
-% %         fSes = tmp; clear tmp
-% %     else
-% %         tmp = fSes; clear fSes
-% %         fSes.afni = tmp;
-% %     end
-% %     fSes.fs.fMask = fMask;
-% % end
-% % nEcho = size(fVolTs,2);
-% % nRun = size(fVolTs,1);
-
-
-% %% Unpack outputs
-% disp('Unpacking outputs')
-% forceThis = force;
-% if ~isempty(f)
-%     cmd = {};
-%     if exist('srcAfni','var') && ~isempty(srcAfni); cmd{end+1} = srcAfni; end
-%     for i = 1:numel(f)
-
-%         %%% Extract baseline -- fitted
-%         fIn = f(i).afni.fStat;
-%         fOut = replace(fIn,'_stats.nii.gz','_fBasePoly0.nii.gz');
-%         f(i).fs.fBasePoly0 = fOut;
-%         if forceThis || ~exist(fOut,'file')
-%             buck = num2str(1:size(f(i).afni.fIn,1),'Run#%iPol#0_Coef,'); buck(end) = [];
-%             cmd{end+1} = '3dbucket -overwrite \';
-%             cmd{end+1} = ['-prefix ' fOut ' \'];
-%             cmd{end+1} = [fIn '[' buck ']'];
-%         end
-
-%         %%% Extract baseline -- temporal average
-%         fIn  = char(f(i).afni.fIn);
-%         fOut = replace(fIn,'preproc_volTs.nii.gz','av_preproc_volTs.nii.gz');
-%         f(i).fs.fBaseTsAv = fOut;
-%         if force || ~exist(fOut,'file')
-%             cmd{end+1} = '3dTstat -overwrite -mean \';
-%             cmd{end+1} = ['-prefix ' fOut ' \'];
-%             cmd{end+1} = fIn;
-%         end
-
-
-%         for k = 0:param.dsgn.condK % 0 for the full model; >=1 for each event conditions
-
-%             %%% Add baselines to response ts
-%             if k>0
-%                 fIn   = f(i).fs.fRespTs{k};
-%                 %%%% baseline from fit
-%                 fOut  = replace(fIn,'_respAv.nii.gz','_respAvOnBasePoly0.nii.gz');
-%                 fBase = f(i).fs.fBasePoly0;
-%                 f(i).fs.fRespTsOnBasePoly0{k,1} = fOut;
-%                 if force || ~exist(fOut,'file')
-%                     cmd{end+1} = '3dcalc -overwrite \';
-%                     cmd{end+1} = ['-prefix ' fOut ' \'];
-%                     cmd{end+1} = ['-a ' fIn   ' \'];
-%                     cmd{end+1} = ['-b ' fBase ' \'];
-%                     cmd{end+1} = '-expr ''a+b''';
-%                 end
-%                 %%%% baseline from temporal average
-%                 fOut = replace(fIn,'_respAv.nii.gz','_respAvOnBaseTsAv.nii.gz');
-%                 fBase = f(i).fs.fBaseTsAv;
-%                 f(i).fs.fRespTsOnBaseTsAv{k,1} = fOut;
-%                 if force || ~exist(fOut,'file')
-%                     cmd{end+1} = '3dcalc -overwrite \';
-%                     cmd{end+1} = ['-prefix ' fOut ' \'];
-%                     cmd{end+1} = ['-a ' fIn   ' \'];
-%                     cmd{end+1} = ['-b ' fBase ' \'];
-%                     cmd{end+1} = '-expr ''a+b''';
-%                 end
-%             end
-
-%             %%% Extract F-value
-%             fIn = f(i).afni.fStat;
-%             if k==0 % full-model
-%                 fOut = replace(fIn,'_stats.nii.gz','_fVal.nii.gz');
-%                 f(i).fs.fFullF = fOut;
-%             else    % individual conditions of the model
-%                 fOut = replace(fIn,'_stats.nii.gz','_fVal.nii.gz');
-%                 fOut = replace(fOut,'cond-FULL',['cond-' param.dsgn.condLabel{k}]);
-%                 f(i).fs.fCondF{k,1} = fOut;
-%             end
-%             if forceThis || ~exist(fOut,'file')
-%                 cmd{end+1} = '3dbucket -overwrite \';
-%                 cmd{end+1} = ['-prefix ' fOut ' \'];
-%                 if k==0 % full-model
-%                     cmd{end+1} = [fIn '[Full_Fstat]'];
-%                 else    % individual conditions of the model
-%                     cmd{end+1} = [fIn '[' param.dsgn.task '_' param.dsgn.condLabel{k} '_Fstat]'];
-%                 end
-%             end
-
-%             %%% Compute p-value
-%             if k==0 % full-model
-%                 fIn  = f(i).fs.fFullF;
-%                 fOut = replace(fIn,'_fVal.nii.gz','_fValP.nii.gz');
-%                 f(i).fs.fFullF_pVal      = fOut;
-%             else    % individual conditions of the model
-%                 fIn  = f(i).fs.fCondF{k,1};
-%                 fOut = replace(fIn,'_fVal.nii.gz','_fValP.nii.gz');
-%                 f(i).fs.fCondF_pVal{k,1} = fOut;
-%             end
-%             if force || ~exist(fOut,'file')
-%                 cmd{end+1} = ['df=$(3dAttribute BRICK_STATAUX ' fIn ')'];
-%                 cmd{end+1} = 'df1=$(echo $df | awk ''{print $(NF-1)}'')';
-%                 cmd{end+1} = 'df2=$(echo $df | awk ''{print $NF}'')';
-%                 cmd{end+1} = '3dcalc -overwrite \';
-%                 cmd{end+1} = ['-prefix ' fOut ' \'];
-%                 cmd{end+1} = ['-a ' fIn ' \'];
-%                 cmd{end+1} = '-expr "1-stat2cdf(a,4,$df1,$df2,0)" 2> /dev/null';
-%             end
-
-%             %%% Compute q-value (fdr)
-%             if k==0 % full-model
-%                 fIn  = f(i).fs.fFullF;
-%                 fOut = replace(fIn,'_fVal.nii.gz','_fValQ.nii.gz');
-%                 f(i).fs.fFullF_qVal      = fOut;
-%             else    % individual conditions of the model
-%                 fIn  = f(i).fs.fCondF{k,1};
-%                 fOut = replace(fIn,'_fVal.nii.gz','_fValQ.nii.gz');
-%                 f(i).fs.fCondF_qVal{k,1} = fOut;
-%             end
-
-
-%             %%% Coef
-%             switch param.model
-%                 case {'SPMG2'}
-%                     dbstack; error('code that')
-%                     fIn = f(i).afni.fStat;
-%                     fOut = replace(fIn,'_stats.nii.gz','_coef.nii.gz');
-%                     f(i).fs.fCoef = fOut;
-%                     if forceThis || ~exist(fOut,'file')
-%                         cmd{end+1} = '3dbucket -overwrite \';
-%                         cmd{end+1} = ['-prefix ' fOut ' \'];
-%                         cmd{end+1} = [fIn '[' param.funDsgn.label '#0_Coef,' param.funDsgn.label '#1_Coef]'];
-%                     end
-
-%                 case {'SPMG3'}
-%                     dbstack; error('code that')
-%                 case {'TENT' 'TENTzero'}
-%                 otherwise
-%                     dbstack; error('code that');
-%             end
-
-%         end
-%     end
-% end
-
-
-% %%% Run system commands
-% if length(cmd)>1
-%     if verbose
-%         [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
-%     else
-%         [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
-%         % [status,cmdout] = system(strjoin(cmd(1:4),newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
-%     end
-%     disp(' done')
-% else
-%     disp(' already done, skipping')
-% end
-
+verboseThis = verbose;
+forceThis   = force;
+fRespRun = unpackAfni(fRespRun,[],forceThis,verboseThis);
+fActRun  = unpackAfni(fActRun, [],forceThis,verboseThis);
+if R>1
+    fRespCat = unpackAfni(fRespCat,[],forceThis,verboseThis);
+    fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
+else
+    fRespCat = fRespRun; fRespCat.r = 0;
+    fActCat  = fActRun;  fActCat.r = 0;
+end
 
 
 
@@ -369,115 +140,9 @@ return
 
 
 
-
-% % % %%% Convert SPMG2 cartesian responses coefficient (gamma + first derivative) to polar (amplitude + delay) coefficient
-% % % switch param.model
-% % %     case {'SPMG2'}
-% % %         dbstack; error('double-check that')
-% % %         disp('convert hrf+derivative cartesian coefficients to polar coefficients')
-% % %
-% % %         for i = 1:size(f,1)
-% % %             fIn     = f(i).fs.fCoef;
-% % %             fOut    = replace(fIn,'_coef.nii.gz','_coefPol.nii.gz');
-% % %             fOutFig = replace(fIn,'_coef.nii.gz','_coefPol.fig');
-% % %             fFDR    = f(i).fs.fFullQ;
-% % %             f(i).fs.fCoefPol = fOut;
-% % %
-% % %             verboseThis = verbose;
-% % %             forceThis   = force;
-% % %             if forceThis || ~exist(fOut,'file') || ~exist(fOutFig,'file')
-% % %                 % hMat = figure('WindowStyle','docked');
-% % %                 hMat = figure('Visible','off');
-% % %
-% % %                 coef = MRIread(fIn);
-% % %                 fdr  = MRIread(fFDR);
-% % %                 mask = MRIread(fMask);
-% % %                 mask = mask.vol & fdr.vol<0.05;
-% % %
-% % %                 coef.vol = complex(coef.vol(:,:,:,1),coef.vol(:,:,:,2));
-% % %                 scatter(real(coef.vol(mask)),imag(coef.vol(mask)));
-% % %                 ax = gca; ax.DataAspectRatio = [1 1 1];
-% % %                 grid on
-% % %                 axis([-1 1 -1 1].*max(abs(axis)))
-% % %                 xline(0,'k'); yline(0,'k');
-% % %                 xlabel('SPM canon (coef)')
-% % %                 ylabel('SPM canon derivative (coef)')
-% % %
-% % %                 %get principal vector
-% % %                 slp = real(coef.vol(mask))\imag(coef.vol(mask));
-% % %                 hRef = refline(slp,0); hRef.Color = 'r';
-% % %                 v = complex(1,slp); v = v./abs(v);
-% % %                 title([num2str(angle(v)/pi*180,'%0.1f°') ' deviation from expected HR delay'])
-% % %
-% % %                 % subtract that vector orientation from data
-% % %                 coefPol = coef;
-% % %                 coefPol.vol(:,:,:,1) = abs(coef.vol);
-% % %                 coefPol.vol(:,:,:,2) = wrapToPi( angle(coef.vol) - angle(v) );
-% % %                 MRIwrite(coefPol,fOut);
-% % %
-% % %                 if verboseThis>1
-% % %                     hMat.Visible = 'on';
-% % %                     hMat.WindowStyle = 'docked';
-% % %                     savefig(hMat,fOutFig,'compact')
-% % %                 else
-% % %                     set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
-% % %                     savefig(hMat,fOutFig,'compact')
-% % %                     close(hMat)
-% % %                 end
-% % %
-% % %                 disp(' done')
-% % %             else
-% % %                 disp(' already done, skipping')
-% % %             end
-% % %         end
-% % %
-% % %     case {'SPMG3'}
-% % %         dbstack; error('code that')
-% % %     case {'TENT' 'TENTzero'}
-% % %     otherwise
-% % %         dbstack; error('code that');
-% % % end
-% % %
-% % %
-% % %
-% % %
-% % %
-% % % if param.skipRun && ~param.skipCat
-% % %     fRun = [];
-% % %     fSes = f;
-% % % elseif ~param.skipRun && ~param.skipCat
-% % %     fRun = f(1:end-1);
-% % %     fSes = f(end);
-% % %     clear f
-% % % else
-% % %     dbstack; error('fix that mess')
-% % %     if ~isempty(fRun) && ~isempty(fSes)
-% % %         fRun = f(1:end-1,:);
-% % %         fSes = f(end,:);
-% % %         f    = [];
-% % %     else
-% % %         dbstack; error('X');
-% % %     end
-% % % end
-% % %
-% % % %%% Run command
-% % % disp('Writing baselines')
-% % % if length(cmd)>1
-% % %     if verbose
-% % %         [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'error','IgnoreCase',true); dbstack; error(cmdout); error('x'); end
-% % %     else
-% % %         [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout) || contains(cmdout,'error','IgnoreCase',true); dbstack; error(cmdout); error('x'); end
-% % %     end
-% % %     disp(' done')
-% % % else
-% % %     disp(' already done, skipping')
-% % % end
-% % % %% %%%%%%%%%%%%%%%%%%%%%%
-
-
-%%%%%%%%%%%%%%%%%
-%% Make videos %%
-%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%
+%% Make videos
+%%%%%%%%%%%%%%
 switch param.model
     case {'SPMG2' 'SPMG3'}
     case {'TENT' 'TENTzero'}
@@ -660,19 +325,16 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose)
     
     % Handle multiple runs
     if r
-        if size(param.nFrame,1)>1
-            param.nFrame = param.nFrame(r,:);
-        end
-        if length(param.tr)>1
-            param.tr     = param.tr(r);
-        end
+        param.tr            = param.tr(r,:);
+        param.nFrame        = param.nFrame(r,:);
+        param.nDummyRemoved = param.nDummyRemoved(r,:);
     end
     
 
 
-    %% %%%%%%%%%%%%%%%%%%
-    % Functional design %
-    %%%%%%%%%%%%%%%%%% %%
+    %%%%%%%%%%%%%%%%%%%%
+    %% Functional design
+    %%%%%%%%%%%%%%%%%%%%
     if isfield(param,'dsgn') && isa(param.dsgn,'runDsgn')
         trStim   = param.dsgn.dt;
         durSeq   = param.dsgn.ondurList;
@@ -700,9 +362,9 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose)
     multiEcho = sz(2)>1;
     
 
-    %% %%%%%
-    % Mask %
-    %%%%%%%%
+    %%%%%%%
+    %% Mask
+    %%%%%%%
     mriMask = MRIread(fMask);
     mriMask.vol([1:5 end-4:end],:              ) = 0;
     mriMask.vol(:              ,[1:5 end-4:end]) = 0;
@@ -795,17 +457,6 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose)
 
         [cmdTmpTmp,param.dsgn.nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,param.dryRun);
         
-        
-        % switch HRmodel
-        %     case {'TENT' 'TENTzero'}
-        %         [cmdTmpTmp,param.dsgn.nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,param.dryRun);
-        %         % [cmdTmpTmp,param.funDsgn.nReg] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,durSeq,condSeq,HRmodel,param.funDsgn.label,[],fResp,fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved,param.trDecon,param.dryRun);
-        %     case {'SPMG2' 'SPMG3'}
-        %         dbstack; error('double-check')
-        %         [cmdTmpTmp,param.dsgn.nReg] = afniCmd(fIn,fMask,fStim,param.nDummy,param.tr,startSeq,durSeq,condSeq,HRmodel,param.funDsgn.label,[],[]   ,fFit,fResid,fMat,fStat,verbose,param.nDummyRemoved,[]           ,param.dryRun);
-        %     otherwise
-        %         dbstack; error('figure that out')
-        % end
         if param.dryRun
             system(strjoin([{srcAfni} cmdTmpTmp],newline))
         end
@@ -845,7 +496,8 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     tr      = mean(param.tr);
     nFrame  = max(param.nFrame);
     trDecon = param.trDecon;
-    nDummy = param.nDummyIgnore + param.nDummyRemoved;
+    if any(diff(param.nDummyRemoved)>1); dbstack; error('nDummyRemoved should be the same across runs'); end
+    nDummy = mode(param.nDummyIgnore + param.nDummyRemoved);
     fIn = cellstr(fIn);
     cmd = {'3dDeconvolve -overwrite \'};
     if ~dryRun
@@ -861,8 +513,8 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         cmd{end+1} = ['-nodata ' num2str(nFrame) ' ' num2str(tr,'%0.16f') ' \'];
     end
     cmd{end+1} = '-polort A \';
-    cmd{end+1} = ['-stim_times_subtract ' num2str(mean(tr)*nDummy,'%f') ' \'];
-
+    cmd{end+1} = ['-stim_times_subtract ' num2str(mean(tr.*nDummy),'%f') ' \'];
+    
     % Set design
     dsgn = param.dsgn;
     nRegAll = [];
@@ -906,7 +558,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
                 if eTimeNext(end) > length(dsgn.onsetList)
                     eTimeNext(end) = [];
                     eTimeNext = dsgn.onsetList(eTimeNext);
-                    eTimeNext(end+1) = (nFrame + param.nDummyRemoved) * tr;
+                    eTimeNext(end+1) = (nFrame + mode(param.nDummyRemoved)) * tr;
                 else
                     eTimeNext = dsgn.onsetList(eTimeNext);
                 end

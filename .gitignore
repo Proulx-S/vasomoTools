@@ -40,3 +40,6 @@ octave-workspace
 *.HEAD
 *.nii
 *.nii.gz
+
+# Cursor
+.cursorignore
