@@ -31,14 +31,14 @@ fIn = stats.fStat;
 for r = 1:size(fRes.fIn,1)
     dOut = strsplit(fRes.fIn{r},filesep); dOut = strjoin(dOut(1:end-1),filesep);
     fOut = strsplit(fIn        ,filesep); fOut = fOut{end};
-    fOut = replace(fOut,'_stats.nii.gz','_poly0base.nii.gz');
+    fOut = replace(fOut,'_stats','_poly0base.nii.gz');
     fOut = fullfile(dOut,fOut);
     stats.fPoly0Base{r,1} = fOut;
     if force || ~exist(fOut,'file')    
         buck = ['Run#' num2str(r) 'Pol#0_Coef'];
         cmd{end+1} = '3dbucket -overwrite \';
         cmd{end+1} = ['-prefix ' fOut ' \'];
-        cmd{end+1} = [fIn '[' buck ']'];
+        cmd{end+1} = [fIn '+orig[' buck ']'];
     end
 end
 %%% concatenate across runs
@@ -147,12 +147,12 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
     end
 
     %% Extract F-value
-    fIn = fRes.fStat;
+    fIn = stats.fStat;
     if k==0 % full-model
-        fOut = replace(fIn,'_stats.nii.gz','_fVal.nii.gz');
+        fOut = replace(fIn,'_stats','_fVal.nii.gz');
         stats.fFullF = fOut;
     else    % individual conditions of the model
-        fOut = replace(fIn,'_stats.nii.gz','_fVal.nii.gz');
+        fOut = replace(fIn,'_stats','_fVal.nii.gz');
         fOut = replace(fOut,'cond-FULL',['cond-' stats.condList{k}]);
         stats.fCondF{1,k} = fOut;
     end
@@ -160,9 +160,9 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
         cmd{end+1} = '3dbucket -overwrite \';
         cmd{end+1} = ['-prefix ' fOut ' \'];
         if k==0 % full-model
-            cmd{end+1} = [fIn '[Full_Fstat]'];
+            cmd{end+1} = [fIn '+orig[Full_Fstat]'];
         else    % individual conditions of the model
-            cmd{end+1} = [fIn '[' stats.task '_' stats.condList{k} '_Fstat]'];
+            cmd{end+1} = [fIn '+orig[' stats.task '_' stats.condList{k} '_Fstat]'];
         end
     end
 
@@ -225,15 +225,15 @@ for k = 1:fRes.param.dsgn.condK
     if fRes.r==0 && strcmp(fRes.param.model,'SPMG2') % only for analysis on catenated runs for sufficient precision in delay estimation
         
         % Extract coefficients
-        fIn = fRes.fStat;
+        fIn = stats.fStat;
         fOut = replace(fIn,'cond-FULL',['cond-' stats.condList{k}]);
-        fOut = replace(fOut,'_stats.nii.gz','_coefs.nii.gz');
+        fOut = replace(fOut,'_stats','_coefs.nii.gz');
         stats.fCondCoef{1,k} = fOut;
         if force || ~exist(fOut,'file')
             cmd = {src.afni};
             cmd{end+1} = '3dbucket -overwrite \';
             cmd{end+1} = ['-prefix ' fOut ' \'];
-            cmd{end+1} = [fIn '[' stats.task '_' stats.condList{k} '#0_Coef,' stats.task '_' stats.condList{k} '#1_Coef]'];
+            cmd{end+1} = [fIn '+orig[' stats.task '_' stats.condList{k} '#0_Coef,' stats.task '_' stats.condList{k} '#1_Coef]'];
             [status,cmdout] = system(strjoin(cmd,newline)); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
         end
         

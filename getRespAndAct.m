@@ -387,8 +387,8 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose)
         end
         
 
-        fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.nii.gz']);
-        fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz'  ]);
+        fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats']); % let's let afni use its native file format, it is sometimes glitchy otherwise
+        fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
         if param.getResid
             fResid = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_resid.nii.gz']);
         else
@@ -462,14 +462,14 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose)
             system(strjoin([{srcAfni} cmdTmpTmp],newline))
         end
 
-        if force || anyDontExist([fResp fRespStd fStat])
+        if force || anyDontExist([fResp fRespStd [fStat '+orig.BRIK']])
             cmdTmp = [cmdTmp cmdTmpTmp];
         end
         cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fResp)   ,' ')];
         cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fRespStd),' ')];
-        cmdTmp{end+1} = ['echo ''   '''                 fStat         ];
+        cmdTmp{end+1} = ['echo ''   '''                [fStat '+orig']         ];
         cmdTmp{end+1} = ['echo ''   '''                 fMat          ];
-        if ~force && ~anyDontExist([fResp fRespStd fStat])
+        if ~force && ~anyDontExist([fResp fRespStd [fStat '+orig.BRIK']])
             cmdTmp{end+1} = 'echo ''   ''already done, skipping';
         end
 
