@@ -252,6 +252,13 @@ for k = 1:fRes.param.dsgn.condK
             % Get slope (main vector) of the data from significant voxels
             mriQ = MRIread(stats.fCondF_qVal{1,k});
             mask = mriQ.vol<0.05;
+            if any(mask(:))
+                nullFlag = 0;
+            else
+                nullFlag = 1;
+                mriP = MRIread(stats.fCondF_pVal{1,k});
+                mask = mriP.vol<0.05;
+            end
             slp = real(mriCoef.vol(mask))\imag(mriCoef.vol(mask));
             v = complex(1,slp); v = v./abs(v);
 
@@ -265,7 +272,11 @@ for k = 1:fRes.param.dsgn.condK
             legend('Voxels','Main Vector');
             [a,b,~] = fileparts(replace(fIn,'.nii.gz',''));
             [~,a,~] = fileparts(a);
-            title([a newline b],'Interpreter','none');
+            if nullFlag
+                title([a newline b newline 'WARNING: showing p<0.05 voxels, delay not corrected (no q<0.05 voxels)'],'Interpreter','none');
+            else
+                title([a newline b],'Interpreter','none');
+            end
             % and save
             set(hFig, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
             savefig(hFig, fFig, 'compact');
@@ -279,7 +290,9 @@ for k = 1:fRes.param.dsgn.condK
 
             % Adjusting relative to principal vector
             rho   = abs(mriCoef.vol);                         % Magnitude
-            theta = wrapToPi(angle(mriCoef.vol) - angle(v));  % Phase
+            if ~nullFlag
+                theta = wrapToPi(angle(mriCoef.vol) - angle(v));  % Phase
+            end
             mriPol = mriCoef; mriPol.fspec = fOutPolar;
             mriPol.vol(:,:,:,1) = rho;                         % Magnitude
             mriPol.vol(:,:,:,2) = theta;                       % Phase
