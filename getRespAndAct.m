@@ -72,6 +72,16 @@ end
 param.tr = [volTs.tr]'./1000;
 param.dsgn = dsgn;
 
+%% Special case
+if any(diff(param.nFrame))
+    dbstack; error('nFrame cannot be different across runs');
+    dat.rRef = 1;
+    dat.rBad = 3;
+    passDown{end+1}.dat.rRef = 1;
+    passDown{end+1}.dat.rRef = 1;
+    passDown{end}.id = 'TENTzeroParam';
+end
+
 
 %% Run afni's 3dDeconvolve for response timecourse estimation
 param.model = 'TENTzero';
@@ -80,6 +90,9 @@ R = size(fVolTs,1);
 clear fRespRun
 for r = 1:R
     fRespRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    if param.rRef==r
+        fRespRef = fRespRun(r,:);
+    end
 end
 % On catenated runs
 if R>1
@@ -494,6 +507,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     % timeseries. Only frames after these will be feed to 3dDeconvolve using
     % the [nDummyIgnore..$] notation.
     % nDummy [int]: total number of dummy initial frames
+    if ~isfield(param,'forceDeconWin'); param.forceDeconWin = []; end
     tr      = mean(param.tr);
     nFrame  = max(param.nFrame);
     trDecon = param.trDecon;
@@ -537,12 +551,12 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         end
         fclose(fido);
 
-        dur = dsgn.ondurList(kList(k)==dsgn.cond); if ~isempty(dur) && any(diff(dur)); dbstack; error('stim duration cannot be different across trials'); end
-        dur = dur(1);
         
         % Set model
         switch param.model
             case 'SPMG2'
+                dur = dsgn.ondurList(kList(k)==dsgn.cond); if ~isempty(dur) && any(diff(dur)); dbstack; error('stim duration cannot be different across trials'); end
+                dur = dur(1);
                 nReg = 2;
                 cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
                 nRegAll(k) = nReg;
@@ -554,26 +568,31 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
             case 'TENT'
                 dbstack; error('code that')
             case 'TENTzero'
-                % set the deconvolution window to the maximum (all the way up to the next stimulus or the end of the run)
-                eTime     = dsgn.onsetList(dsgn.cond==kList(k));
-                eTimeNext = find(dsgn.cond==kList(k))+1;
-                if eTimeNext(end) > length(dsgn.onsetList)
-                    eTimeNext(end) = [];
-                    eTimeNext = dsgn.onsetList(eTimeNext);
-                    eTimeNext(end+1) = (nFrame + mode(param.nDummyRemoved)) * tr;
+                if isempty(param.forceDeconWin)
+                    % set the deconvolution window to the maximum (all the way up to the next stimulus or the end of the run)
+                    eTime     = dsgn.onsetList(dsgn.cond==kList(k));
+                    eTimeNext = find(dsgn.cond==kList(k))+1;
+                    if eTimeNext(end) > length(dsgn.onsetList)
+                        eTimeNext(end) = [];
+                        eTimeNext = dsgn.onsetList(eTimeNext);
+                        eTimeNext(end+1) = (nFrame + mode(param.nDummyRemoved)) * tr;
+                    else
+                        eTimeNext = dsgn.onsetList(eTimeNext);
+                    end
+                    deconWin = min(eTimeNext - eTime);
+                    if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
+                        deconWin = ceil(deconWin/trDecon)*trDecon;
+                    else
+                        deconWin = floor(deconWin/trDecon)*trDecon;
+                    end
+                    b = 0;
+                    c = round((deconWin-trDecon)/trDecon)*trDecon;
+                    nReg = round( (c-b)/trDecon + 1 );
+                    % (c-b)/(nReg-1)
                 else
-                    eTimeNext = dsgn.onsetList(eTimeNext);
+                    keyboard
+                    dbstack; error('code that');
                 end
-                deconWin = min(eTimeNext - eTime);
-                if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
-                    deconWin = ceil(deconWin/trDecon)*trDecon;
-                else
-                    deconWin = floor(deconWin/trDecon)*trDecon;
-                end
-                b = 0;
-                c = round((deconWin-trDecon)/trDecon)*trDecon;
-                nReg = round( (c-b)/trDecon + 1 );
-                % (c-b)/(nReg-1)
                 cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
                 nReg = nReg - 2;
                 if ~dryRun

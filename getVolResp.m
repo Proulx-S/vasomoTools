@@ -71,9 +71,9 @@ else
 end
 
 
-if any(diff([volTs.nFrame])) || any(diff([volTs.nFrameOrig]))
-    error('not all runs have the same number of frames')
-end
+% if any(diff([volTs.nFrame])) || any(diff([volTs.nFrameOrig]))
+%     error('not all runs have the same number of frames')
+% end
 param.nDummyRemoved = [volTs.nFrameOrig]' - [volTs.nFrame]';
 
 
