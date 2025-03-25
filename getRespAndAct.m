@@ -1,8 +1,9 @@
-function [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct(volTs,dsgn,fMask,param,force,verbose)
-if ~exist('force','var');     force = []; end
-if ~exist('verbose','var'); verbose = []; end
-if ~exist('dsgn','var');       dsgn = []; end
-if ~exist('fMask','var');     fMask = []; end
+function [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct(volTs,dsgn,fMask,param,force,verbose,passDown)
+if ~exist('force','var');     force   = []; end
+if ~exist('verbose','var'); verbose   = []; end
+if ~exist('dsgn','var');       dsgn   = []; end
+if ~exist('fMask','var');     fMask   = []; end
+if ~exist('passDown','var'); passDown = {}; end
 if isempty(force);     force = 0; end
 if isempty(verbose); verbose = 0; end
 if isempty(dsgn)
@@ -72,16 +73,6 @@ end
 param.tr = [volTs.tr]'./1000;
 param.dsgn = dsgn;
 
-%% Special case
-if any(diff(param.nFrame))
-    dbstack; error('nFrame cannot be different across runs');
-    dat.rRef = 1;
-    dat.rBad = 3;
-    passDown{end+1}.dat.rRef = 1;
-    passDown{end+1}.dat.rRef = 1;
-    passDown{end}.id = 'TENTzeroParam';
-end
-
 
 %% Run afni's 3dDeconvolve for response timecourse estimation
 param.model = 'TENTzero';
@@ -90,14 +81,31 @@ R = size(fVolTs,1);
 clear fRespRun
 for r = 1:R
     fRespRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
-    if param.rRef==r
-        fRespRef = fRespRun(r,:);
-    end
 end
 % On catenated runs
 if R>1
     fRespCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
 end
+
+%% Rerun special case
+if any(diff(param.nFrame))
+    forceThis = 1;
+    switch volTs(1).fOrigList{1}
+        case '/local/users/sebp/martinos/vsmDriven/doIt_generalPreproc/vsmDriven/bids/sub-vsmDrivenP5/ses-1/func/sub-vsmDrivenP5_ses-1_task-10sPrd1sDur_acq-vfMRIinflow_run-1_angio.nii.gz'
+            rBad = 3;
+            rRef = 1;
+            % Extract parameters to fix
+            cmd = strsplit(fRespRun(rRef,:).cmd,newline)';
+            cmd = strsplit(cmd{contains(cmd,'TENTzero(')});
+            passDown{end+1}.pr = cmd{contains(cmd,'TENTzero(')};
+            passDown{end  }.id = 'TENTzeroParam';
+            % Rerun, passing down the fixed parameters
+            fRespRun(rBad,:) = runAfni(fVolTs(rBad,:),[rBad R],param,fMask,forceThis,verbose,passDown); % analysis performed on each echoe within that function
+        otherwise
+            error('need to define parameters for this special case')
+    end
+end
+
 
 %% Run afni's 3dDeconvolve for double-gamma response amplitude (and delay)
 param.model = 'SPMG2';
@@ -111,7 +119,6 @@ end
 if R>1
     fActCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
 end
-
 
 
 
@@ -323,12 +330,13 @@ end
 
 
 
-function fRes = runAfni(fList,rR,param,fMask,force,verbose)
+function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
     global src
     if ~exist('rR','var');                     rR = []; end
     if ~exist('fMask','var');               fMask = []; end
     if ~exist('force','var');               force = []; end
     if ~exist('verbose','var');           verbose = []; end
+    if ~exist('passDown','var');         passDown = []; end
     if ~isfield(param,'getResid'); param.getResid = []; end
     if isempty(force);                   force = 0; end
     if isempty(verbose);               verbose = 0; end
@@ -471,6 +479,19 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose)
 
         [cmdTmpTmp,param.dsgn.nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,param.dryRun);
         
+        %SPECIAL CASE
+        if ~isempty(passDown)
+            if strcmp(passDown{end}.id,'TENTzeroParam')
+                tmp = cmdTmpTmp(contains(cmdTmpTmp,'TENTzero('));
+                if numel(tmp)>1; dbstack; error('code that for more than one stimulus type'); end
+                tmp = strsplit(char(tmp),' '); tmp{contains(tmp,'TENTzero(')} = passDown{end}.pr; tmp = {strjoin(tmp,' ')};
+                cmdTmpTmp(contains(cmdTmpTmp,'TENTzero(')) = tmp;
+            else
+                dbstack; error('double-check that')
+            end
+        end
+
+
         if param.dryRun
             system(strjoin([{srcAfni} cmdTmpTmp],newline))
         end
