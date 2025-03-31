@@ -12,8 +12,11 @@ classdef runCond
       sub
       ses % [run x 1]
       acq
+      prsc
       task
       dsgn
+      dirs
+      dirsOrig
       fList         % [run x 1]
       fPreprocList  % [run x 1]
       fPreprocMaskList % [run x 1 x preprocStep]
