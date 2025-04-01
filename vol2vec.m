@@ -60,11 +60,7 @@ if isempty(mri.nDummy)
 end
 nDummy = mri.nDummy; if isnan(nDummy); nDummy = 0; end
 if isempty(mri.t)
-    dT = mri.tr/1000;
-    sT = nDummy*dT;
-    eT = (mri.nframes-1+nDummy)*dT;
-    mri.t = linspace(sT,eT,(eT-sT)/dT+1)';
-    % mri.t = (sT:dT:eT)';
+    mri.t = ( (0:mri.nframes-1).*(mri.tr/1000) )'';
 end
 
 %% Exit if enough
