@@ -35,6 +35,7 @@ classdef runCond
       acqTime       % [run x 1]
       nFrame        % [run x 1]
       nFrameOrig    % [run x 1]
+      tr
       nDummy        % [run x 1]
       nDummyRemoved % [run x 1]
       dt            % [run x 1]
