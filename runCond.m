@@ -13,6 +13,8 @@ classdef runCond
       ses % [run x 1]
       acq
       prsc
+      vencAcq
+      vencRec
       task
       dsgn
       dirs
