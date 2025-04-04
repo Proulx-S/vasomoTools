@@ -5,6 +5,9 @@ if isempty(verbose);        verbose = 0 ; end
 if ~exist('force','var');   force = []; end
 if isempty(force);          force = 0 ; end
 param = fMat.param;
+if ~isfield(param,'nDummyRemoved') || isempty(param.nDummyRemoved)
+    param.nDummyRemoved = param.nFrameOrig-param.nFrame;
+end
 if diff(param.nDummyRemoved)>0; dbstack; error('nDummyRemoved cannot be different across runs'); end
 
 %% Extract design matrix
@@ -43,6 +46,12 @@ for r = 1:length(param.nFrame)
     tRun(:,r) = (iRun(:,r) + param.nDummyRemoved(r) + param.nDummyIgnore -1) .* param.tr(r);
 end
 
+if param.PCflag
+    iRun = cat(2,iRun,iRun);
+    iSes = cat(2,iSes,iSes + iSes(end));
+    tRun = cat(2,tRun,tRun);
+end
+
 
 % xaxis time after stim onset and baselines
 switch param.model
@@ -73,7 +82,7 @@ iStim = iStim+nnz(pInd);
 
 
 %% Plot design matrix
-if force || ~exist(fMat.fMatFig,'file')
+if force || ~exist(char(fMat.fMatFig),'file')
     hMat = figure('Visible','off');
     h = imagesc(mat); colormap gray
     h.Parent.YTick = iSes(:);
@@ -96,7 +105,7 @@ if force || ~exist(fMat.fMatFig,'file')
     [~,b,~] = fileparts(fileparts(fMat.fStat));
     title(b,'interpreter','none')
     set(hMat, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
-    savefig(hMat,fMat.fMatFig,'compact')
+    savefig(hMat,char(fMat.fMatFig),'compact')
     if verbose>0
         hMat.Visible = 'on';
         hMat.WindowStyle = 'docked';

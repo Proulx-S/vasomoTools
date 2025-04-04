@@ -17,10 +17,12 @@ if isempty(verbose); verbose = 0; end
 % if ~isfield(param,'skipCat'); param.skipCat = []; end
 % if ~isfield(param,'skipRun'); param.skipRun = []; end
 if ~isfield(param,'dryRun'); param.dryRun = []; end
-% if isempty(param.skipMov); param.skipMov = 0; end
+if ~isfield(param,'PCflag'); param.PCflag = []; end
+        % if isempty(param.skipMov); param.skipMov = 0; end
 % if isempty(param.skipCat); param.skipCat = 0; end
 % if isempty(param.skipRun); param.skipRun = 0; end
 if isempty(param.dryRun); param.dryRun = 0; end
+if isempty(param.PCflag); param.PCflag = 0; end
 
 %% Assert data files
 if ~iscell(fVolTs) && ~ischar(fVolTs{1})
@@ -31,7 +33,6 @@ end
 if ~isa(dsgn,'runDsgn')
     dbstack; error('old version, reconciliate')
 end
-dsgn
 
 %% Assert mask files
 if ~iscell(fMask) && ~ischar(fMask)
@@ -41,17 +42,28 @@ end
 %% Assert param
 param.dsgn = dsgn; clear dsgn
 if any((param.nFrameOrig-param.nFrame).*param.tr > param.dsgn.onsetList(1))
-    dbstack; error('too many dummy removed->timeseries begins after first event');
+    disp('!!!!!!!!!!!!!!!!!!!!!')
+    disp('WARNING: too many dummy removed->timeseries begins after first event')
+    disp('WARNING: discarding first event, but you really should reprocess with less dummies')
+    disp('!!!!!!!!!!!!!!!!!!!!!')
+    param.dsgn.onsetList(1) = [];
+    param.dsgn.ondurList(1) = [];
+    param.dsgn.cond(1)      = [];
+    % dbstack; error('too many dummy removed->timeseries begins after first event');
 end
 
 
 %% Run afni's 3dDeconvolve for response timecourse estimation
 param.model = 'TENTzero';
-% On each run
 R = size(fVolTs,1);
+% On each run
 clear fRespRun
 for r = 1:R
-    fRespRun(r,:) = runAfni(fVolTs(r,1),[r R],param,fMask(r,1),force,verbose); % analysis performed on each echoe within that function
+    if param.PCflag
+        fRespRun(r,:) = runAfni(fVolTs(r,:,:),[r R],param,fMask(r,1),force,verbose); % analysis performed on each echoe within that function
+    else
+        fRespRun(r,:) = runAfni(fVolTs(r,1),[r R],param,fMask(r,1),force,verbose); % analysis performed on each echoe within that function
+    end
 end
 % On catenated runs
 if R>1
@@ -87,11 +99,19 @@ param.model = 'SPMG2';
 R = size(fVolTs,1);
 clear fActRun
 for r = 1:R
-    fActRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    if param.PCflag
+        fActRun(r,:) = struct;
+    else
+        fActRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    end
 end
 % On catenated runs
 if R>1
-    fActCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    if param.PCflag
+        fActCat      = struct;
+    else
+        fActCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    end
 end
 
 
@@ -106,10 +126,14 @@ if R>1
     fRespCat.xMat      = plotDsgnMat(fRespCat     ,forceThis,verboseThis);
 end
 for r = 1:R
-    fActRun(r,1).xMat = plotDsgnMat(fActRun(r,1),forceThis,verboseThis);
+    if numel(fields(fActRun(r,1)))
+        fActRun(r,1).xMat = plotDsgnMat(fActRun(r,1),forceThis,verboseThis);
+    end
 end
 if R>1
-    fActCat.xMat      = plotDsgnMat(fActCat     ,forceThis,verboseThis);
+    if numel(fields(fActRun(r,1)))
+        fActCat.xMat      = plotDsgnMat(fActCat     ,forceThis,verboseThis);
+    end
 end
 
 
@@ -118,13 +142,19 @@ end
 verboseThis = verbose;
 forceThis   = force;
 fRespRun = unpackAfni(fRespRun,[],forceThis,verboseThis);
-fActRun  = unpackAfni(fActRun, [],forceThis,verboseThis);
+if numel(fields(fActRun))
+    fActRun  = unpackAfni(fActRun, [],forceThis,verboseThis);
+end
 if R>1
     fRespCat = unpackAfni(fRespCat,[],forceThis,verboseThis);
-    fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
+    if numel(fields(fActCat))
+        fActCat  = unpackAfni(fActCat, [],forceThis,verboseThis);
+    end
 else
     fRespCat = fRespRun; fRespCat.r = 0;
-    fActCat  = fActRun;  fActCat.r = 0;
+    if numel(fields(fActCat))
+        fActCat  = fActRun;  fActCat.r = 0;
+    end
 end
 
 
@@ -356,14 +386,19 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
     end
 
 
-    sz = size(fList);
+    sz = size(fList,[1 2 3]);
     multiRun  = sz(1)>1;
     multiEcho = sz(2)>1;
+    if diff([sz(3)>1 param.PCflag]); dbstack; error('expecting PCflag or 2 volTs in the 3rd dimension'); end
     
 
     %%%%%%%
     %% Mask
     %%%%%%%
+    if iscell(fMask) && size(fMask,1)>1
+        if length(unique(fMask))>1; dbstack; error('multiple masks not supported'); end
+        fMask = fMask{1};
+    end
     mriMask = MRIread(char(fMask));
     mriMask.vol([1:5 end-4:end],:              ) = 0;
     mriMask.vol(:              ,[1:5 end-4:end]) = 0;
@@ -372,37 +407,59 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
 
 
     cmd = {src.afni};
-    if size(fList,2)>1; dbstack; error('double-check that'); end
     for E = 1:size(fList,2)
 
         %% Define files
-        fIn = fList(:,E);
+        fIn = fList(:,E,:);
         if multiRun
-            fOut = char(fIn(1)); fOut = strsplit(fOut,'_');
-            fOut{contains(fOut,'run-')} = 'run-cat'; fOut = strjoin(fOut,'_'); if ~exist(fileparts(fOut),'dir'); mkdir(fileparts(fOut)); end
+            fOut = fIn(1,:,:);
+            for iii = 1:size(fOut,3)
+                fOut{iii} = strsplit(fOut{iii},'_');
+                fOut{iii}{contains(fOut{iii},'run-')} = 'run-cat';
+                fOut{iii} = strjoin(fOut{iii},'_'); if ~exist(fileparts(fOut{iii}),'dir'); mkdir(fileparts(fOut{iii})); end
+            end
         else
-            fOut = char(fIn);
+            fOut = fIn;
         end
         
 
-        fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats']); % let's let afni use its native file format, it is sometimes glitchy otherwise
-        fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+        if param.PCflag
+            fStat  = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats']); % let's let afni use its native file format, it is sometimes glitchy otherwise
+            fFit   = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+        else
+            fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats']); % let's let afni use its native file format, it is sometimes glitchy otherwise
+            fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+        end
         if param.getResid
+            dbstack; error('double-check that')
             fResid = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_resid.nii.gz']);
         else
             fResid = '';
         end
-        fMask  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_mask.nii.gz' ]);
-        mriMask.fspec = fMask; MRIwrite(mriMask,fMask);
-        fResp    = repmat({''},size(param.dsgn.condLabel));
-        fRespStd = repmat({''},size(param.dsgn.condLabel));
+        fMask  = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_mask.nii.gz' ]);
+        if ~exist(fileparts(char(fMask)),'dir'); mkdir(fileparts(char(fMask))); end
+        mriMask.fspec = fMask; MRIwrite(mriMask,char(fMask));
         switch HRmodel
             case {'TENT' 'TENTzero'}
-                for k = 1:param.dsgn.condK
-                    fResp{k}    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respAv.nii.gz']);
-                    fRespStd{k} = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respSd.nii.gz']);
+                if param.PCflag
+                    fResp    = repmat({''},[size(param.dsgn.condLabel,[1 2]) 2]);
+                    fRespStd = repmat({''},[size(param.dsgn.condLabel,[1 2]) 2]);
+                    for k = 1:param.dsgn.condK
+                        fResp(1,k,:)    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respAv.nii.gz']);
+                        fRespStd(1,k,:) = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respSd.nii.gz']);
+                    end
+                else
+                    fResp    = repmat({''},size(param.dsgn.condLabel));
+                    fRespStd = repmat({''},size(param.dsgn.condLabel));
+                    for k = 1:param.dsgn.condK
+                        fResp(k)    = cellstr(fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respAv.nii.gz']));
+                        fRespStd(k) = cellstr(fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_respSd.nii.gz']));
+                    end
                 end
             case {'SPMG2' 'SPMG3'}
+                fResp    = [];
+                fRespStd = [];
+                if param.PCflag; dbstack; error('should not attempt to run SPMG models on PC data'); end
             otherwise
                 dbstack; error('figure that out')
         end
@@ -421,12 +478,21 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
             end
             if any(durList); dbstack; error('different durations across trials within the same condition, code that (hint: -stim_times_AM1)'); end
             % Move on assuming same duration across trials within the same condition
-            fStim = cell(size(param.dsgn.condLabel));
-            for k = 1:param.dsgn.condK
-                fStim{k} = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_startTime.1D']);
+            if param.PCflag
+                fStim = repmat({''},[size(param.dsgn.condLabel,[1 2]) 2]);
+                for k = 1:param.dsgn.condK
+                    fStim(:,k,:) = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_startTime.1D']);
+                end
+                fMat    = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.1D']);
+                fMatFig = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.fig']);
+            else
+                fStim = cell(size(param.dsgn.condLabel));
+                for k = 1:param.dsgn.condK
+                    fStim(k) = cellstr(fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-' param.dsgn.condLabel{k} '_model-' HRmodel '_startTime.1D']));
+                end
+                fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.1D']);
+                fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.fig']);
             end
-            fMat    = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.1D']);
-            fMatFig = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats.xmat.fig']);
         end
 
    
@@ -473,14 +539,23 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
             system(strjoin([{srcAfni} cmdTmpTmp],newline))
         end
 
-        if force || anyDontExist([fResp fRespStd [fStat '+orig.BRIK']])
-            cmdTmp = [cmdTmp cmdTmpTmp];
+        switch param.model
+            case {'TENTzero' 'TENT'}
+                if force || anyDontExist([fResp(:)' fRespStd(:)' [char(fStat) '+orig.BRIK']])
+                    cmdTmp = [cmdTmp cmdTmpTmp];
+                    cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fResp)   ,' ')];
+                    cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fRespStd),' ')];
+                end
+            case {'SPMG2' 'SPMG3'}
+                if force || ~exist([char(fStat) '+orig.BRIK'],'file')
+                    cmdTmp = [cmdTmp cmdTmpTmp];
+                end
+            otherwise
+                dbstack; error('figure that out')
         end
-        cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fResp)   ,' ')];
-        cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fRespStd),' ')];
-        cmdTmp{end+1} = ['echo ''   '''                [fStat '+orig']         ];
-        cmdTmp{end+1} = ['echo ''   '''                 fMat          ];
-        if ~force && ~anyDontExist([fResp fRespStd [fStat '+orig.BRIK']])
+        cmdTmp{end+1} = ['echo ''   '''                [char(fStat) '+orig']         ];
+        cmdTmp{end+1} = ['echo ''   '''                 char(fMat)          ];
+        if ~force && ~anyDontExist([fResp(:)' fRespStd(:)' [fStat '+orig.BRIK']])
             cmdTmp{end+1} = 'echo ''   ''already done, skipping';
         end
 
@@ -491,7 +566,7 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
     end
 
     %% Run afni command
-    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout); dbstack; error(cmdout); error('x'); end
+    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR','IgnoreCase',false); dbstack; error(cmdout); end
 
 
 
@@ -517,7 +592,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     if ~dryRun
         cmd{end+1} = ['-input ' sprintf(['%s[' num2str(param.nDummyIgnore) '..$] '],fIn{:}) ' \'];
         if ~isempty(fMask)
-            cmd{end+1} = ['-mask ' fMask ' \'];
+            cmd{end+1} = ['-mask ' char(fMask) ' \'];
         end
     else
         dbstack; error('code that')
@@ -526,84 +601,27 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         end
         cmd{end+1} = ['-nodata ' num2str(nFrame) ' ' num2str(tr,'%0.16f') ' \'];
     end
-    cmd{end+1} = '-polort A -local_times \';
-    cmd{end+1} = ['-stim_times_subtract ' num2str(mean(tr.*nDummy),'%f') ' \'];
+    cmd{end+1} = '-polort A \';
+    cmd{end+1} = ['-local_times -stim_times_subtract ' num2str(mean(tr.*nDummy),'%f') ' \'];
     
     % Set design
     dsgn = param.dsgn;
-    nRegAll = [];
-    cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK) ' \'];
-    kList = sort(unique(dsgn.cond));
-    cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
-    for k = 1:dsgn.condK
-        cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
-
-        % write design to file
-        if dryRun
-            fStim = [tempname '_startTime.1D' ];
-        end
-        fido = fopen(fStim{k}, 'w');
-        if ~iscell(fIn); dbstack; error('fIn must be type cell'); end
-        for i = 1:size(fIn,1)
-            fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
-            fprintf(fido,'\n');
-        end
-        fclose(fido);
-
-        
-        % Set model
-        switch param.model
-            case 'SPMG2'
-                dur = dsgn.ondurList(kList(k)==dsgn.cond); if ~isempty(dur) && any(diff(dur)); dbstack; error('stim duration cannot be different across trials'); end
-                dur = dur(1);
-                nReg = 2;
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
-                nRegAll(k) = nReg;
-            case 'SPMG3'
-                dbstack; error('double-check that')
-                nReg = 3;
-                if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
-            case 'TENT'
-                dbstack; error('code that')
-            case 'TENTzero'
-                if isempty(param.forceDeconWin)
-                    % set the deconvolution window to the maximum (all the way up to the next stimulus or the end of the run)
-                    eTime     = dsgn.onsetList(dsgn.cond==kList(k));
-                    eTimeNext = find(dsgn.cond==kList(k))+1;
-                    if eTimeNext(end) > length(dsgn.onsetList)
-                        eTimeNext(end) = [];
-                        eTimeNext = dsgn.onsetList(eTimeNext);
-                        eTimeNext(end+1) = (nFrame + mode(nDummyRemoved)) * tr;
-                    else
-                        eTimeNext = dsgn.onsetList(eTimeNext);
-                    end
-                    deconWin = min(eTimeNext - eTime);
-                    if (deconWin/trDecon)/ceil(deconWin/trDecon)>0.9
-                        deconWin = ceil(deconWin/trDecon)*trDecon;
-                    else
-                        deconWin = floor(deconWin/trDecon)*trDecon;
-                    end
-                    b = 0;
-                    c = round((deconWin-trDecon)/trDecon)*trDecon;
-                    nReg = round( (c-b)/trDecon + 1 );
-                    % (c-b)/(nReg-1)
-                else
-                    keyboard
-                    dbstack; error('code that');
-                end
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
-                nReg = nReg - 2;
-                if ~dryRun
-                    cmd{end+1} = ['-iresp ' num2str(k) ' ' fResp{k}    ' \'];
-                    cmd{end+1} = ['-sresp ' num2str(k) ' ' fRespStd{k} ' \'];
-                end
-                nRegAll(k) = nReg;
-            otherwise
-                dbstak; error('X');
-        end
+    if param.PCflag
+        cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK*2) ' \'];
+    else
+        cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK) ' \'];
     end
-    nReg = nRegAll;
+    cmd{end+1} = ['-TR_times ' num2str(trDecon,'%f') ' \'];
+    kList = sort(unique(dsgn.cond));
+    nReg = zeros(1,dsgn.condK);
+    for k = 1:dsgn.condK
+        if param.PCflag
+            [cmdTmp,nReg(k)] = setAfniStimFileAndCmd(k,kList,dsgn,fIn,fStim(:,k,:),param,dryRun,fResp,fRespStd);
+        else
+            [cmdTmp,nReg(k)] = setAfniStimFileAndCmd(k,kList,dsgn,fIn,fStim,param,dryRun,fResp,fRespStd);
+        end
+        cmd = [cmd cmdTmp];
+    end
 
 
     if dryRun
@@ -616,19 +634,139 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
 
     % Set outputs
     if ~dryRun
-        cmd{end+1} = ['-fitts ' fFit ' \'];
+        cmd{end+1} = ['-fitts ' char(fFit) ' \'];
         if ~isempty(fResid)
-            cmd{end+1} = ['-errts ' fResid ' \'];
+            dbstack; error('code that')
+            cmd{end+1} = ['-errts ' char(fResid) ' \'];
         end
         cmd{end+1} = '-bout -fout \';
     end
-    cmd{end+1} = ['-x1D ' fMat ' \'];
+    %%%%%%%%%%%%%%
+    %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
+    fMatTmp = [tempname '.xmat.1D'];
+    cmd{end+1} = ['-x1D ' char(fMatTmp) ' \'];
+    %%%%%%%%%%%%%%
     if ~dryRun
         if verbose>0
-            cmd{end+1} = ['-bucket ' fStat];
+            cmd{end+1} = ['-bucket ' char(fStat)];
         else
-            cmd{end+1} = ['-bucket ' fStat ' 2>/dev/null'];
+            cmd{end+1} = ['-bucket ' char(fStat) ' 2>/dev/null'];
         end
     else
         cmd{end}(end-1:end) = [];
+    end
+    %%%%%%%%%%%%%%
+    %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
+    cmd{end+1} = ['cp ' char(fMatTmp) ' ' char(fMat)];
+    %%%%%%%%%%%%%%
+
+
+
+function [cmd,nReg] = setAfniStimFileAndCmd(k,kList,dsgn,fIn,fStim,param,dryRun,fResp,fRespStd)
+    cmd = {};
+    if param.PCflag
+        cmd{end+1} = ['-stim_label ' num2str(k)            ' ' [char(dsgn.task) '_' dsgn.condLabel{k} 'Real'] ' \'];
+        cmd{end+1} = ['-stim_label ' num2str(dsgn.condK+k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k} 'Imag'] ' \'];
+    else
+        cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
+    end
+
+    % write design to file
+    if dryRun
+        fStim = [tempname '_startTime.1D' ];
+    end
+
+    if param.PCflag
+        %real
+        fido = fopen(fStim{:,:,1}, 'w');
+        for i = 1:size(fIn,1)
+            fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
+            fprintf(fido,'\n');
+        end
+        for i = 1:size(fIn,1)
+            fprintf(fido,'*');
+            fprintf(fido,'\n');
+        end
+        fclose(fido);
+        %imag
+        fido = fopen(fStim{:,:,2}, 'w');
+        for i = 1:size(fIn,1)
+            fprintf(fido,'*');
+            fprintf(fido,'\n');
+        end
+        for i = 1:size(fIn,1)
+            fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
+            fprintf(fido,'\n');
+        end
+        fclose(fido);
+    else
+        fido = fopen(char(fStim), 'w');
+        if ~iscell(fIn); dbstack; error('fIn must be type cell'); end
+        for i = 1:size(fIn,1)
+            fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
+            fprintf(fido,'\n');
+        end
+        fclose(fido);
+    end
+    
+
+    
+    % Set model
+    switch param.model
+        case 'SPMG2'
+            dur = dsgn.ondurList(kList(k)==dsgn.cond); if ~isempty(dur) && any(diff(dur)); dbstack; error('stim duration cannot be different across trials'); end
+            dur = dur(1);
+            nReg = 2;
+            cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
+            nRegAll(k) = nReg;
+        case 'SPMG3'
+            dbstack; error('double-check that')
+            nReg = 3;
+            if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
+            cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
+        case 'TENT'
+            dbstack; error('code that')
+        case 'TENTzero'
+            % set the deconvolution window to the maximum (all the way up to the next stimulus or the end of the run)
+            eTime     = dsgn.onsetList(dsgn.cond==kList(k));
+            eTimeNext = find(dsgn.cond==kList(k))+1;
+            if eTimeNext(end) > length(dsgn.onsetList)
+                eTimeNext(end) = [];
+                eTimeNext = dsgn.onsetList(eTimeNext);
+                eTimeNext(end+1) = max(param.nFrame) * mean(param.tr); % use max nFrame in case of a run interruption
+                % eTimeNext(end+1) = (param.nFrame + mode(param.nFrameOrig - param.nFrame)) * mean(param.tr);
+            else
+                eTimeNext = dsgn.onsetList(eTimeNext);
+            end
+            deconWin = min(eTimeNext - eTime);
+            % deconWin = deconWin - 3*tr; % ensure at least one acquisition tr (not trDecon) of baseline between each stimulus
+            if (deconWin/param.trDecon)/ceil(deconWin/param.trDecon)>0.9
+                deconWin = ceil(deconWin/param.trDecon)*param.trDecon;
+            else
+                deconWin = floor(deconWin/param.trDecon)*param.trDecon;
+            end
+            b = 0;
+            c = round((deconWin-param.trDecon)/param.trDecon)*param.trDecon;
+            nReg = round( (c-b)/param.trDecon + 1 );
+            % (c-b)/(nReg-1)
+            if param.PCflag
+                cmd{end+1} = ['-stim_times ' num2str(k)            ' ' fStim{:,:,1} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+                cmd{end+1} = ['-stim_times ' num2str(dsgn.condK+k) ' ' fStim{:,:,2} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+            else
+                cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(fStim) ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+            end
+            nReg = nReg - 2;
+            if ~dryRun
+                if param.PCflag
+                    cmd{end+1} = ['-iresp ' num2str(k)            ' ' fResp{:,:,1}    ' \'];
+                    cmd{end+1} = ['-sresp ' num2str(k)            ' ' fRespStd{:,:,1} ' \'];
+                    cmd{end+1} = ['-iresp ' num2str(dsgn.condK+k) ' ' fResp{:,:,2}    ' \'];
+                    cmd{end+1} = ['-sresp ' num2str(dsgn.condK+k) ' ' fRespStd{:,:,2} ' \'];
+                else
+                    cmd{end+1} = ['-iresp ' num2str(k) ' ' char(fResp)    ' \'];
+                    cmd{end+1} = ['-sresp ' num2str(k) ' ' char(fRespStd) ' \'];
+                end
+            end
+        otherwise
+            dbstak; error('X');
     end

@@ -28,7 +28,8 @@ for R = 1:length(mList)
         disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     end
 end
-fList = volTs.fPreprocList(:,1);
+
+fList = volTs.fPreprocList;
 if isempty(dsgn)
     dsgn = volTs.dsgn;
 end
@@ -38,15 +39,13 @@ end
 param.nFrameOrig    = volTs.nFrameOrig;
 param.nFrame        = volTs.nFrame;
 param.tr            = volTs.tr;
-param.trDecon       = dsgn.dt;
-% param.tr            = volTs.tr;
-% param.nDummyRemoved = volTs.nFrameOrig - volTs.nFrame;
+if (abs(dsgn.dt-mean(param.tr))./mean(param.tr))<0.1
+    param.trDecon       = dsgn.dt;
+else
+    param.trDecon       = mean(param.tr);
+end
+% param.trDecon       = dsgn.dt;
 
-
-
-
-% if ~all(diff([volTs.tr])<0.01); dbstack; error('runs have different tr'); end
-% tr = [volTs.tr]./1000;
 
 
 % if mean(tr) == dsgn.dt
@@ -74,13 +73,52 @@ param.trDecon       = dsgn.dt;
 % end
 
 
+
+
+
 %% Compute response and activation
-[fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(fList,dsgn,mList,param,force,verbose);
+[fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(fList(:,1),dsgn,mList,param,force,verbose);
 
 volResp.respCat = fRespCat;
 volResp.respRun = fRespRun;
 volResp.actCat = fActCat;
 volResp.actRun = fActRun;
+
+
+
+
+
+%% Compute response --- phase contrast data
+% Detect phase contrast data
+realInd = contains(fList(1,:),'part-real');
+imagInd = contains(fList(1,:),'part-imag');
+if any(realInd) && any(imagInd)
+    disp('phase contrast data detected')
+    realInd = contains(fList,'part-real');
+    imagInd = contains(fList,'part-imag');
+    realInd = find(all(realInd,1));
+    imagInd = find(all(imagInd,1));
+    if length(realInd)==1 && length(imagInd)==1
+        disp('and well-defined')
+        param.PCflag = true;
+    else
+        disp('but not well-defined... skipping')
+        param.PCflag = false;
+    end
+end
+
+% Fit phase contrast data
+if param.PCflag
+    [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fList(:,[realInd imagInd]),[1 3 2]),dsgn,mList,param,force,verbose);
+
+    volRespPC.respCat = fRespCat;
+    volRespPC.respRun = fRespRun;
+    volRespPC.actCat = [];
+    volRespPC.actRun = [];
+end
+
+
+
 
 
 

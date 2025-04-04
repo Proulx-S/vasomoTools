@@ -29,16 +29,40 @@ cmd = {src.afni};
 %%% from each run
 fIn = stats.fStat;
 for r = 1:size(fRes.fIn,1)
-    dOut = strsplit(fRes.fIn{r},filesep); dOut = strjoin(dOut(1:end-1),filesep);
-    fOut = strsplit(fIn        ,filesep); fOut = fOut{end};
+    if fRes.param.PCflag
+        dOut = strsplit(fRes.fIn{r,1,1},filesep); dOut = strjoin(dOut(1:end-1),filesep);
+        dOut = replace(dOut,'part-real','part-realImag');
+    else
+        dOut = strsplit(fRes.fIn{r},filesep); dOut = strjoin(dOut(1:end-1),filesep);
+    end
+    fOut = strsplit(char(fIn)        ,filesep); fOut = fOut{end};
     fOut = replace(fOut,'_stats','_poly0base.nii.gz');
     fOut = fullfile(dOut,fOut);
     stats.fPoly0Base{r,1} = fOut;
-    if force || ~exist(fOut,'file')    
-        buck = ['Run#' num2str(r) 'Pol#0_Coef'];
-        cmd{end+1} = '3dbucket -overwrite \';
-        cmd{end+1} = ['-prefix ' fOut ' \'];
-        cmd{end+1} = [fIn '+orig[' buck ']'];
+    if force || ~exist(fOut,'file')
+        if fRes.param.PCflag
+            % real
+            buck = ['Run#' num2str(r) 'Pol#0_Coef'];
+            cmd{end+1} = '3dbucket -overwrite \';
+            cmd{end+1} = ['-prefix ' replace(fOut,'part-realImag','part-real') ' \'];
+            cmd{end+1} = [char(fIn) '+orig[' buck ']'];
+            % imaginary
+            buck = ['Run#' num2str(r+size(fRes.fIn,1)) 'Pol#0_Coef'];
+            cmd{end+1} = '3dbucket -overwrite \';
+            cmd{end+1} = ['-prefix ' replace(fOut,'part-realImag','part-imag') ' \'];
+            cmd{end+1} = [char(fIn) '+orig[' buck ']'];
+            % abs
+            cmd{end+1} = '3dcalc -overwrite \';
+            cmd{end+1} = ['-prefix ' fOut ' \'];
+            cmd{end+1} = ['-a ' replace(fOut,'part-realImag','part-real') ' \'];
+            cmd{end+1} = ['-b ' replace(fOut,'part-realImag','part-imag') ' \'];
+            cmd{end+1} = '-expr ''sqrt(a*a+b*b)''';
+        else
+            buck = ['Run#' num2str(r) 'Pol#0_Coef'];
+            cmd{end+1} = '3dbucket -overwrite \';
+            cmd{end+1} = ['-prefix ' fOut ' \'];
+            cmd{end+1} = [char(fIn) '+orig[' buck ']'];
+        end
     end
 end
 %%% concatenate across runs
@@ -68,6 +92,10 @@ end
 %%% from each run
 for r = 1:size(fRes.fIn,1)
     fIn  = char(fRes.fIn(r));
+    if fRes.param.PCflag
+        fIn = replace(fIn,'part-real','part-mag');   fIn = strsplit(fIn,'_');
+        fIn{contains(fIn,'rec-venc')} = 'rec-venc0'; fIn = strjoin(fIn,'_');
+    end
     fOut = replace(fIn,'preproc_volTs.nii.gz','preproc_volTsAv.nii.gz');
     stats.fTsAvBase{r,1} = fOut;
     if force || ~exist(fOut,'file')
@@ -108,67 +136,118 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
                 stats.fResp{1,k}   = '';
                 stats.fRespSd{1,k} = '';
             case {'TENT' 'TENTzero'}
-                stats.fResp{1,k}   = fRes.fResp{1,k};
-                stats.fRespSd{1,k} = fRes.fRespStd{1,k};
-                fIn   = stats.fResp{1,k};
-                % baseline from fit
-                fOut  = replace(fIn,'_respAv.nii.gz','_respAvOnPoly0Base.nii.gz');
-                if fRes.r==0
-                    fBase = stats.fPoly0Base_catAv;
+                if fRes.param.PCflag
+                    stats.fResp(1,k,:)   = fRes.fResp(1,k,:);
+                    stats.fResp(1,k,3)   = replace(replace(stats.fResp(1,k,1),'part-real','part-realImag'),'_respAv.nii.gz','_respAvPhase.nii.gz');
+                    stats.fResp(1,k,4)   = replace(replace(stats.fResp(1,k,1),'part-real','part-realImag'),'_respAv.nii.gz','_respAvMag.nii.gz');
+                    % get phase
+                    if force || ~exist(stats.fResp{1,k,3},'file')
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' stats.fResp{1,k,3} ' \'];
+                        cmd{end+1} = ['-a '      stats.fResp{1,k,1} ' \'];
+                        cmd{end+1} = ['-b '      stats.fResp{1,k,2} ' \'];
+                        cmd{end+1} = '-expr ''atan2(b,a)''';
+                    end
+                    % get mag
+                    if force || ~exist(stats.fResp{1,k,4},'file')
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' stats.fResp{1,k,4} ' \'];
+                        cmd{end+1} = ['-a '      stats.fResp{1,k,1} ' \'];
+                        cmd{end+1} = ['-b '      stats.fResp{1,k,2} ' \'];
+                        cmd{end+1} = '-expr ''sqrt(a*a+b*b)''';
+                    end
+
+                    stats.fRespSd(1,k,:) = fRes.fRespStd(1,k,:);
+                    stats.fRespSd(1,k,3) = replace(replace(stats.fRespSd(1,k,1),'part-real','part-realImag'),'_respAv.nii.gz','_respAvPhase.nii.gz');
+                    stats.fRespSd(1,k,4) = replace(replace(stats.fRespSd(1,k,1),'part-real','part-realImag'),'_respAv.nii.gz','_respAvMag.nii.gz');
+                    % get phase
+                    if force || ~exist(stats.fRespSd{1,k,3},'file')
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' stats.fRespSd{1,k,3} ' \'];
+                        cmd{end+1} = ['-a '      stats.fRespSd{1,k,1} ' \'];
+                        cmd{end+1} = ['-b '      stats.fRespSd{1,k,2} ' \'];
+                        cmd{end+1} = '-expr ''atan2(b,a)''';
+                    end
+                    % get mag
+                    if force || ~exist(stats.fRespSd{1,k,4},'file')
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' stats.fRespSd{1,k,4} ' \'];
+                        cmd{end+1} = ['-a '      stats.fRespSd{1,k,1} ' \'];
+                        cmd{end+1} = ['-b '      stats.fRespSd{1,k,2} ' \'];
+                        cmd{end+1} = '-expr ''sqrt(a*a+b*b)''';
+                    end
+
+                    % too lazy to add baseline to mag
+                    stats.fRespOnPoly0Base = {};
+                    stats.fRespOnTsAvBase = {};
                 else
-                    fBase = char(stats.fPoly0Base);
-                end
-                stats.fRespOnPoly0Base{1,k} = fOut;
-                if force || ~exist(fOut,'file')
-                    cmd{end+1} = '3dcalc -overwrite \';
-                    cmd{end+1} = ['-prefix ' fOut ' \'];
-                    cmd{end+1} = ['-a ' fIn   ' \'];
-                    cmd{end+1} = ['-b ' fBase ' \'];
-                    cmd{end+1} = '-expr ''a+b''';
-                end
-                % baseline from temporal average
-                fOut  = replace(fIn,'_respAv.nii.gz','_respAvOnTsAvBase.nii.gz');
-                if fRes.r==0
-                    fBase = stats.fTsAvBase_catAv;
-                else
-                    fBase = char(stats.fTsAvBase);
-                end
-                stats.fRespOnTsAvBase{1,k} = fOut;
-                if force || ~exist(fOut,'file')
-                    cmd{end+1} = '3dcalc -overwrite \';
-                    cmd{end+1} = ['-prefix ' fOut ' \'];
-                    cmd{end+1} = ['-a ' fIn   ' \'];
-                    cmd{end+1} = ['-b ' fBase ' \'];
-                    cmd{end+1} = '-expr ''a+b''';
+                    stats.fResp{1,k}   = fRes.fResp{1,k};
+                    stats.fRespSd{1,k} = fRes.fRespStd{1,k};
+                    fIn   = stats.fResp{1,k};
+                    % baseline from fit
+                    fOut  = replace(fIn,'_respAv.nii.gz','_respAvOnPoly0Base.nii.gz');
+                    if fRes.r==0
+                        fBase = stats.fPoly0Base_catAv;
+                    else
+                        fBase = char(stats.fPoly0Base);
+                    end
+                    stats.fRespOnPoly0Base{1,k} = fOut;
+                    if force || ~exist(fOut,'file')
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' fOut ' \'];
+                        cmd{end+1} = ['-a ' fIn   ' \'];
+                        cmd{end+1} = ['-b ' fBase ' \'];
+                        cmd{end+1} = '-expr ''a+b''';
+                    end
+                    % baseline from temporal average
+                    fOut  = replace(fIn,'_respAv.nii.gz','_respAvOnTsAvBase.nii.gz');
+                    if fRes.r==0
+                        fBase = stats.fTsAvBase_catAv;
+                    else
+                        fBase = char(stats.fTsAvBase);
+                    end
+                    stats.fRespOnTsAvBase{1,k} = fOut;
+                    if force || ~exist(fOut,'file')
+                        cmd{end+1} = '3dcalc -overwrite \';
+                        cmd{end+1} = ['-prefix ' fOut ' \'];
+                        cmd{end+1} = ['-a ' fIn   ' \'];
+                        cmd{end+1} = ['-b ' fBase ' \'];
+                        cmd{end+1} = '-expr ''a+b''';
+                    end
                 end
         otherwise
             dbstack; error('code that');
         end
+        if fRes.param.PCflag
+            % Need to implement something to combine the real and imaginay regressors
+            % 3dDeconvolve glt ?
+            continue
+        end
     end
 
     %% Extract F-value
-    fIn = stats.fStat;
+    fIn = char(stats.fStat);
     if k==0 % full-model
         fOut = replace(fIn,'_stats','_fVal.nii.gz');
         stats.fFullF = fOut;
     else    % individual conditions of the model
         fOut = replace(fIn,'_stats','_fVal.nii.gz');
         fOut = replace(fOut,'cond-FULL',['cond-' stats.condList{k}]);
-        stats.fCondF{1,k} = fOut;
+        stats.fCondF{1,k} = char(fOut);
     end
     if force || ~exist(fOut,'file')
         cmd{end+1} = '3dbucket -overwrite \';
         cmd{end+1} = ['-prefix ' fOut ' \'];
         if k==0 % full-model
-            cmd{end+1} = [fIn '+orig[Full_Fstat]'];
+            cmd{end+1} = [char(fIn) '+orig[Full_Fstat]'];
         else    % individual conditions of the model
-            cmd{end+1} = [fIn '+orig[' stats.task '_' stats.condList{k} '_Fstat]'];
+            cmd{end+1} = [char(fIn) '+orig[' stats.task '_' stats.condList{k} '_Fstat]'];
         end
     end
 
     %% Compute p-value
     if k==0 % full-model
-        fIn  = stats.fFullF;
+        fIn  = char(stats.fFullF);
         fOut = replace(fIn,'_fVal.nii.gz','_fValP.nii.gz');
         stats.fFullF_pVal = fOut;
     else    % individual conditions of the model
@@ -188,7 +267,7 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
 
     %% Compute q-value (fdr)
     if k==0 % full-model
-        fIn  = stats.fFullF;
+        fIn  = char(stats.fFullF);
         fOut = replace(fIn,'_fVal.nii.gz','_fValQ.nii.gz');
         stats.fFullF_qVal      = fOut;
     else    % individual conditions of the model
@@ -198,9 +277,9 @@ for k = 0:fRes.param.dsgn.condK % 0 for the full model; >=1 for each event condi
     end
     if force || ~exist(fOut,'file')
         cmd{end+1} = '3dFDR -overwrite -qval \';
-        cmd{end+1} = ['-prefix ' fOut ' \'];
-        cmd{end+1} = ['-input ' fIn ' \'];
-        cmd{end+1} = ['-mask ' fMask];
+        cmd{end+1} = ['-prefix ' char(fOut) ' \'];
+        cmd{end+1} = ['-input ' char(fIn) ' \'];
+        cmd{end+1} = ['-mask ' char(fMask)];
     end
 end
 
@@ -225,9 +304,9 @@ for k = 1:fRes.param.dsgn.condK
     if fRes.r==0 && strcmp(fRes.param.model,'SPMG2') % only for analysis on catenated runs for sufficient precision in delay estimation
         
         % Extract coefficients
-        fIn = stats.fStat;
+        fIn = char(stats.fStat);
         fOut = replace(fIn,'cond-FULL',['cond-' stats.condList{k}]);
-        fOut = replace(fOut,'_stats','_coefs.nii.gz');
+        fOut = char(replace(fOut,'_stats','_coefs.nii.gz'));
         stats.fCondCoef{1,k} = fOut;
         if force || ~exist(fOut,'file')
             cmd = {src.afni};
