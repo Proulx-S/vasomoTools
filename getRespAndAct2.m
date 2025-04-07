@@ -601,7 +601,11 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         end
         cmd{end+1} = ['-nodata ' num2str(nFrame) ' ' num2str(tr,'%0.16f') ' \'];
     end
-    cmd{end+1} = '-polort A \';
+    if param.PCflag
+        cmd{end+1} = '-polort 0 \';
+    else
+        cmd{end+1} = '-polort A \';
+    end
     cmd{end+1} = ['-local_times -stim_times_subtract ' num2str(mean(tr.*nDummy),'%f') ' \'];
     
     % Set design

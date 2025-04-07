@@ -76,7 +76,7 @@ end
 
 
 
-%% Compute response and activation
+%% Compute response and activation --- magnitude-only data
 [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(fList(:,1),dsgn,mList,param,force,verbose);
 
 volResp.respCat = fRespCat;
@@ -88,7 +88,7 @@ volResp.actRun = fActRun;
 
 
 
-%% Compute response --- phase contrast data
+%% Compute response --- phase-contrast + magnitude data in complex domain
 % Detect phase contrast data
 realInd = contains(fList(1,:),'part-real');
 imagInd = contains(fList(1,:),'part-imag');
@@ -105,18 +105,62 @@ if any(realInd) && any(imagInd)
         disp('but not well-defined... skipping')
         param.PCflag = false;
     end
+else
+    param.PCflag = false;
+    clear realInd imagInd
 end
 
-% Fit phase contrast data
+% Fit timeseries in complex domain
 if param.PCflag
     [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fList(:,[realInd imagInd]),[1 3 2]),dsgn,mList,param,force,verbose);
+
+    volRespCmplx.respCat = fRespCat;
+    volRespCmplx.respRun = fRespRun;
+    volRespCmplx.actCat = [];
+    volRespCmplx.actRun = [];
+end
+
+
+%% Compute response --- phase-contrast-only data (mag=1) in complex domain
+if param.PCflag
+    % Remove magnitude data from complex-domain data
+    disp('Converting to phase-only complex data (setting magnitude to 1)...');
+    fListMag1 = replace(replace(fList(:,[realInd imagInd]),'part-real','part-realMag1'),'part-imag','part-imagMag1');
+    for r = 1:size(fListMag1,1)
+        disp(['run ' num2str(r) ' of ' num2str(size(fListMag1,1))])
+        if ~exist(fileparts(fListMag1{r,1}),'dir'); mkdir(fileparts(fListMag1{r,1})); end
+        if ~exist(fileparts(fListMag1{r,2}),'dir'); mkdir(fileparts(fListMag1{r,2})); end
+            
+        if force || ~exist(fListMag1{r,1},'file') || ~exist(fListMag1{r,2},'file')
+            % Read real and imaginary parts
+            mriR = MRIread(fList{r,1});
+            mriI = MRIread(fList{r,2});
+            
+            % Convert to polar
+            mriPhase = rmfield(mriR,'vol');
+            [mriPhase.vol,~] = cart2pol(mriR.vol,mriI.vol);
+            mriMag = rmfield(mriR,'vol');
+            mriMag.vol = ones(size(mriR.vol));
+            
+            % Convert back to cartesian
+            [mriR.vol,mriI.vol] = pol2cart(mriPhase.vol,mriMag.vol);
+
+            % Write
+            MRIwrite(mriR,fListMag1{r,1});
+            MRIwrite(mriI,fListMag1{r,2});
+        else
+            disp('already done, skipping')
+        end
+    end
+    
+    % Fit timeseries in complex domain
+    [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fListMag1,[1 3 2]),dsgn,mList,param,force,verbose);
 
     volRespPC.respCat = fRespCat;
     volRespPC.respRun = fRespRun;
     volRespPC.actCat = [];
     volRespPC.actRun = [];
 end
-
 
 
 
