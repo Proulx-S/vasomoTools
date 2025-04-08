@@ -1,4 +1,4 @@
-function volResp = getVolResp2(volTs,volAnat,dsgn,info,force,verbose)
+function [volResp,volRespCmplx,volRespCmplxMag1] = getVolResp2(volTs,volAnat,dsgn,info,force,verbose)
 if ~exist('volAnat','var'); volAnat = []; end
 if ~exist('dsgn','var');       dsgn = []; end
 if ~exist('info','var');       info = []; end
@@ -118,6 +118,8 @@ if param.PCflag
     volRespCmplx.respRun = fRespRun;
     volRespCmplx.actCat = [];
     volRespCmplx.actRun = [];
+else
+    volRespCmplx = [];
 end
 
 
@@ -156,10 +158,12 @@ if param.PCflag
     % Fit timeseries in complex domain
     [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fListMag1,[1 3 2]),dsgn,mList,param,force,verbose);
 
-    volRespPC.respCat = fRespCat;
-    volRespPC.respRun = fRespRun;
-    volRespPC.actCat = [];
-    volRespPC.actRun = [];
+    volRespCmplxMag1.respCat = fRespCat;
+    volRespCmplxMag1.respRun = fRespRun;
+    volRespCmplxMag1.actCat = [];
+    volRespCmplxMag1.actRun = [];
+else
+    volRespCmplxMag1 = [];
 end
 
 

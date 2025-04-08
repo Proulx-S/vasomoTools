@@ -152,9 +152,7 @@ if R>1
     end
 else
     fRespCat = fRespRun; fRespCat.r = 0;
-    if numel(fields(fActCat))
-        fActCat  = fActRun;  fActCat.r = 0;
-    end
+    fActCat  = fActRun;  fActCat.r  = 0;
 end
 
 
@@ -396,7 +394,12 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
     %% Mask
     %%%%%%%
     if iscell(fMask) && size(fMask,1)>1
-        if length(unique(fMask))>1; dbstack; error('multiple masks not supported'); end
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        disp('multiple masks not supported, using the first one')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        disp('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        % if length(unique(fMask))>1; dbstack; error('multiple masks not supported'); end
         fMask = fMask{1};
     end
     mriMask = MRIread(char(fMask));
