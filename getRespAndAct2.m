@@ -349,7 +349,11 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
     
     % Handle multiple runs
     if r
-        param.tr            = param.tr(r,:);
+        try
+            param.tr            = param.tr(r,:);
+        catch
+            warning(['only one tr found in param.tr' newline 'using the same for all runs'])
+        end
         param.nFrame        = param.nFrame(r,:);
         param.nFrameOrig    = param.nFrameOrig(r,:);
         % param.nDummyRemoved = param.nDummyRemoved(r,:);

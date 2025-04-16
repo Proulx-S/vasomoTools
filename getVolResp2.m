@@ -75,6 +75,7 @@ end
 
 
 
+param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
 
 %% Compute response and activation --- magnitude-only data
 [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(fList(:,1),dsgn,mList,param,force,verbose);
@@ -123,7 +124,6 @@ end
 
 %% Compute response --- phase-contrast-only data (mag=1) in complex domain
 if param.PCflag
-
     % Remove magnitude data from complex-domain data
     disp('Converting to phase-only complex data (setting magnitude to 1)...');
     fListMag1 = replace(replace(fList(:,[realInd imagInd]),'part-real','part-realMag1'),'part-imag','part-imagMag1');
@@ -164,7 +164,6 @@ if param.PCflag
     end
     
     % Fit timeseries in complex domain
-    param.durDecon = 0.75; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
     [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fListMag1,[1 3 2]),dsgn,mList,param,force,verbose);
 
 

@@ -43,7 +43,12 @@ for r = 1:length(param.nFrame)
     else
         iSes(:,r) = iRun(:,r) + sum(param.nFrame(1:r-1));
     end
-    tRun(:,r) = (iRun(:,r) + param.nDummyRemoved(r) + param.nDummyIgnore -1) .* param.tr(r);
+    try
+        tRun(:,r) = (iRun(:,r) + param.nDummyRemoved(r) + param.nDummyIgnore -1) .* param.tr(r);
+    catch
+        tRun(:,r) = (iRun(:,r) + param.nDummyRemoved(r) + param.nDummyIgnore -1) .* param.tr;
+        warning(['only one tr found in param.tr' newline 'using the same for all runs'])
+    end
 end
 
 if param.PCflag
