@@ -86,8 +86,6 @@ volResp.actRun = fActRun;
 
 
 
-
-
 %% Compute response --- phase-contrast + magnitude data in complex domain
 % Detect phase contrast data
 realInd = contains(fList(1,:),'part-real');
@@ -125,6 +123,7 @@ end
 
 %% Compute response --- phase-contrast-only data (mag=1) in complex domain
 if param.PCflag
+
     % Remove magnitude data from complex-domain data
     disp('Converting to phase-only complex data (setting magnitude to 1)...');
     fListMag1 = replace(replace(fList(:,[realInd imagInd]),'part-real','part-realMag1'),'part-imag','part-imagMag1');
@@ -135,14 +134,14 @@ if param.PCflag
             
         if force || ~exist(fListMag1{r,1},'file') || ~exist(fListMag1{r,2},'file')
             % Read real and imaginary parts
-            mriR = MRIread(fList{r,1});
-            mriI = MRIread(fList{r,2});
+            mriR = MRIread(fList{r,realInd});
+            mriI = MRIread(fList{r,imagInd});
             
             % Convert to polar
             mriPhase = rmfield(mriR,'vol');
             [mriPhase.vol,~] = cart2pol(mriR.vol,mriI.vol);
             mriMag = rmfield(mriR,'vol');
-            mriMag.vol = ones(size(mriR.vol));
+            mriMag.vol = ones(size(mriR.vol)).*4096;
             
             % Convert back to cartesian
             [mriR.vol,mriI.vol] = pol2cart(mriPhase.vol,mriMag.vol);
@@ -150,13 +149,49 @@ if param.PCflag
             % Write
             MRIwrite(mriR,fListMag1{r,1});
             MRIwrite(mriI,fListMag1{r,2});
+
+            % % Read again to confirm phase is fine
+            % mriR2 = MRIread(fListMag1{r,1});
+            % mriI2 = MRIread(fListMag1{r,2});
+            % [theta,rho2] = cart2pol(mriR2.vol,mriI2.vol);
+            % figure('WindowStyle','docked')
+            % min(abs(mriPhase.vol(:) - theta(:)))
+            % max(abs(mriPhase.vol(:) - theta(:)))
+
         else
             disp('already done, skipping')
         end
     end
     
     % Fit timeseries in complex domain
+    param.durDecon = 0.75; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
     [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fListMag1,[1 3 2]),dsgn,mList,param,force,verbose);
+
+
+
+    % % Confirm fitting baseline phase in the complex domain is really the same as averaging in the phase domain
+    % close all
+    % r = 1;
+    % mriR = MRIread(fList{r,realInd});
+    % mriI = MRIread(fList{r,imagInd});
+    % [theta,rho] = cart2pol(mean(mriR.vol,4),mean(mriI.vol,4));
+    % figure('WindowStyle','docked')
+    % imagesc(theta,[-pi pi]); colormap gray
+    % colorbar
+    % ax2 = gca;
+
+    % p0real = MRIread(fRespRun(r).stats.fPoly0Base{1});
+    % p0imag = MRIread(fRespRun(r).stats.fPoly0Base{2});
+    % [p0theta,p0rho] = cart2pol(p0real.vol,p0imag.vol);
+    % figure('WindowStyle','docked')
+    % imagesc(p0theta,[-pi pi]); colormap gray
+    % colorbar
+    % ax3 = gca;
+    % linkaxes([ax2 ax3])
+    % set([ax2 ax3],'PlotBoxAspectRatio',[1 1 1],'DataAspectRatio',[1 1 1])
+
+
+
 
     volRespCmplxMag1.respCat = fRespCat;
     volRespCmplxMag1.respRun = fRespRun;

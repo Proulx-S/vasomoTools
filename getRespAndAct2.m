@@ -746,6 +746,9 @@ function [cmd,nReg] = setAfniStimFileAndCmd(k,kList,dsgn,fIn,fStim,param,dryRun,
                 eTimeNext = dsgn.onsetList(eTimeNext);
             end
             deconWin = min(eTimeNext - eTime);
+            if isfield(param,'durDecon') && ~isempty(param.durDecon)
+                deconWin = deconWin.*param.durDecon;
+            end
             % deconWin = deconWin - 3*tr; % ensure at least one acquisition tr (not trDecon) of baseline between each stimulus
             if (deconWin/param.trDecon)/ceil(deconWin/param.trDecon)>0.9
                 deconWin = ceil(deconWin/param.trDecon)*param.trDecon;
