@@ -9,8 +9,10 @@ if isempty(force);     force = 0; end
 if isempty(verbose); verbose = 1; end
         
 
-
-%% Assert inputs
+%%%%%%%%%
+%% Assert
+%%%%%%%%%
+%%% assert inputs
 if isa(volTs,'runCond')
     disp('volTs is runCond format')
 end
@@ -35,7 +37,7 @@ if isempty(dsgn)
 end
 
 
-%% Assert parameters
+%%% assert parameters
 param.nFrameOrig    = volTs.nFrameOrig;
 param.nFrame        = volTs.nFrame;
 param.tr            = volTs.tr;
@@ -45,49 +47,34 @@ else
     param.trDecon       = mean(param.tr);
 end
 % param.trDecon       = dsgn.dt;
+%% %%%%%%
 
 
 
-% if mean(tr) == dsgn.dt
-%     param.trDecon = mean(tr);
-% else
-%     param.trDecon = dsgn.dt;
-%     warning(strjoin({''...
-%         ['volume TR   =  ' sprintf('%7.6f ',mean(tr)) 'sec']...
-%         ['stim dt     =  ' sprintf('%7.6f ',dsgn.dt) 'sec']...
-%         ['stim onsets = [' sprintf('%7.3f ',dsgn.onsetList) ']sec']...
-%         ['            = [' sprintf('%7.3f ',(dsgn.onsetList / mean(tr))) ']vol']...
-%         ['Defaulting to stim dt (not TR) for deconvolution = ' num2str(param.trDecon,'%7.6f') 'sec']},newline))
-% end
-
-
-
-
-% %% Adjust dsgn
-% if isfield(dsgn,'nullTrial') && ~isempty(dsgn.nullTrial)
-%     dsgn.cond = dsgn.nullTrial + 1;
-%     dsgn.condLabel = {'stim' 'catch'}';
-% elseif isempty(dsgn.cond)
-%     dsgn.cond = ones(size(dsgn.onsetList));
-%     dsgn.condLabel = {'stim'}';
-% end
-
-
-
-
-param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
-
+forceThis   = 1;
+verboseThis = 1;
+param.durDecon = 0.95; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response and activation --- magnitude-only data
-[fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(fList(:,1),dsgn,mList,param,force,verbose);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+[fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(fList(:,1),dsgn,mList,param,forceThis,verboseThis);
 
 volResp.respCat = fRespCat;
 volResp.respRun = fRespRun;
 volResp.actCat = fActCat;
 volResp.actRun = fActRun;
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
+if 0
+
+forceThis   = 0;
+verboseThis = 0;
+param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response --- phase-contrast + magnitude data in complex domain
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Detect phase contrast data
 realInd = contains(fList(1,:),'part-real');
 imagInd = contains(fList(1,:),'part-imag');
@@ -120,9 +107,14 @@ if param.PCflag
 else
     volRespCmplx = [];
 end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
+forceThis   = 0;
+verboseThis = 0;
+param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response --- phase-contrast-only data (mag=1) in complex domain
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 if param.PCflag
     % Remove magnitude data from complex-domain data
     disp('Converting to phase-only complex data (setting magnitude to 1)...');
@@ -199,8 +191,14 @@ if param.PCflag
 else
     volRespCmplxMag1 = [];
 end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+else
 
+volRespCmplx     = [];
+volRespCmplxMag1 = [];
+    
+end
 
 
 

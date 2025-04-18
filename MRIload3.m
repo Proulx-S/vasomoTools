@@ -67,10 +67,10 @@ if isstruct(f) || isa(f,'runCond')
             %this contains a list of files, read their headers
             if any(ismember(f.dataType,'volTs'))
                 %this is a volTs, read its headers
-                if ~isfield(f,'sub')  || isempty(f.sub);  f.sub  = '?';                              end
-                if ~isfield(f,'ses')  || isempty(f.ses);  f.ses  = repmat('?',size(f.fPreprocList)); end
-                if ~isfield(f,'acq')  || isempty(f.acq);  f.acq  = '?';                              end
-                if ~isfield(f,'task') || isempty(f.task); f.task = '?';                              end
+                if ~isa(f,'runCond') && ~isfield(f,'sub')  || isempty(f.sub);  f.sub  = '?';                              end
+                if ~isa(f,'runCond') && ~isfield(f,'ses')  || isempty(f.ses);  f.ses  = repmat('?',size(f.fPreprocList)); end
+                if ~isa(f,'runCond') && ~isfield(f,'acq')  || isempty(f.acq);  f.acq  = '?';                              end
+                if ~isa(f,'runCond') && ~isfield(f,'task') || isempty(f.task); f.task = '?';                              end
                 mri = MRIload3(f.fPreprocList,f);
                 for r = 1:length(f.fPreprocList)
                     f.volTs(r,1).mri = mri(r);
