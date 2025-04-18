@@ -601,6 +601,20 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         if ~isempty(fMask)
             cmd{end+1} = ['-mask ' char(fMask) ' \'];
         end
+
+        %%% Censored time points
+        cnsr = cell(size(fIn));
+        for i = 1:length(fIn)
+            cnsr{i} = readmatrix(replace(fIn{i},'preproc_volTs.nii.gz','censor_preproc_volTs.csv'));
+            cnsr{i} = cnsr{i}(param.nDummyIgnore+1:end,2);
+        end
+        cnsr = find(cat(1,cnsr{:})==0);
+        if ~isempty(cnsr)
+            if param.PCflag; dbstack; error('need to adapt implementation of censorship when real and imaginary data are catenated in time as in here'); end
+            cmd{end+1} = ['-CENSORTR ' strjoin(arrayfun(@num2str,cnsr-1,'UniformOutput',false),',') ' \'];
+        end
+    
+
     else
         dbstack; error('code that')
         if isempty(nFrame)
@@ -655,7 +669,11 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     %%%%%%%%%%%%%%
     %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
     fMatTmp = [tempname '.xmat.1D'];
-    cmd{end+1} = ['-x1D ' char(fMatTmp) ' \'];
+    cmd{end+1} = ['-x1D_uncensored ' char(fMatTmp) ' \'];
+    if ~isempty(cnsr)
+        fMatTmp2 = replace(fMatTmp,'.xmat.1D','X.xmat.1D');
+        cmd{end+1} = ['-x1D_regcensored ' char(fMatTmp2) ' \'];
+    end
     %%%%%%%%%%%%%%
     if ~dryRun
         if verbose>0
@@ -669,6 +687,9 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     %%%%%%%%%%%%%%
     %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
     cmd{end+1} = ['cp ' char(fMatTmp) ' ' char(fMat)];
+    if ~isempty(cnsr)
+        cmd{end+1} = ['cp ' char(fMatTmp2) ' ' char(replace(fMat,'.xmat.1D','.xmatCnsrClmn.1D'))];
+    end
     %%%%%%%%%%%%%%
 
 

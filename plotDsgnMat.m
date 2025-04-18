@@ -9,7 +9,6 @@ if ~isfield(param,'nDummyRemoved') || isempty(param.nDummyRemoved)
     param.nDummyRemoved = param.nFrameOrig-param.nFrame;
 end
 if diff(param.nDummyRemoved)>0; dbstack; error('nDummyRemoved cannot be different across runs'); end
-
 %% Extract design matrix
 cmdX = {src.afni};
 cmdX{end+1} = ['1dcat ' char(fMat(1).fMat)];
@@ -86,6 +85,20 @@ pInd(1:nPoly) = true;
 iStim = iStim+nnz(pInd);
 
 
+fMatCnsr = replace(char(fMat(1).fMat),'.xmat.1D','.xmatCnsrClmn.1D');
+if exist(fMatCnsr,'file')
+    cmdX = {src.afni};
+    cmdX{end+1} = ['1dcat ' fMatCnsr];
+    [~,cmdout] = system(strjoin(cmdX,newline));
+    matX = str2num(cmdout);
+    nCnsr = size(matX,2) - size(mat,2);
+    cnsr = any(matX(:,end-nCnsr+1:end),2);
+else
+    cnsr = [];
+end
+
+
+
 %% Plot design matrix
 if force || ~exist(char(fMat.fMatFig),'file')
     hMat = figure('Visible','off');
@@ -106,6 +119,9 @@ if force || ~exist(char(fMat.fMatFig),'file')
             error('code that')
     end
     clim([-1 1])
+    if ~isempty(cnsr)
+        yline(find(cnsr),'r')
+    end
 
     [~,b,~] = fileparts(fileparts(fMat.fStat));
     title(b,'interpreter','none')
@@ -126,6 +142,7 @@ xMat.tRun  = tRun';
 xMat.tStim = tStim;
 xMat.nReg  = nReg;
 xMat.nPoly = nPoly;
+xMat.cnsr  = cnsr;
 
 
 
