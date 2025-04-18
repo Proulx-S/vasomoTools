@@ -46,8 +46,13 @@ function [out,avMap] = volAnatPreproc6(rCond,force,verbose)
     [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
     
 
-    [fVolCorr,fVolTsCorr,fVol,fVolField] = correctBiasField(fAvCatAv, fMaskBrain, [], force, verbose)
-    [fVesselMask,fNonVesselMask] = computeVesselness(fVolCorr,fMaskBrain,force,verbose);
+    forceThis = 1;
+    %%%% correct bias field
+    [fVolCorr,fVolTsCorr,fVol,fVolField] = correctBiasField(fAvCatAv, fMaskBrain, [], forceThis, verbose);
+
+    forceThis = 1;
+    %%%% compute vesselness
+    [fComp,fNonComp,labelList] = computeVesselness(fVolCorr,fMaskBrain,forceThis,verbose);
 
 
 
