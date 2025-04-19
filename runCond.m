@@ -49,5 +49,8 @@ classdef runCond
       bhvr   
       phs
       QA
+      r
+      R
+      mri
    end
 end

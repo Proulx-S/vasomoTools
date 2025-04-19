@@ -1,4 +1,4 @@
-function funPsd = runFullMT6(rCond,W,K,win,dsgn,mask,skipSVD,skipPSD,verbose)
+function funPsd = runFullMT6(rCond,W,K,win,dsgn,mask,skipSVD,skipPSD,force,verbose)
 % Wrapper for the Chronux's mtspectrumc function for multitaper estimation of
 % pds spectra, compatible with MRI data imported by MRIread.m.
 %
@@ -65,8 +65,20 @@ if isempty(testFlag); testFlag = 0; end
 
 if 1
     % [volTs.volTs.dsgn] = deal(volTs.dsgn);
-    for I = 1:numel(volTs)
-        funPsd(I) = doIt(volTs(I).mri,W,K,win,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
+    rCond.fPreprocList
+    
+    for I = 1:size(rCond.fPreprocList,1)
+        
+        rCond.r = I;
+        rCond.R = size(rCond.fPreprocList,1);
+        if isempty(rCond.volTs)
+            rCond.volTs = vec2vol(rCond.volTs);
+            rCond.volTs = vol2vec(MRIread(rCond.fPreprocList{I,1,1}));
+        else
+            rCond.volTs(I,1,1) = MRIread(rCond.fPreprocList{I,1,1});
+        end
+        
+        funPsd(I) = doIt(rCond,W,K,win,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
     end
     funPsd = reshape(funPsd,size(volTs));
 
@@ -154,10 +166,17 @@ if isempty(testFlag); testFlag = 0; end
 if isempty(win); win = [inf 0]; end
 windFlag = 0;
 
-if ~isfield(funTs,'nvoxels') || isempty(funTs.nvoxels)
-    funTs.nvoxels = max(size(funTs.vec,2),prod(size(funTs.vol,[1 2 3])));
+if ~isempty(funTs.mri.vol)
+    nVox = prod(size(funTs.mri.vol,[1 2 3]));
+elseif isfield(funTs.mri,'vec') && ~isempty(funTs.mri.vec)
+    nVox = size(funTs.mri.vec,2);
+else
+    nVox = funTs.mri.nvoxels;    
 end
-if funTs.nvoxels==1; if verbose; disp('only one timeseries, skipping SVD'); end; skipSVD = true; end
+if nVox==1
+    if verbose; disp('only one timeseries, skipping SVD'); end
+    skipSVD = true;
+end
 
 param.win = win; % win always in seconds; param.win in seconds here, but will be converted to frames later
 param.onsetList = onsetList; % alwaysin seconds
@@ -181,52 +200,56 @@ skipTrialGramMD = skipTrialGram;
 %     param.onsetList = [];
 % end
 
-%% Load data
-if (~isfield(funTs,'vec') || isempty(funTs.vec)) && (~isfield(funTs,'vol') || isempty(funTs.vol))
-    funTs = MRIload3(funTs,mask,[],1);
-else
+% %% Load data
+% if (~isfield(funTs,'vec') || isempty(funTs.vec)) && (~isfield(funTs,'vol') || isempty(funTs.vol))
+%     funTs = MRIload3(funTs,mask,[],1);
+% else
 
     %% Mask
     if ~isempty(mask)
-        funTs = applyMask(funTs,mask);
-        funTs.mask = mask;
+        funTs.mri = vol2vec(funTs.mri,mask);
+        % funTs.mri = applyMask(funTs.mri,mask);
+        % funTs.mask = mask;
     end
-end
+% end
 
-%% Assert
-if isfield(funTs,'vec') && ~isempty(funTs.vec); tmp = all(funTs.vec==0,1); else tmp = all(funTs.vol==0,4); end
-if any(tmp(:)); warning('Some voxels are all 0s. Adjust your mask to avoid later problems'); end
+% %% Assert
+% if isfield(funTs,'vec') && ~isempty(funTs.vec); tmp = all(funTs.vec==0,1); else tmp = all(funTs.vol==0,4); end
+% if any(tmp(:)); warning('Some voxels are all 0s. Adjust your mask to avoid later problems'); end
 
-%% Complete som stuff
-if isfield(funTs,'tr') && length(funTs.tr)>1
-    funTs.tr = mean(funTs.tr);
-end
-if ~isfield(funTs,'tr') || isempty(funTs.tr) || isnan(funTs.tr)
-    if isfield(funTs,'Fs')
-        funTs.tr = 1/funTs.Fs(1) *1000;
-    else
-        dbstack; error('code that');
-    end
-end
-tr = funTs.tr/1000;
+%% Complete some stuff
+% if isfield(funTs,'tr') && length(funTs.tr)>1
+%     funTs.tr = mean(funTs.tr);
+% end
+% if ~isfield(funTs,'tr') || isempty(funTs.tr) || isnan(funTs.tr)
+%     if isfield(funTs,'Fs')
+%         funTs.tr = 1/funTs.Fs(1) *1000;
+%     else
+%         dbstack; error('code that');
+%     end
+% end
 
-if ~isfield(funTs,'nDummyRemoved')
-    funTs.nDummyRemoved = 0;
-end
-if ~isfield(funTs,'t') || isempty(funTs.t) || any(isnan(funTs.t))
-    n = funTs.nframes;
-    s = tr.*(0+funTs.nDummyRemoved  );
-    e = tr.*(n+funTs.nDummyRemoved-1);
-    funTs.t = linspace(s,e,n)';
-end
+tr = funTs.tr(funTs.r);
+nDummyRemoved = funTs.nFrameOrig(funTs.r) - funTs.nFrame(funTs.r);
+t = ((nDummyRemoved+1):funTs.nFrameOrig(funTs.r))-1; t = (t.*tr)';
+
+% if ~isfield(funTs,'nDummyRemoved')
+%     funTs.nDummyRemoved = 0;
+% end
+% if ~isfield(funTs,'t') || isempty(funTs.t) || any(isnan(funTs.t))
+%     n = funTs.nframes;
+%     s = tr.*(0+funTs.nDummyRemoved  );
+%     e = tr.*(n+funTs.nDummyRemoved-1);
+%     funTs.t = linspace(s,e,n)';
+% end
 
 
 
 %% Set parameters
 Wflag = ~isempty(W);
 Kflag = ~isempty(K);
-% tpFlag = ~isempty(tp); if tpFlag; Wflag = false; Kflag = false; end
-if ~isfield(funTs,'nruns'); funTs.nruns = 1; end
+% % tpFlag = ~isempty(tp); if tpFlag; Wflag = false; Kflag = false; end
+% if ~isfield(funTs,'nruns'); funTs.nruns = 1; end
 %%% Window size (defined in seconds up to here, then in number of frames)
 if param.win(1)==inf
     %%%% single-window over the full time series
@@ -268,7 +291,8 @@ if isfield(funTs,'t') && ~isempty(funTs.t) && all(~isnan(funTs.t)) && max(abs(di
     onsetList = onsetList(onsetList < funTs.t(nFrame));
 else
     hackFlag = 0;
-    nFrame = funTs.nframes;
+    % nFrame = funTs.nframes;
+    nFrame = funTs.nFrame(funTs.r);
 end
     
     
