@@ -80,7 +80,7 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
 
     forceThis = force;
     %%%% compute vesselness
-    [fComp,fNonComp,labelList,fSegFig] = computeVesselness(fVolCorr,fMaskBrain,forceThis,verbose);
+    [fComp,fNonComp,fSegFig] = computeVesselness(fVolCorr,fMaskBrain,forceThis,verbose);
 
     
     %% Draw vessel rois

@@ -1,4 +1,4 @@
-function [fComp,fNonComp,labelList,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
+function [fComp,fNonComp,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
     if ~exist('force','var'); force = []; end
     if isempty(force);        force = 0 ; end
     if ~exist('verbose','var'); verbose = []; end
@@ -196,14 +196,6 @@ function [fComp,fNonComp,labelList,fSegFig] = computeVesselness(fVol,fMask,force
     end
     savefig(hFig,fSegFig,'compact')
 
-
-
-
-
-
-
-    else
-        labelList
 
 
 

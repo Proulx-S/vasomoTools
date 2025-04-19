@@ -51,8 +51,8 @@ end
 
 
 
-forceThis   = 1;
-verboseThis = 1;
+forceThis   = force;
+verboseThis = verbose;
 param.durDecon = 0.95; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response and activation --- magnitude-only data
@@ -69,8 +69,8 @@ volResp.actRun = fActRun;
 
 if 0
 
-forceThis   = 0;
-verboseThis = 0;
+forceThis   = force;
+verboseThis = verbose;
 param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response --- phase-contrast + magnitude data in complex domain
@@ -109,8 +109,8 @@ else
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-forceThis   = 0;
-verboseThis = 0;
+forceThis   = force;
+verboseThis = verbose;
 param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response --- phase-contrast-only data (mag=1) in complex domain
