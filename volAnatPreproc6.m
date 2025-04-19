@@ -1,4 +1,4 @@
-function [out,avMap] = volAnatPreproc6(rCond,force,verbose)
+function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     global src
     if ~exist('force','var');     force = []; end
     if ~exist('verbose','var'); verbose = []; end
@@ -24,41 +24,112 @@ function [out,avMap] = volAnatPreproc6(rCond,force,verbose)
     fCatAv = fullfile(fCatAv,['cat_' char(b) '.nii.gz']);
     fAvCatAv = strsplit(fCatAv,filesep); fAvCatAv{end} = ['av_' fAvCatAv{end}]; fAvCatAv = strjoin(fAvCatAv,filesep);
 
-    cmd = {src.afni};
-    cmd{end+1} = ['3dTcat -overwrite \'];
-    cmd{end+1} = ['-prefix ' fCatAv ' \'];
-    cmd{end+1} = strjoin(fAvList,' ');
-    cmd{end+1} = ['3dTstat -overwrite -mean \'];
-    cmd{end+1} = ['-prefix ' fAvCatAv ' \'];
-    cmd{end+1} = fCatAv;
-    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+    if force || ~exist(fCatAv,'file') || ~exist(fAvCatAv,'file')
+        cmd = {src.afni};
+        cmd{end+1} = ['3dTcat -overwrite \'];
+        cmd{end+1} = ['-prefix ' fCatAv ' \'];
+        cmd{end+1} = strjoin(fAvList,' ');
+        cmd{end+1} = ['3dTstat -overwrite -mean \'];
+        cmd{end+1} = ['-prefix ' fAvCatAv ' \'];
+        cmd{end+1} = fCatAv;
+        if verbose
+            [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+        else
+            [status,cmdout] = system(strjoin(cmd,newline)        ); if status; dbstack; error(cmdout); error('x'); end
+        end
+    end
+
+
 
     %%% Combine masks
     fMaskBrainInv = unique(rCond.(char(taskList)).fPreprocMaskList); fMaskBrainInv(cellfun('isempty',fMaskBrainInv)) = [];
     if length(fMaskBrainInv)>1; dbstack; error('more than one mask found'); end; fMaskBrainInv = char(fMaskBrainInv);
     %%%% conform
-    fMaskBrainInv2 = replace(fAvCatAv,'_volTs.nii.gz','_brainMask.nii.gz'); copyfile(fMaskBrainInv,fMaskBrainInv2);
+    fMaskBrainInv2 = replace(fAvCatAv,'_volTs.nii.gz','_brainMaskInv.nii.gz'); copyfile(fMaskBrainInv,fMaskBrainInv2);
     fMaskBrainInv = fMaskBrainInv2;
     MRIconform(fMaskBrainInv,fAvCatAv);
-    fMaskBrain = replace(fMaskBrainInv,'_brainMask.nii.gz','_brainMaskInv.nii.gz');
-    cmd = {src.afni};
-    cmd{end+1} = ['3dcalc -overwrite -a ' fMaskBrainInv ' -expr ''-(a-1)'' -prefix ' fMaskBrain];
-    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+    fMaskBrain = replace(fMaskBrainInv,'_brainMaskInv.nii.gz','_brainMask.nii.gz');
+    if force || ~exist(fMaskBrain,'file')
+        cmd = {src.afni};
+        cmd{end+1} = ['3dcalc -overwrite -a ' fMaskBrainInv ' -expr ''-(a-1)'' -prefix ' fMaskBrain];
+        if verbose
+            [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+        else
+            [status,cmdout] = system(strjoin(cmd,newline)        ); if status; dbstack; error(cmdout); error('x'); end
+        end
+    end
+
+
+
+    %%% Output file index
+    acqLabel = strjoin({['acq-' rCond.(char(taskList)).acq] ['prsc-' rCond.(char(taskList)).prsc]},'_');
+    volAnat.mask.brain.f     = fMaskBrain;
+    volAnat.mask.brain.fInv  = fMaskBrainInv;
+    volAnat.mask.brain.fBase = fAvCatAv;
     
 
-    forceThis = 1;
+    % task = char(taskList);
+    % acq = rCond.(task).acq;
+    % prsc = rCond.(task).prsc;
+    
+
+    %% Preprocess anat for vesselness map (for a starting point to vessel drawing)
+    forceThis = force;
     %%%% correct bias field
     [fVolCorr,fVolTsCorr,fVol,fVolField] = correctBiasField(fAvCatAv, fMaskBrain, [], forceThis, verbose);
 
-    forceThis = 1;
+    forceThis = force;
     %%%% compute vesselness
-    [fComp,fNonComp,labelList] = computeVesselness(fVolCorr,fMaskBrain,forceThis,verbose);
+    [fComp,fNonComp,labelList,fSegFig] = computeVesselness(fVolCorr,fMaskBrain,forceThis,verbose);
+
+    
+    %% Draw vessel rois
+    derivDir = fullfile(rCond.(char(taskList)).dirsOrig.bidsDeriv,acqLabel);
+    fVesselRoi  = fullfile(derivDir,'vessel.nii.gz');
+
+    if force || ~exist(fVesselRoi,'file')
+        disp('!!!!!!!!!!')
+        disp('!!!!!!!!!!')
+        dbstack; warning('not implemented yet')
+        disp('!!!!!!!!!!')
+        disp('!!!!!!!!!!')
+    end
+
+
+    %%% Output file index
+    volAnat.label.calcarineVessel.f        = fVesselRoi;
+    volAnat.label.calcarineVessel.label    = {'artery' 'vein' 'Left-vessel' 'Right-vessel'};
+    volAnat.label.calcarineVessel.labelVal = [902 914 30 62];
+    volAnat.label.calcarineVessel.fBase = fVolCorr;
+    volAnat.label.calcarineVessel.fFig  = fSegFig;
+    if verbose
+        disp('FS color LUT');
+        disp('902->artery');
+        disp('914->vein');
+        disp('30 ->Left-vessel');
+        disp('62 ->Right-vessel');
+    end
+
+
+
+    %% Insert into rCond
+    if nargout>1
+        rCond.(char(taskList)).volAnat = volAnat;
+    end
+
+
+return
+
+    
 
 
 
 
 
 
+
+
+    
     %% %%%%%
     % ROIs %
     %%%%% %%
@@ -115,7 +186,11 @@ function [out,avMap] = volAnatPreproc6(rCond,force,verbose)
                 k = 2;
                 X = mri.vec(:);
 
-                hFig = figure('visible','off');
+                if verbose
+                    hFig = figure('WindowStyle','docked');
+                else
+                    hFig = figure('visible','off');
+                end
                 hT = tiledlayout(1,2); hT.TileSpacing = "tight"; hT.Padding = 'tight';
 
                 nexttile
@@ -153,15 +228,15 @@ function [out,avMap] = volAnatPreproc6(rCond,force,verbose)
                 volAnat.mask.vessel.mri = mriVessel;
 
                 fFig = volAnat.mask.vessel.fFig;
-                if verbose<=1
+                if ~verbose
                     set(hFig, 'CreateFcn', 'set(gcbo,''Visible'',''on'')');
                 end
                 savefig(hFig,fFig,'compact')
-                if verbose>1
-                    hFig.Visible = 'on';
-                    hFig.WindowStyle = 'docked';
-                    drawnow
-                end
+                % if verbose>1
+                %     hFig.Visible = 'on';
+                %     hFig.WindowStyle = 'docked';
+                %     drawnow
+                % end
             end
 
             %%% Manual refinement

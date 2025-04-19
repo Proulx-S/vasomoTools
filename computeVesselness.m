@@ -1,8 +1,30 @@
-function [fComp,fNonComp,labelList] = computeVesselness(fVol,fMask,force,verbose)
+function [fComp,fNonComp,labelList,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
     if ~exist('force','var'); force = []; end
     if isempty(force);        force = 0 ; end
     if ~exist('verbose','var'); verbose = []; end
     if isempty(verbose);        verbose = 0 ; end
+
+
+    %% Main parameters and file names
+    k = 3;
+    tmpLabelList = {'vessel' 'brain' 'nonBrain'};
+
+    fComp = cell(1,length(tmpLabelList));
+    fNonComp = cell(1,length(tmpLabelList));
+    for i = 1:k
+        fComp{i} = replace(fVol,'_volTs.nii.gz',['_' tmpLabelList{i} 'SegMask.nii.gz']);
+        fNonComp{i} = replace(fVol,'_volTs.nii.gz',['_non' tmpLabelList{i} 'SegMask.nii.gz']);
+    end
+    fSegFig = replace(fVol,'_volTs.nii.gz','_seg.fig');
+
+
+
+
+    if force || any(cellfun(@(x) ~exist(x,'file'),[fComp fNonComp cellstr(fSegFig)]))
+
+
+
+
     
     %% Read and plot data
     %%% Read in data
@@ -27,12 +49,17 @@ function [fComp,fNonComp,labelList] = computeVesselness(fVol,fMask,force,verbose
     hT = tiledlayout(2,2); hT.TileSpacing = "tight"; hT.Padding = 'tight';
     axDist = nexttile([2 1]);
     h = histogram(X,'Normalization','pdf'); hold on
+    title(hT,fVol,'Interpreter','none');
     
 
     %% Fit and plot distribution
+    % exception
+    if strcmp(fVol,'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
+        k = 4;
+    end
     %%% Fit gaussian mixture
-    k = 3;
-    GMModel = fitgmdist(X,k);
+    rng(42, 'twister'); % Fixed seed for consistent GMM fitting
+    GMModel = fitgmdist(X,k,'Options',statset('MaxIter',1000));
     
     % %%% Identify the component based on mean value
     % % Sort mu in ascending order to get proper indices
@@ -85,8 +112,11 @@ function [fComp,fNonComp,labelList] = computeVesselness(fVol,fMask,force,verbose
     % cLim(1) = 5; axProb{1}.CLim = cLim;
 
 
+    
+
     %% Label components
     labelList = repmat({'?'},k,1);
+    
     %%%% Narrowest component is brain
     [~,b] = min(GMModel.Sigma);
     labelList{b} = 'brain';
@@ -94,6 +124,38 @@ function [fComp,fNonComp,labelList] = computeVesselness(fVol,fMask,force,verbose
     %%%% Highest component is vessel
     [~,b] = max(GMModel.mu);
     labelList{b} = 'vessel';
+
+    % exception
+    if strcmp(fVol,'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
+        %%%% Second highest component is also vessel
+        [~,b] = sort(GMModel.mu,'descend');
+        labelList{b(2)} = 'vessel';
+    end
+
+    %%%% The rest
+    % make sure labels are ok
+    if ~all(ismember(labelList(~ismember(labelList,'?')),tmpLabelList))
+        dbstack; error('labelList does not match tmpLabelList');
+    end
+    % fill in non-formally defined labels
+    labelList(ismember(labelList,'?')) = tmpLabelList(~ismember(tmpLabelList,labelList));
+
+
+
+
+    % %% Merge components
+    % if strcmp(fVol,'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
+    %     b = find(ismember(labelList,'vessel'));
+    %     [~,bx] = max(GMModel.mu(b))
+    %     bx = b(bx); % component to merge
+    %     b = b(b~=bx); % component to merge to
+
+    %     segMap(segMap==bx) = b;
+    %     probMaps(:,:,:,b) = probMaps(:,:,:,b) + probMaps(:,:,:,bx);
+    %     probMaps(:,:,:,bx) = nan;
+    % end
+
+    
 
     %%%% update legend
     legend(hPlot,labelList)
@@ -115,42 +177,16 @@ function [fComp,fNonComp,labelList] = computeVesselness(fVol,fMask,force,verbose
 
 
     %% Write segmentation data
-    fComp = cell(1,length(labelList));
-    for i = 1:k
-        if strcmp(labelList{i},'?'); continue; end
-        fComp{i} = replace(fVol,'_volTs.nii.gz',['_' labelList{i} 'SegMask.nii.gz']);
-        if force || ~exist(fComp{i},'file')
-            mri.vol = ismember(segMap,find(ismember(labelList,labelList{i})));
+    for i = 1:length(fComp)
+        if force || ~exist(fComp{i},'file') || ~exist(fNonComp{i},'file')
+            mri.vol = ismember(segMap,find(ismember(labelList,tmpLabelList{i})));
             MRIwrite(mri,fComp{i});
-        end
-    end
-    fNonComp = cell(1,length(labelList));
-    for i = 1:k
-        if strcmp(labelList{i},'?'); continue; end
-        fNonComp{i} = replace(fVol,'_volTs.nii.gz',['_non' labelList{i} 'SegMask.nii.gz']);
-        if force || ~exist(fNonComp{i},'file')
-            mri.vol = ismember(segMap,find(~ismember(labelList,labelList{i})));
+            mri.vol = ismember(segMap,find(~ismember(labelList,tmpLabelList{i})));
             MRIwrite(mri,fNonComp{i});
         end
     end
 
-
-    % %%% Write vessel mask
-    % fVessel = replace(fVol,'_volTs.nii.gz','_vesselMask.nii.gz');
-    % if force || ~exist(fVessel,'file')
-    %     mri.vol = ismember(segMap,find(ismember(labelList,'vessel')));
-    %     MRIwrite(mri,fVessel);
-    % end
-
-    % %%% Write non-vessel mask
-    % fNonVessel = replace(fVol,'_volTs.nii.gz','_nonVesselMask.nii.gz');
-    % if force || ~exist(fNonVessel,'file')
-    %     mri.vol = ismember(segMap,find(~ismember(labelList,'vessel')));
-    %     MRIwrite(mri,fNonVessel);
-    % end
-
     %%% Save figure
-    fSegFig = replace(fVol,'_volTs.nii.gz','_seg.fig');
     if verbose
         % hFig.Visible = 'on';
         % hFig.WindowStyle = 'docked';
@@ -161,3 +197,17 @@ function [fComp,fNonComp,labelList] = computeVesselness(fVol,fMask,force,verbose
     savefig(hFig,fSegFig,'compact')
 
 
+
+
+
+
+
+    else
+        labelList
+
+
+
+
+
+
+    end
