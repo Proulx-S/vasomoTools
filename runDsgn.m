@@ -11,5 +11,7 @@ classdef runDsgn
       condLabel % [cellstr] event/trial condition labels (indices corresponds to values of cond)
       condK     % [int] number of event/trial conditions
       nReg      % [i] number of regressors
+      winSec    % [num,num] window length,step in seconds
+      win       % [int,int] window length,step in number of frames
    end
 end
