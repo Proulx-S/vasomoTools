@@ -5,12 +5,18 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     if isempty(force);            force = 0; end
     if isempty(verbose);        verbose = 0; end
 
+        
 
     %% Summarize across runs
     %%% Combine tasks
     taskList = fields(rCond); taskList(~contains(taskList,'task_')) = [];
     if length(taskList)>1; dbstack; error('need to combine data from multiple files'); end
     
+    disp('--------------------------------')
+    disp(['volAnat: ' rCond.(taskList{1}).sub '_acq-' rCond.(taskList{1}).acq '_prsc-' rCond.(taskList{1}).prsc '_venc-' rCond.(taskList{1}).vencAcq])
+    disp('--------------------------------')
+
+
     %%% Combine runs
     fAvList = cell(size(rCond.(char(taskList)).fPreprocList,1),1);
     for R = 1:size(rCond.(char(taskList)).fPreprocList,1)
@@ -109,6 +115,23 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         disp('30 ->Left-vessel');
         disp('62 ->Right-vessel');
     end
+
+
+
+
+
+    %% Individual vessel ROIs
+    if exist(fVesselRoi,'file')
+        label = volAnat.label.calcarineVessel;
+        imField = {'base'};
+        im = {label.fBase};
+        cropSz = 10;
+        volAnat.roi.vessel = getVesselRoi2(label,imField,im,cropSz);
+    else
+        % keyboard
+        volAnat.roi.vessel = [];
+    end
+    
 
 
 

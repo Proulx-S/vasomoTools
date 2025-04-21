@@ -1,4 +1,4 @@
-function funPsd = runFullMT6(rCond,W,K,winSec,dsgn,mask,skipSVD,skipPSD,force,verbose)
+function rCond = runFullMT6(rCond,W,K,winSec,dsgn,mask,skipSVD,skipPSD,force,verbose)
 % Wrapper for the Chronux's mtspectrumc function for multitaper estimation of
 % pds spectra, compatible with MRI data imported by MRIread.m.
 %
@@ -71,18 +71,19 @@ for I = 1:size(rCond.fPreprocList,1)
     else
         rCond.volTs(I,1,1) = vol2vec(MRIread(rCond.fPreprocList{I,1,1}));
     end
-    volMt(I) = doIt(rCond,W,K,winSec,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
+    volMt.run(I,1,1) = doIt(rCond,W,K,winSec,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
 end
 
 %% Compute on the average of all runs
-rCond.volTs(1).vol = mean(cat(5,rCond.volTs.vol),5);
+volTs = rCond.volTs;
 rCond.volTs(2:end) = [];
-rCond.r = 1;
-rCond.R = 1;
-volMt(end+1) = doIt(rCond,W,K,winSec,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
+rCond.volTs(1).vol = mean(cat(5,volTs.vol),5);
+rCond.r = 1; % in getVolResp2, 0 indicates the analysis is to be performed on volTs catenated across runs
+rCond.R = 1; 
+volMt.runAv = doIt(rCond,W,K,winSec,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
 
-
-
+rCond.volTs = volTs; clear volTs;
+rCond.volMt = volMt; clear volMt;
 
 
 % %% Quick inspection of results
@@ -176,41 +177,24 @@ volMt(end+1) = doIt(rCond,W,K,winSec,dsgn,mask,extra,skipSVD,skipPSD,verbose,tap
 
 
 
-disp('!!!!!!!')
-disp('!!!!!!!')
-disp('!!!!!!!')
-disp('!!!!!!!')
-disp('!!!!!!!')
-disp('continue the work here')
-dbstack;
-disp('!!!!!!!')
-disp('!!!!!!!')
-disp('!!!!!!!')
-disp('!!!!!!!')
-keyboard
 
 
 
 
 
-
-
-
-funPsd = reshape(funPsd,size(volTs));
-
-
-for I = 1:numel(volTs)
-    fieldList = {'psd' 'psdGram' 'psdTrialGram' 'psdTrialGramMD' 'svd' 'svdGram' 'svdTrialGram' 'svdTrialGramMD'};
-    for i = 1:length(fieldList)
-        if isfield(funPsd(I),fieldList{i}) && ~isempty(funPsd(I).(fieldList{i}))
-            if isfield(funPsd(I),'mask')
-                funPsd(I).(fieldList{i}).param.mask = funPsd(I).mask;
-            else
-                funPsd(I).(fieldList{i}).param.mask = [];
-            end
-        end
-    end
-end
+% funPsd = reshape(funPsd,size(volTs));
+% for I = 1:numel(volTs)
+%     fieldList = {'psd' 'psdGram' 'psdTrialGram' 'psdTrialGramMD' 'svd' 'svdGram' 'svdTrialGram' 'svdTrialGramMD'};
+%     for i = 1:length(fieldList)
+%         if isfield(funPsd(I),fieldList{i}) && ~isempty(funPsd(I).(fieldList{i}))
+%             if isfield(funPsd(I),'mask')
+%                 funPsd(I).(fieldList{i}).param.mask = funPsd(I).mask;
+%             else
+%                 funPsd(I).(fieldList{i}).param.mask = [];
+%             end
+%         end
+%     end
+% end
 
 
 
@@ -737,6 +721,7 @@ for sInd = 1:length(rCond)
     skip.gram        = skipGram;
     skip.trialGram   = skipTrialGram;
     skip.trialGramMD = skipTrialGramMD;
+    param.fMask = mask;
     paramInit = param;
     param.psd          = rmfield(paramInit,'dsgn');
     param.svd          = rmfield(paramInit,'dsgn');
@@ -773,6 +758,7 @@ for sInd = 1:length(rCond)
 
     %% Sort outputs
     volMt(sInd).param = param;
+    volMt(sInd).fMask = mask;
 
 
     % funPsd(sInd).psd.f = permute(funPsd(sInd).psd.f,[2 1 3 4 5 6]);
