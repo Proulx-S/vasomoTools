@@ -1,120 +1,67 @@
-function [ax,F] = plotSpec(volPsd,metricLabel,H,tWin,volTs,respQthresh)
-if ~exist('H','var'); H = [];                             end
-if isempty(H);        H = figure('WindowStyle','docked'); end
-
-if isfield(volPsd,'dsgn') && isfield(volPsd.dsgn,'f0'); f0 = volPsd.dsgn.f0; else; f0 = []; end
-
-if ~exist('tWin','var');                                     tWin = []; end
-if ~exist('metricLabel','var');                       metricLabel = []; end
-if ~exist('volTs','var');                                   volTs = []; end
-if ~exist('respQthresh','var');                       respQthresh = []; end
-if isempty(metricLabel);                              metricLabel = 'psd'; end % 'psd' 'coh'
-if isempty(respQthresh) && strcmp(metricLabel,'psd'); respQthresh = 0.05; end % 'psd' 'coh'
-threshAvFlag = ismember(metricLabel,{'psd' 'psdEPC'}) && ~isempty(volTs) && isfield(volTs,'resp') && ~isempty(respQthresh) && respQthresh~=inf && respQthresh~=1;
-
-switch class(H)
-    case 'matlab.graphics.layout.TiledChartLayout'
-        F = H.Parent;
-    case 'matlab.ui.Figure'
-        F = H;
-    otherwise
-end
-
-figure(F);
-ax = {};
-ax{end+1} = nexttile;
-
-
-%% Select approrpiate data
-switch metricLabel
-    case 'psd'
-        mt    = volPsd.psd;
-        vec   = mt.PSD;
-        label = 'spatially averaged spectrum';
-    case 'coh'
-        mt    = volPsd.svd;
-        vec   = mt.COH;
-        label = 'coherence spectrum';
-    otherwise
-        dbstack; error('code trhat')
-end
-
-
-
-
-%%% average across space
-if threshAvFlag
-    vec = squeeze(mean(vec(:,:,:,:,:,volTs.resp.Fq.vol(volPsd.vol2vec)<=respQthresh,:,1),6));
-else
-    vec = squeeze(mean(vec(:,:,:,:,:,:,:,1),6));
-end
-f = squeeze(mt.f);
-% f   = squeeze(volPsd.f);
-% psd = squeeze(mean(volPsd.vec,2));
-plot(f,vec,'k')
-grid on
-axis tight
-xlabel('f (Hz)')
-switch metricLabel
-    case 'psd'
-        ylabel('psd')
-        ax{end}.YScale = 'log';
-    case 'coh'
-        ylabel('coherence')
-    otherwise
-        dbstack; error('code trhat')
-end
-
-
-K = mt.K;
-T = mt.T;
-[TW,W] = K2W(T,K,0);
-
-paramStr = ['(K=' num2str(K) '; 2W=' num2str(W*2,'%0.4f') 'Hz; T=' num2str(T,'%0.2f') 'sec; TW=' num2str(TW) ')'];
-if threshAvFlag
-    title(['spectrum ' paramStr ' averaged across voxels with Q<=' num2str(respQthresh,'%0.2f')])
-else
-    switch metricLabel
-        case 'psd'
-            title(['spectrum ' paramStr ' averaged across voxels'])
-        case 'coh'
-            title(['coherence spectrum ' paramStr])
+function plotSpec(rCond,roi,H)
+    if ~exist('roi','var'); roi = struct; end    
+    if ~exist('H','var');     H = []    ; end
+    
+    %% Assert
+    if iscell(roi)
+        roi = [roi{:}];
     end
-end
+    if iscell(H)
+        H = [H{:}];
+    end
+    roi = roi(:);
+    H   = H(:);
+    % if all(size(roi) == flip(size(H))); roi = roi'; end
+    if length(roi) ~= length(H); dbstack; error('roi and H must have the same dimensions'); end
 
-yLim = vec(f>0.01);
-yLim = [min(yLim) max(yLim)];
-ylim(yLim)
-xlim([0 f(end)])
-
-addW([],volPsd.psd)
-
-
-
-if isfield(volPsd,'psdTrialGram') && ~isempty(volPsd.psdTrialGram)
-    addFreq([],volPsd.psdTrialGram.onsetList,volPsd.psdTrialGram.durList,2)
-end
-
-if ~isempty(f0)
-    xline(f0,'--b')
-end
-
-if isfield(volPsd,'psdTrialGramMD') && ~isempty(volPsd.psdTrialGramMD) && ~isempty(tWin)
-    dbstack; error('double-check that');
-    t   = volPsd.psdTrialGramMD.t(1,1,1,1,1,1,:,1);
-    f   = volPsd.psdTrialGramMD.f(1,1,1,1,:,1,1,1);
-    if tWin==inf
-        psd = mean(mean(volPsd.psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,:),6),7);
+    %% Setup figure
+    hF = figure('WindowStyle','docked');
+    if isempty(roi)
     else
-        [~,wInd] = min(abs(t-tWin));
-        psd = mean(volPsd.psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,wInd,:),6);
+        hA = cell(size(H));
+        for i = 1:length(H)
+            hA{i} = axes(hF,'Position',H(i).Position,'Box','on');
+        end
+        hA = [hA{:}]; hA = hA(:);
     end
-    plot(squeeze(f),squeeze(psd),'--k')
-end
+
+    if isfield(roi(1),'vec') && isfield(roi(1).vec,'mt')
+        roiDataFlag = true;
+    else
+        roiDataFlag = false;
+    end
+    
+
+    %% Plot spectra
+    if roiDataFlag
+        for i = 1:length(roi)
+            f    = roi(i).vec.mt.psd.f;
+            spec = mean(roi(i).vec.mt.psd.vec,6);
+            plot(hA(i),squeeze(f),squeeze(spec),'k');
+        end
+    else
+        dbstack; error('double check roi data format');
+        dataMask = MRIread(rCond.volMt.runAv.psd.param.fMask); dataMask = dataMask.vol~=0;
+        f       = rCond.volMt.runAv.psd.f;
+        spec    = size(rCond.volMt.runAv.psd.PSD,1:8); spec(6) = length(roi); spec = zeros(spec);
+        for i = 1:length(roi)
+            vec2roi = roi{i}.mask(dataMask);
+            spec(:,:,:,:,:,i,:,:) = mean(rCond.volMt.runAv.psd.PSD(:,:,:,:,:,vec2roi,:,:),6);
+        end
+    end
+
+    % %% Plot PSD
+    % for i = 1:length(roi)
+    %     plot(hA{i},squeeze(f),squeeze(spec(:,:,:,:,:,i,:,:)),'k');
+    % end
 
 
-ax = [ax{:}];
 
-
-
+    %% Adjust axes
+    for i = 1:length(H)
+        hA(i).XAxis.Color = H(i).XAxis.Color; hA(i).XAxis.LineWidth = H(i).XAxis.LineWidth;
+        hA(i).YAxis.Color = H(i).YAxis.Color; hA(i).YAxis.LineWidth = H(i).YAxis.LineWidth;
+    end
+    axis(hA,'tight'); yLim = get(hA,'YLim'); yLim = [min([yLim{:}]) max([yLim{:}])];
+    set(hA,'YLim',yLim,'YScale','log','XGrid','on','YGrid','on','XMinorGrid','on','YMinorGrid','on');
 

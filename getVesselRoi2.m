@@ -30,9 +30,11 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
     end
 
     %% Read in data to crop
+    fIm = cell(size(im));
     for d = 1:length(im)
         if ischar(im{d});
-            im{d} = MRIread(im{d});
+            fIm{d} = im{d};
+            im{d} = MRIread(fIm{d});
             im{d} = im{d}.vol;
         else
             dbstack; error('im should be a char or a struct');
@@ -42,7 +44,7 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
     %% Get individual vessel ROIs
     roi = cell(1,length(mask));
     for l = 1:length(mask)
-        roi{l} = doIt(mask(l).vol,mask(l).label,imField,im,cropSz);
+        roi{l} = doIt(mask(l).vol,mask(l).label,imField,im,fIm,cropSz);
     end
     roi = cat(1,roi{:})';
     roi(cellfun('isempty',{roi.label})) = [];
@@ -51,7 +53,7 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
 
 
 
-function roi = doIt(mask,label,imField,im,cropSz)
+function roi = doIt(mask,label,imField,im,fIm,cropSz)
 
 if ~any(mask(:))
     roi.poly  = [];
@@ -73,17 +75,11 @@ P = regions(Pall);
 % roi = repmat(struct,size(P) + [1 0]);
 roi = repmat(struct,size(P));
 for p = 1:length(P)
-    % if p~=length(P)+1
-        roi(p).poly  = P(p);
-        roi(p).mask  = poly2mask(roi(p).poly.Vertices(:,1),roi(p).poly.Vertices(:,2),size(mask,1),size(mask,2));
-        roi(p).class = label;
-        roi(p).id    = p;
-        roi(p).label = [label num2str(p,'%02i')];
-    % else
-    %     roi(p).poly  = Pall;
-    %     roi(p).mask  = mask;
-    %     roi(p).label = [label 'All'];
-    % end
+    roi(p).poly  = P(p);
+    roi(p).mask  = poly2mask(roi(p).poly.Vertices(:,1),roi(p).poly.Vertices(:,2),size(mask,1),size(mask,2));
+    roi(p).class = label;
+    roi(p).id    = p;
+    roi(p).label = [label num2str(p,'%02i')];
 
     %center of mass
     [rows, cols] = ndgrid(1:size(roi(p).mask, 1), 1:size(roi(p).mask, 2));
@@ -97,33 +93,17 @@ for p = 1:length(P)
     end
     roi(p).com(1) = sum( cols(roi(p).mask) .* imCom(roi(p).mask) ) / sum(imCom(roi(p).mask));
     roi(p).com(2) = sum( rows(roi(p).mask) .* imCom(roi(p).mask) ) / sum(imCom(roi(p).mask));
-
-    %crop all images to all rois
-    % switch roi(p).label            
-    %     case [label 'All']
-    %         x = [find(any(roi(p).mask,1),1,'first') find(any(roi(p).mask,1),1,'last')];
-    %         y = [find(any(roi(p).mask,2),1,'first') find(any(roi(p).mask,2),1,'last')];
-    %         x = mean(x) + [-1 1].*max([diff(x) diff(y)])/2;
-    %         y = mean(y) + [-1 1].*max([diff(x) diff(y)])/2;
-    %         for i = 1:length(imField)
-    %             roi(p).im.(imField{i}).x  = round(x + [-1 1].*cropSz/2);
-    %             roi(p).im.(imField{i}).y  = round(y + [-1 1].*cropSz/2);
-    %             % roi(p).im.(imField{i}).x  = round([find(any(roi(p).mask,1),1,'first') find(any(roi(p).mask,1),1,'last')] + [-1 1].*cropSz/2);
-    %             % roi(p).im.(imField{i}).y  = round([find(any(roi(p).mask,2),1,'first') find(any(roi(p).mask,2),1,'last')] + [-1 1].*cropSz/2);
-    %         end
-    %     otherwise
-            x = round( roi(p).com(1) + [-1 1].*cropSz/2 );
-            y = round( roi(p).com(2) + [-1 1].*cropSz/2 );
-            tmp = roi(p).mask; tmp(y(1):y(2),x(1):x(2)) = false;
-            if any(tmp(:))
-                warning(['cropped image does not include all of ' roi(p).label newline 'consider increasing cropSz'])
-            end
-            for i = 1:length(imField)
-                roi(p).im.(imField{i}).x = x;
-                roi(p).im.(imField{i}).y = y;
-                % roi(p).im.(imField{i}).im = im{i}(roi(p).im.(imField{i}).y(1):roi(p).im.(imField{i}).y(2),roi(p).im.(imField{i}).x(1):roi(p).im.(imField{i}).x(2),:,:,:);
-            end
-    % end
+    x = round( roi(p).com(1) + [-1 1].*cropSz/2 );
+    y = round( roi(p).com(2) + [-1 1].*cropSz/2 );
+    tmp = roi(p).mask; tmp(y(1):y(2),x(1):x(2)) = false;
+    if any(tmp(:))
+        warning(['cropped image does not include all of ' roi(p).label newline 'consider increasing cropSz'])
+    end
+    for i = 1:length(imField)
+        roi(p).im.(imField{i}).fName = fIm{i};
+        roi(p).im.(imField{i}).x     = x;
+        roi(p).im.(imField{i}).y     = y;
+    end
     for i = 1:length(imField)
         roi(p).im.(imField{i}).im = im{i}(roi(p).im.(imField{i}).y(1):roi(p).im.(imField{i}).y(2),roi(p).im.(imField{i}).x(1):roi(p).im.(imField{i}).x(2),:,:,:);
     end
