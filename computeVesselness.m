@@ -1,26 +1,41 @@
-function [fComp,fNonComp,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
+function [fComp,fNonComp,fSegFig,fVol] = computeVesselness(fVol,fMask,force,verbose)
     if ~exist('force','var'); force = []; end
     if isempty(force);        force = 0 ; end
     if ~exist('verbose','var'); verbose = []; end
     if isempty(verbose);        verbose = 0 ; end
+    fVol = cellstr(fVol);
 
 
     %% Main parameters and file names
     k = 3;
     tmpLabelList = {'vessel' 'brain' 'nonBrain'};
 
-    fComp = cell(1,length(tmpLabelList));
-    fNonComp = cell(1,length(tmpLabelList));
-    for i = 1:k
-        fComp{i} = replace(fVol,'_volTs.nii.gz',['_' tmpLabelList{i} 'SegMask.nii.gz']);
-        fNonComp{i} = replace(fVol,'_volTs.nii.gz',['_non' tmpLabelList{i} 'SegMask.nii.gz']);
+    fComp = cell(length(fVol),length(tmpLabelList));
+    fNonComp = cell(length(fVol),length(tmpLabelList));
+    for ii = 1:length(fVol)
+        for i = 1:k
+            fComp{ii,i}    = replace(fVol{ii},'_volTs.nii.gz',['_'    tmpLabelList{i} 'SegMask.nii.gz']);
+            fNonComp{ii,i} = replace(fVol{ii},'_volTs.nii.gz',['_non' tmpLabelList{i} 'SegMask.nii.gz']);
+        end
     end
-    fSegFig = replace(fVol,'_volTs.nii.gz','_seg.fig');
+    if length(fVol)>1
+        fSegFig = strsplit(fVol{1},'_');
+        fSegFig{contains(fSegFig,'run-')} = 'run-cat';
+        fSegFig = strjoin(fSegFig,'_');
+    else
+        fSegFig = fVol{1};
+    end
+    fSegFig = replace(fSegFig,'_volTs.nii.gz','_seg.fig');
+    if ~exist(fileparts(fSegFig),'dir')
+        mkdir(fileparts(fSegFig));
+    end
 
 
 
 
-    if force || any(cellfun(@(x) ~exist(x,'file'),[fComp fNonComp cellstr(fSegFig)]))
+
+
+    if force || any(cellfun(@(x) ~exist(x,'file'),[fComp(:); fNonComp(:); cellstr(fSegFig)]))
 
 
 
@@ -28,9 +43,12 @@ function [fComp,fNonComp,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
     
     %% Read and plot data
     %%% Read in data
-    mri = MRIread(fVol);
     mask = MRIread(fMask); mask = logical(mask.vol);
-    X = log(mri.vol(mask));
+    X = cell(size(fVol));
+    for R = length(fVol):-1:1
+        mri = MRIread(fVol{R});
+        X{R} = log(mri.vol(mask));
+    end
 
 
     % %%% Define gaussian mixture
@@ -48,18 +66,18 @@ function [fComp,fNonComp,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
     
     hT = tiledlayout(2,2); hT.TileSpacing = "tight"; hT.Padding = 'tight';
     axDist = nexttile([2 1]);
-    h = histogram(X,'Normalization','pdf'); hold on
-    title(hT,fVol,'Interpreter','none');
+    h = histogram(cat(1,X{:}),'Normalization','pdf'); hold on
+    title(hT,fVol{1},'Interpreter','none');
     
 
     %% Fit and plot distribution
     % exception
-    if strcmp(fVol,'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
+    if strcmp(fVol{1},'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
         k = 4;
     end
     %%% Fit gaussian mixture
     rng(42, 'twister'); % Fixed seed for consistent GMM fitting
-    GMModel = fitgmdist(X,k,'Options',statset('MaxIter',1000));
+    GMModel = fitgmdist(cat(1,X{:}),k,'Options',statset('MaxIter',1000));
     
     % %%% Identify the component based on mean value
     % % Sort mu in ascending order to get proper indices
@@ -77,19 +95,34 @@ function [fComp,fNonComp,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
         hPlot(i) = plot(binCent,p.*pdf(n,binCent));
     end
     axDist.YLim(2) = axDist.YLim(2)/4;
+    cmap = get(hPlot,'Color');
+    [~,b] = sort(GMModel.mu,'descend');
+    % cmap = cmap(b);
+    for i = 1:k
+        set(hPlot(b(i)),'Color',cat(1,cmap{i}));
+    end
     
 
     %% Compute component probabilities and segmentation
     %%% component probability maps
-    prob = posterior(GMModel, X);
-    probMaps = zeros([k size(mri.vol)]);
-    probMaps(:,mask) = permute(prob,[2 1]);
-    probMaps = permute(probMaps,[2 3 4 1]);
+    prob = posterior(GMModel, cat(1,X{:}));
+    idx  =   cluster(GMModel, cat(1,X{:}));
 
-    %%% segment
-    idx = cluster(GMModel,X);
-    segMap = zeros(size(mri.vol));
-    segMap(mask) = idx;
+    prob = permute(reshape(permute(prob,[2 1]),[size(prob,2) nnz(mask) length(fVol)]),[2 1 3]);
+    idx  = permute(reshape(permute(idx ,[2 1]),[1            nnz(mask) length(fVol)]),[2 1 3]);
+
+    prob = mat2cell(prob,size(prob,1),size(prob,2),ones(1,length(fVol)));
+    idx  = mat2cell(idx ,size(idx ,1),size(idx ,2),ones(1,length(fVol)));
+
+    probMaps = cell(size(fVol));
+    segMap   = cell(size(fVol));
+    for R = 1:length(fVol)
+        probMaps{R} = zeros([k size(mri.vol)]);
+        probMaps{R}(:,mask) = permute(prob{R},[2 1]);
+        probMaps{R} = permute(probMaps{R},[2 3 4 1]);
+        segMap{R} = zeros(size(mri.vol));
+        segMap{R}(mask) = idx{R};
+    end
 
     
     % axProb = {};
@@ -168,21 +201,24 @@ function [fComp,fNonComp,fSegFig] = computeVesselness(fVol,fMask,force,verbose)
     imagesc(mri.vol,[0 800]);
     ax = axIm; ax.PlotBoxAspectRatio = [1 1 1]; ax.XAxis.Visible = 'off'; ax.YAxis.Visible = 'off'; ax.Colormap = gray;
     axSeg = nexttile;
-    imagesc(segMap);
+    imagesc(segMap{1});
     ax = axSeg; ax.PlotBoxAspectRatio = [1 1 1]; ax.XAxis.Visible = 'off'; ax.YAxis.Visible = 'off';
     cMap = get(hPlot,'Color'); cMap = cat(1,cMap{:}); cMap = cat(1,[0 0 0],cMap);
     ax.Colormap = cMap;
+    % ax.Colormap = cat(1,cmap{:});
     linkaxes([axIm axSeg]);
     
 
 
     %% Write segmentation data
-    for i = 1:length(fComp)
-        if force || ~exist(fComp{i},'file') || ~exist(fNonComp{i},'file')
-            mri.vol = ismember(segMap,find(ismember(labelList,tmpLabelList{i})));
-            MRIwrite(mri,fComp{i});
-            mri.vol = ismember(segMap,find(~ismember(labelList,tmpLabelList{i})));
-            MRIwrite(mri,fNonComp{i});
+    for R = 1:size(fVol,1)
+        for i = 1:size(fComp,2)
+            if force || ~exist(fComp{R,i},'file') || ~exist(fNonComp{R,i},'file')
+                mri.vol = ismember(segMap{R},find(ismember(labelList,tmpLabelList{i})));
+                MRIwrite(mri,fComp{R,i});
+                mri.vol = ismember(segMap{R},find(~ismember(labelList,tmpLabelList{i})));
+                MRIwrite(mri,fNonComp{R,i});
+            end
         end
     end
 
