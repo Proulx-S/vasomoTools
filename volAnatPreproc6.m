@@ -18,17 +18,42 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
 
 
     %%% Combine runs
-    fAvList = cell(size(rCond.(char(taskList)).fPreprocList,1),1);
-    for R = 1:size(rCond.(char(taskList)).fPreprocList,1)
-        fAvList{R} = strsplit(rCond.(char(taskList)).fPreprocList{R,1,1},filesep); fAvList{R}{end} = ['av_' fAvList{R}{end}]; fAvList{R} = strjoin(fAvList{R},filesep);
+    fList = cell(size(taskList));
+    for T = 1:length(taskList)
+        fList{T} = rCond.(char(taskList{T})).fPreprocList;
     end
+    fList = cat(1,fList{:});
+    
+    fAvList = cell(size(fList));
+    for R = 1:size(fList,1)
+        fAvList{R} = strsplit(fList{R,1,1},filesep); fAvList{R}{end} = ['av_' fAvList{R}{end}]; fAvList{R} = strjoin(fAvList{R},filesep);
+    end
+
+    fName = strsplit(fAvList{1},filesep); fName = fName{end};
     fCatAv = unique(fileparts(fileparts(fAvList)));
-    if length(fCatAv)>1; dbstack; error('not sure where to store this'); end
-    fCatAv = char(fCatAv);
-    [~,b,~] = fileparts(replace(fAvList,'.nii.gz','')); b = unique(b);
-    if length(b)>1; dbstack; error('not sure who to name this'); end
-    fCatAv = fullfile(fCatAv,['cat_' char(b) '.nii.gz']);
+    if length(fCatAv)>1
+        fCatAv = strsplit(fCatAv{1},filesep);
+        fCatAv{contains(fCatAv,'ses-')} = 'ses-cat';
+        fCatAv = strjoin(fCatAv,filesep);
+    else
+        fCatAv = char(fCatAv);
+    end
+    fCatAv = fullfile(fCatAv,['cat_' fName]);
     fAvCatAv = strsplit(fCatAv,filesep); fAvCatAv{end} = ['av_' fAvCatAv{end}]; fAvCatAv = strjoin(fAvCatAv,filesep);
+    
+    if ~exist(fileparts(fAvCatAv),'dir'); mkdir(fileparts(fAvCatAv)); end
+
+    % fAvList = cell(size(rCond.(char(taskList)).fPreprocList,1),1);
+    % for R = 1:size(rCond.(char(taskList)).fPreprocList,1)
+    %     fAvList{R} = strsplit(rCond.(char(taskList)).fPreprocList{R,1,1},filesep); fAvList{R}{end} = ['av_' fAvList{R}{end}]; fAvList{R} = strjoin(fAvList{R},filesep);
+    % end
+    % fCatAv = unique(fileparts(fileparts(fAvList)));
+    % if length(fCatAv)>1; dbstack; error('not sure where to store this'); end
+    % fCatAv = char(fCatAv);
+    % [~,b,~] = fileparts(replace(fAvList,'.nii.gz','')); b = unique(b);
+    % if length(b)>1; dbstack; error('not sure who to name this'); end
+    % fCatAv = fullfile(fCatAv,['cat_' char(b) '.nii.gz']);
+    % fAvCatAv = strsplit(fCatAv,filesep); fAvCatAv{end} = ['av_' fAvCatAv{end}]; fAvCatAv = strjoin(fAvCatAv,filesep);
 
     if force || ~exist(fCatAv,'file') || ~exist(fAvCatAv,'file')
         cmd = {src.afni};
@@ -96,11 +121,11 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
 
     if force || ~exist(fVesselRoi,'file')
 
-        rCond.(taskList{1})
+        % rCond.(taskList{1})
         
-        fAvMap
-        fTof
-        drawVesselRoi([cellstr(fVolCorr) cellstr(fCatAvCorr)],fVesselRoi,cellstr{fComp{contains(fComp,'vesselSegMask.nii.gz')}},fMaskBrain,fAvMap,fTof)
+        % fAvMap
+        % fTof
+        % drawVesselRoi([cellstr(fVolCorr) cellstr(fCatAvCorr)],fVesselRoi,cellstr{fComp{contains(fComp,'vesselSegMask.nii.gz')}},fMaskBrain,fAvMap,fTof)
         
         disp('!!!!!!!!!!')
         disp('!!!!!!!!!!')

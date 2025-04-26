@@ -53,5 +53,6 @@ classdef runCond
       r
       R
       mri
+      clustId
    end
 end
