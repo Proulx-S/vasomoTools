@@ -343,8 +343,8 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         fVesselRoi_deriv  = fullfile(derivDir,'vessel.nii.gz'); 
         copyfile(fVesselness,fVesselRoi);
     end
-    fVesselRoiMaxVox  = fullfile(derivDir,'vesselMaxVox.nii.gz'); copyfile(fVesselRoi,fVesselRoiMaxVox);
-    fVesselRoiDilated = fullfile(derivDir,'vesselDilated.nii.gz'); copyfile(fVesselRoi,fVesselRoiDilated);
+    % fVesselRoiMaxVox  = fullfile(derivDir,'vesselMaxVox.nii.gz'); copyfile(fVesselRoi,fVesselRoiMaxVox);
+    % fVesselRoiDilated = fullfile(derivDir,'vesselDilated.nii.gz'); copyfile(fVesselRoi,fVesselRoiDilated);
     
 
 
@@ -355,14 +355,17 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         fAvMapEchoCatCnfrm
         fAvCatAv
         fCatAv
-        fVesselRoiDilated
+        % fVesselRoiDilated
         fVesselRoi
-        fVesselRoiMaxVox
+        % fVesselRoiMaxVox
         fVesselness
         };
     tmpDir = tempname; mkdir(tmpDir);
     for i = 1:length(fNeurodeskList)
         copyfile(fNeurodeskList{i},tmpDir);
+        if exist(replace(fNeurodeskList{i},'.nii.gz','.lta'),'file')
+            copyfile(replace(fNeurodeskList{i},'.nii.gz','.lta'),tmpDir);
+        end
     end
 
     [~,fMemprage2,~]          = fileparts(replace(fMemprage         ,'.nii.gz','')); fMemprage2          = [fMemprage2,'.nii.gz'];
@@ -372,29 +375,30 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     [~,fAvCatAv2,~]           = fileparts(replace(fAvCatAv          ,'.nii.gz','')); fAvCatAv2           = [fAvCatAv2,'.nii.gz'];
     [~,fCatAv2  ,~]           = fileparts(replace(fCatAv            ,'.nii.gz','')); fCatAv2             = [fCatAv2,'.nii.gz'];
     [~,fVesselRoi2,~]         = fileparts(replace(fVesselRoi        ,'.nii.gz','')); fVesselRoi2         = [fVesselRoi2,'.nii.gz'];
-    [~,fVesselRoiDilated2,~]  = fileparts(replace(fVesselRoiDilated ,'.nii.gz','')); fVesselRoiDilated2  = [fVesselRoiDilated2,'.nii.gz'];
-    [~,fVesselRoiMaxVox2,~]   = fileparts(replace(fVesselRoiMaxVox  ,'.nii.gz','')); fVesselRoiMaxVox2   = [fVesselRoiMaxVox2,'.nii.gz'];
+    % [~,fVesselRoiDilated2,~]  = fileparts(replace(fVesselRoiDilated ,'.nii.gz','')); fVesselRoiDilated2  = [fVesselRoiDilated2,'.nii.gz'];
+    % [~,fVesselRoiMaxVox2,~]   = fileparts(replace(fVesselRoiMaxVox  ,'.nii.gz','')); fVesselRoiMaxVox2   = [fVesselRoiMaxVox2,'.nii.gz'];
     [~,fVesselness2,~]        = fileparts(replace(fVesselness       ,'.nii.gz','')); fVesselness2        = [fVesselness2,'.nii.gz'];
         
 
+    
     %%% To draw masks, copy to neurocloud, use freeview there, then copy back
     subDir = ['sub-' sub '_' acqLabel];
     cmd = {src.fs};
     cmd{end+1} = ['mkdir -p ~/' subDir];
     cmd{end+1} = ['cd ~/' subDir];
-    cmd{end+1} = ['rsync sebp@takoyaki1:' tmpDir '/* .'];
+    cmd{end+1} = ['rsync sebp@takoyaki1:' tmpDir '/*{.nii.gz,.lta} .'];
     cmd{end+1} = 'echo draw VESSEL ROIs (aretery=902, vein=914, left-vessel=30, right-vessel=62)';
     cmd{end+1} = 'freeview -v \';
     cmd{end+1} = [fCatAv2             ':grayscale=0,1000 \'];
-    cmd{end+1} = [fMemprage2          ':resample=cubic:visible=0 \'];
-    cmd{end+1} = [fTofBiasCorrBrain2  ':resample=cubic:visible=0 \'];
+    cmd{end+1} = [fMemprage2          ':resample=cubic \'];
+    cmd{end+1} = [fTofBiasCorrBrain2  ':resample=cubic \'];
     cmd{end+1} = [fAvMapEchoCatCnfrm2 ':resample=cubic \'];
     cmd{end+1} = [fAvCatAv2           ':grayscale=0,1000 \'];
     cmd{end+1} = [fVesselness2        ':colormap=heat \'];
-    cmd{end+1} = [fVesselRoiDilated2  ':colormap=lut \'];
-    cmd{end+1} = [fVesselRoi2         ':colormap=lut \'];
-    cmd{end+1} = [fVesselRoiMaxVox2   ':colormap=lut'];
-    cmd{end+1} = ['rsync ./* sebp@takoyaki1:' tmpDir '/'];
+    % cmd{end+1} = [fVesselRoiDilated2  ':colormap=lut \'];
+    cmd{end+1} = [fVesselRoi2         ':colormap=lut'];
+    % cmd{end+1} = [fVesselRoiMaxVox2   ':colormap=lut'];
+    cmd{end+1} = ['rsync ./*{.nii.gz,.lta} sebp@takoyaki1:' tmpDir '/'];
 
     cmdFile = [tmpDir '.sh'];
     fileID = fopen(cmdFile, 'w');
@@ -411,107 +415,49 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         done = input('', 's');
     end
     disp('++++++++++++++++++++++++++++++++++++++++')
-    
 
-return
-
-for s = 1:length(subList(sesIndList))
-    S = sesIndList(s);
-    for rs = 1:length(runSet{S})
-        if isempty(runSet{S}{rs}.fList); continue; end
-        fBase = char(runSet{S}{rs}.initFiles.fPlumbSmr.sesCat.runAv.fList(:,1));
-        % fMask = replace(fBase,'_volTs.nii.gz','_volBrainMaskInv.nii.gz');
-        % runSet{S}{rs}.fMasks.fMaskInv = fMask;
-        if forceThis || ~exist(runSet{S}{rs}.fMasks.fMaskInv,'file')
-            if forceThis>1 || ~exist(runSet{S}{rs}.fMasks.fMaskInv,'file')
-                mri     = MRIread(fBase,1);
-                mri.vol = ones(mri.volsize);
-                MRIwrite(mri,runSet{S}{rs}.fMasks.fMaskInv);
-            end
-            cmd{end+1} = ['scp sebp@takoyaki1:' runSet{S}{rs}.fMasks.fMaskInv ' sebp@takoyaki1:' fBase ' .'];
-            cmd{end+1} = 'echo draw EXCLUSION mask for the BRAIN (brain=0, nonBrain=1)';
-            cmd{end+1} = 'freeview -v \';
-            cmd{end+1} = [replace(fBase,[fileparts(fBase) filesep],'./') ' \'];
-            cmd{end+1} = [replace(runSet{S}{rs}.fMasks.fMaskInv,[fileparts(runSet{S}{rs}.fMasks.fMaskInv) filesep],'./') ':colormap=heat:opacity=0.33'];
-            cmd{end+1} = ['scp ' replace(runSet{S}{rs}.fMasks.fMaskInv,[fileparts(runSet{S}{rs}.fMasks.fMaskInv) filesep],'./') ' sebp@takoyaki1:' runSet{S}{rs}.fMasks.fMaskInv ''];
+    % move out of tmpDir
+    movefile(fullfile(tmpDir,fVesselRoi2),fVesselRoi)
+    movefile(fullfile(tmpDir,replace(fAvMapEchoCatCnfrm2,'.nii.gz','.lta')),replace(fAvMapEchoCatCnfrm,'.nii.gz','.lta'));
+    for i = 1:length(fNeurodeskList)
+        [~,fName,~] = fileparts(replace(fNeurodeskList{i},'.nii.gz',''));
+        if exist(fullfile(tmpDir,[fName '.lta']),'file')
+            movefile(fullfile(tmpDir,[fName '.lta']),replace(fNeurodeskList{i},'.nii.gz','.lta'));
         end
     end
-end
-
-%%% Write commands to a file instead of copying to clipboard
-if length(cmd)==1
-    disp('all masks found in database bids derivative, no need to draw')
-else
-    cmdFile = fullfile(info.prcDir, 'prc', 'mask_creation_commands.sh');
-    fileID = fopen(cmdFile, 'w');
-    fprintf(fileID, '%s\n', cmd{:});
-    fclose(fileID);
-    disp('++++++++++++++++++++++++++++++++++++++++')
-    % disp('Command for mask creation is in clipboard.')
-    % disp('Paste in freeview capable remote to transfer data, create masks and transfer back.')
-    disp('Commands for mask creation are in file:')
-    disp(cmdFile)
-    disp('Paste in freeview capable remote to transfer data, create masks and transfer back.')
-    %%% Wait for user to confirm mask drawing is done
-    done = '';
-    while ~strcmpi(done, 'done')
-        disp('When done, type "done"')
-        done = input('', 's');
-    end
-    disp('++++++++++++++++++++++++++++++++++++++++')
-end
 
 
 
-
-    if force || ~exist(fVesselRoi,'file')
-
-
-
-        % rCond.(taskList{1})
-        
-        % fAvMap
-        % fTof
-        % drawVesselRoi([cellstr(fVolCorr) cellstr(fCatAvCorr)],fVesselRoi,cellstr{fComp{contains(fComp,'vesselSegMask.nii.gz')}},fMaskBrain,fAvMap,fTof)
-        
-        disp('!!!!!!!!!!')
-        disp('!!!!!!!!!!')
-        dbstack; warning('not implemented yet')
-        disp('!!!!!!!!!!')
-        disp('!!!!!!!!!!')
-    end
+    %%% Store to permanent bids derivatives
+    copyfile(fVesselRoi,fVesselRoi_deriv)
+    
 
 
     %%% Output file index
-    volAnat.label.calcarineVessel.f        = fVesselRoi;
-    volAnat.label.calcarineVessel.label    = {'artery' 'vein' 'Left-vessel' 'Right-vessel'};
-    volAnat.label.calcarineVessel.labelVal = [902 914 30 62];
-    volAnat.label.calcarineVessel.fBase = fVolCorr;
-    volAnat.label.calcarineVessel.fFig  = fSegFig;
-    if verbose
-        disp('FS color LUT');
-        disp('902->artery');
-        disp('914->vein');
-        disp('30 ->Left-vessel');
-        disp('62 ->Right-vessel');
-    end
+    volAnat.label.calcarineVessel.f         = fVesselRoi;
+    volAnat.label.calcarineVessel.label     = {'artery' 'vein' 'Left-vessel' 'Right-vessel'};
+    volAnat.label.calcarineVessel.labelVal  = [902 914 30 62];
+    volAnat.label.calcarineVessel.fBase     = fAvCatAv;
+    volAnat.label.calcarineVessel.fBaseList = {fCatAv fVesselness fAvMapEchoCatCnfrm fTofBiasCorrBrain fMemprage};
+    volAnat.label.calcarineVessel.fFig      = fSegFig;
+    
 
 
 
-
+    
 
     %% Individual vessel ROIs
     if exist(fVesselRoi,'file')
         label = volAnat.label.calcarineVessel;
-        imField = {'base'};
-        im = {label.fBase};
+        imField = {'base' 'vesselness'};
+        [~,b,~] = fileparts(label.fBaseList);
+        im = {label.fBase label.fBaseList{contains(b,'vesselness.nii')}};
         cropSz = 10;
         volAnat.roi.vessel = getVesselRoi2(label,imField,im,cropSz);
     else
         % keyboard
         volAnat.roi.vessel = [];
     end
-    
     
 
     if verbose>1 && exist('label','var')
@@ -555,7 +501,9 @@ end
 
     %% Insert into rCond
     if nargout>1
-        rCond.(char(taskList)).volAnat = volAnat;
+        for T = 1:length(taskList)
+            rCond.(char(taskList{T})).volAnat = volAnat;
+        end
     end
 
 
