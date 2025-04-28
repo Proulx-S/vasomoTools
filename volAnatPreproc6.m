@@ -8,21 +8,28 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         
 
     %% Summarize across runs
+
     %%% Combine tasks
-    taskList = fields(rCond); taskList(~contains(taskList,'task_')) = [];
-    if length(taskList)>1; dbstack; error('need to combine data from multiple files'); end
+    [fList,fMaskList,nDummy,taskList,acqTime] = combineRunsAcrossTasks(rCond);
+    taskList = unique(taskList);
+    % taskList = fields(rCond); taskList(~contains(taskList,'task_')) = [];
+    % if length(taskList)>1; dbstack; error('need to combine data from multiple files'); end
     
+    acq     = rCond.(taskList{1}).acq;
+    prsc    = rCond.(taskList{1}).prsc;
+    vencAcq = rCond.(taskList{1}).vencAcq;
     disp('--------------------------------')
-    disp(['volAnat: ' rCond.(taskList{1}).sub '_acq-' rCond.(taskList{1}).acq '_prsc-' rCond.(taskList{1}).prsc '_venc-' rCond.(taskList{1}).vencAcq])
+    disp(['volAnat: ' rCond.(taskList{1}).sub ' acq-' acq ' prsc-' prsc ' venc-' vencAcq])
     disp('--------------------------------')
+    acqLabel = ['acq-' acq '_prsc-' prsc '_venc-' vencAcq];
 
 
-    %%% Combine runs
-    fList = cell(size(taskList));
-    for T = 1:length(taskList)
-        fList{T} = rCond.(char(taskList{T})).fPreprocList;
-    end
-    fList = cat(1,fList{:});
+    % %%% Combine runs
+    % fList = cell(size(taskList));
+    % for T = 1:length(taskList)
+    %     fList{T} = rCond.(char(taskList{T})).fPreprocList;
+    % end
+    % fList = cat(1,fList{:});
     
     fAvList = cell(size(fList));
     for R = 1:size(fList,1)
@@ -73,28 +80,48 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
 
 
     %%% Combine masks
-    fMaskBrainInv = unique(rCond.(char(taskList)).fPreprocMaskList); fMaskBrainInv(cellfun('isempty',fMaskBrainInv)) = [];
-    if length(fMaskBrainInv)>1; dbstack; error('more than one mask found'); end; fMaskBrainInv = char(fMaskBrainInv);
-    %%%% conform
-    fMaskBrainInv2 = replace(fAvCatAv,'_volTs.nii.gz','_brainMaskInv.nii.gz'); copyfile(fMaskBrainInv,fMaskBrainInv2);
-    fMaskBrainInv = fMaskBrainInv2;
-    MRIconform(fMaskBrainInv,fAvCatAv);
-    fMaskBrain = replace(fMaskBrainInv,'_brainMaskInv.nii.gz','_brainMask.nii.gz');
-    if force || ~exist(fMaskBrain,'file')
-        cmd = {src.afni};
-        cmd{end+1} = ['3dcalc -overwrite -a ' fMaskBrainInv ' -expr ''-(a-1)'' -prefix ' fMaskBrain];
-        if verbose
-            [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
-        else
-            [status,cmdout] = system(strjoin(cmd,newline)        ); if status; dbstack; error(cmdout); error('x'); end
-        end
+    fMaskBrainInv = unique(fMaskList); fMaskBrainInv(cellfun('isempty',fMaskBrainInv)) = [];
+    maskDir = strsplit(rCond.task_50sPrd1sDur.dirs.bidsDeriv,filesep);
+    ind = contains(maskDir,'sub-');
+    if nnz(ind)>1; dbstack; error('more than one mask found'); end
+    maskDir = strjoin([maskDir(1:find(ind)) {acqLabel 'anat'}],filesep);
+    if ~exist(maskDir,'dir'); mkdir(maskDir); end
+    
+    mriOblq = MRIread(fAvCatAv,1); mriOblq.vol = false(mriOblq.volsize);
+    for i = 1:length(fMaskBrainInv)
+        mri = MRIread(fMaskBrainInv{i});
+        mriOblq.vol = mriOblq.vol | mri.vol;
     end
-    MRIconform(fMaskBrain,fAvCatAv);
+
+    fMaskBrainInv = fullfile(maskDir,'brainMaskInv.nii.gz');
+    fMaskBrain    = fullfile(maskDir,'brainMask.nii.gz');
+    MRIwrite(mriOblq,fMaskBrainInv);
+    mriOblq.vol = mriOblq.vol==0;
+    MRIwrite(mriOblq,fMaskBrain);
+
+    
+
+
+    % if length(fMaskBrainInv)>1; dbstack; error('more than one mask found'); end; fMaskBrainInv = char(fMaskBrainInv);
+    % %%%% conform
+    % fMaskBrainInv2 = replace(fAvCatAv,'_volTs.nii.gz','_brainMaskInv.nii.gz'); copyfile(fMaskBrainInv,fMaskBrainInv2);
+    % fMaskBrainInv = fMaskBrainInv2;
+    % MRIconform(fMaskBrainInv,fAvCatAv);
+    % fMaskBrain = replace(fMaskBrainInv,'_brainMaskInv.nii.gz','_brainMask.nii.gz');
+    % if force || ~exist(fMaskBrain,'file')
+    %     cmd = {src.afni};
+    %     cmd{end+1} = ['3dcalc -overwrite -a ' fMaskBrainInv ' -expr ''-(a-1)'' -prefix ' fMaskBrain];
+    %     if verbose
+    %         [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status; dbstack; error(cmdout); error('x'); end
+    %     else
+    %         [status,cmdout] = system(strjoin(cmd,newline)        ); if status; dbstack; error(cmdout); error('x'); end
+    %     end
+    % end
+    % MRIconform(fMaskBrain,fAvCatAv);
 
 
 
     %%% Output file index
-    acqLabel = strjoin({['acq-' rCond.(char(taskList)).acq] ['prsc-' rCond.(char(taskList)).prsc]},'_');
     volAnat.mask.brain.f     = fMaskBrain;
     volAnat.mask.brain.fInv  = fMaskBrainInv;
     volAnat.mask.brain.fBase = fAvCatAv;
@@ -108,18 +135,63 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     %% Preprocess anat for vesselness map (for a starting point to vessel drawing)
     forceThis = force;
     %%%% correct bias field
-    [fVolCorr,fVolTsCorr,fCatAvCorr,fVol,fVolField] = correctBiasField(fAvCatAv, fMaskBrain, fCatAv, [], forceThis, verbose);
-
+    fVolCorr   = cell(size(fAvList));
+    for r = 1:length(fAvList)
+        fVolCorr{r} = correctBiasField(fAvList{r}, volAnat.mask.brain.f, fAvList{r}, [], forceThis, verbose);
+    end
+    
     forceThis = force;
     %%%% compute vesselness
     [fComp,fNonComp,fSegFig] = computeVesselness(fVolCorr,fMaskBrain,forceThis,verbose);
+    
 
+    %%%% summarize vesselness across runs
+    derivDir = fullfile(rCond.(taskList{1}).dirsOrig.bidsDeriv,acqLabel);
+    if ~exist(derivDir,'dir'); mkdir(derivDir); end
+    
+    fVesselness = fullfile(derivDir,'vesselness.nii.gz');
+    mri = MRIread(fComp{r,1},1); mri.vol = zeros(mri.volsize);
+    for r = 1:size(fComp,1)
+        mri.vol = mri.vol + MRIread(fComp{r,1}).vol;
+    end
+    mri.vol = mri.vol/length(fComp);
+    MRIwrite(mri,fVesselness);
+    
     
     %% Draw vessel rois
-    derivDir = fullfile(rCond.(char(taskList)).dirsOrig.bidsDeriv,acqLabel);
-    fVesselRoi  = fullfile(derivDir,'vessel.nii.gz');
+
+    %%% find earlier vessel rois file in derivatives
+    fVesselRoi_deriv = {};
+    for T = 1:length(taskList)
+        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'vessxxel.nii.gz'));
+        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'*','vesxxsel.nii.gz'));
+        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'*','*','vesxxsel.nii.gz'));
+    end
+    fVesselRoi_deriv(cellfun('isempty',fVesselRoi_deriv)) = [];
+
+    %%% copy vessel roi from derivatives or use vesselness
+    fVesselRoi        = fullfile(maskDir,'vessel.nii.gz');
+    if ~isempty(fVesselRoi_deriv)
+        fVesselRoi_deriv = fVesselRoi_deriv{1}; fVesselRoi_deriv = fullfile(fVesselRoi_deriv.folder,fVesselRoi_deriv.name);
+        copyfile(fVesselRoi_deriv,fVesselRoi);
+    else
+        fVesselRoi_deriv  = fullfile(derivDir,'vessel.nii.gz'); 
+        copyfile(fVesselness,fVesselRoi);
+    end
+
+
+
+    
+fAvCatAv
+fCatAv
+fVesselRoi
+fVesselness
+
+
 
     if force || ~exist(fVesselRoi,'file')
+
+
 
         % rCond.(taskList{1})
         
