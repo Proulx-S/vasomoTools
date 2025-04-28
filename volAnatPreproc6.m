@@ -15,6 +15,7 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     % taskList = fields(rCond); taskList(~contains(taskList,'task_')) = [];
     % if length(taskList)>1; dbstack; error('need to combine data from multiple files'); end
     
+    sub     = rCond.(taskList{1}).sub;
     acq     = rCond.(taskList{1}).acq;
     prsc    = rCond.(taskList{1}).prsc;
     vencAcq = rCond.(taskList{1}).vencAcq;
@@ -157,20 +158,184 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     mri.vol = mri.vol/length(fComp);
     MRIwrite(mri,fVesselness);
     
-    
-    %% Draw vessel rois
 
+
+    
+
+    %% Process other anatomical images
+
+    %%% find volAnat in rCond
+    volAnat  = cell(size(taskList));
+    nonEmpty = false(size(taskList));
+    for T = 1:length(taskList)
+        volAnat{T} = rCond.(taskList{T}).volAnat;
+        acqAnatList = fields(volAnat{T});
+        tmp = false;
+        for A = 1:length(acqAnatList)
+            tmp = tmp | numel(volAnat{T}.(acqAnatList{A}))>0;
+        end
+        nonEmpty(T) = tmp;
+    end
+    if nnz(nonEmpty)>1; dbstack; error('more than one volAnat found'); end
+    volAnat = rCond.(taskList{nonEmpty}).volAnat;
+
+
+    %%% find avMap
+    fAvMapEchoCat     = fullfile(derivDir,'avMapEchoCat.nii.gz');
+    fAvMapEchoCat_reg = fullfile(derivDir,'avMapEchoCat.lta');
+    f = fullfile({volAnat.avMap.folder},{volAnat.avMap.name});
+    mriOut = MRIread(f{1},1);
+    for E = 1:length(f)
+        mri = MRIread(f{E});
+        mriOut.vol = cat(4,mriOut.vol,mri.vol);
+    end
+    MRIwrite(mriOut,fAvMapEchoCat);
+    % Update header information of fAvMapEchoCat to match fAvCatAv without interpolation
+    fAvMapEchoCatCnfrm = fullfile(derivDir,'avMapEchoCat_conform.nii.gz');
+    cmd = {src.fs};
+    cmd{end+1} = ['mri_copy_params ' fAvMapEchoCat ' ' fAvCatAv ' ' fAvMapEchoCatCnfrm];
+    disp('Updating header information of echo cat volume to match average...');
+    [status, result] = system(strjoin(cmd, newline), '-echo');
+    if status ~= 0
+        warning('Failed to update header information: %s', result);
+    end
+    
+    %%% find tof
+    fTof     = fullfile(derivDir,'tof.nii.gz');
+    fTof_reg = fullfile(derivDir,'tof.lta');
+    f = fullfile({volAnat.tof.folder},{volAnat.tof.name});
+    copyfile(f{1},fTof);
+    
+    %%% findmemprage
+    fMemprage     = fullfile(derivDir,'memprage.nii.gz');
+    fMemprage_reg = fullfile(derivDir,'memprage.lta');
+    f = fullfile({volAnat.memprage.folder},{volAnat.memprage.name});
+    f = f{contains(f,'proc-rms','IgnoreCase',true)};
+    copyfile(f,fMemprage);
+
+
+    %%% memprage N4 bias correction
+    fMemprageBiasCorr = fullfile(derivDir, 'memprage_n4.nii.gz');
+    if force || ~exist(fMemprageBiasCorr, 'file')
+        cmd = {src.ants};
+        cmd{end+1} = ['N4BiasFieldCorrection -d 3 -i ' fMemprage ' -o ' fMemprageBiasCorr];
+        disp('Running ANTs N4 bias field correction...');
+        [status, result] = system(strjoin(cmd,newline),'-echo');
+        if status ~= 0
+            warning('N4 bias correction failed with message: %s', result);
+            % Fall back to original image if bias correction fails
+            fMemprageBiasCorr = fMemprage;
+            disp('Using original image for brain extraction due to N4 failure.');
+        else
+            disp(['Bias corrected file created: ' fMemprageBiasCorr]);
+        end
+    else
+        disp(['Bias corrected file already exists: ' fMemprageBiasCorr]);
+    end
+    
+    %%% memprage brain extraction using FreeSurfer's machine learning based tools
+    fMemprageBrain = fullfile(derivDir, 'memprage_brain.nii.gz');
+    fMemprageBrainMask = fullfile(derivDir, 'memprage_brain_mask.nii.gz');
+    if force || ~exist(fMemprageBrain, 'file')
+        cmd = {src.fs};
+        cmd{end+1} = ['mri_synthstrip -i ' fMemprageBiasCorr ' -o ' fMemprageBrain ' -m ' fMemprageBrainMask];
+        disp('Running FreeSurfer SynthStrip brain extraction (machine learning based)...');
+        [status, result] = system(strjoin(cmd,newline),'-echo');
+        if status ~= 0
+            warning('FreeSurfer brain extraction failed with message: %s', result);
+        else
+            disp(['Brain extracted file created: ' fMemprageBrain]);
+            disp(['Brain mask file created: ' fMemprageBrainMask]);
+        end
+    else
+        disp(['Brain extracted file already exists: ' fMemprageBrain]);
+    end
+
+    %%% interpolate memprage brain mask to TOF space
+    fMemprageBrainMaskInTofSpace = fullfile(derivDir, 'memprage_brain_mask_tof_space.nii.gz');
+    if force || ~exist(fMemprageBrainMaskInTofSpace, 'file')
+        disp('Interpolating brain mask to TOF space...');
+        cmd = {src.fs};
+        cmd{end+1} = ['mri_vol2vol --mov ' fMemprageBrainMask ' --targ ' fTof ' --regheader --o ' fMemprageBrainMaskInTofSpace ' --nearest'];
+        [status, result] = system(strjoin(cmd,newline),'-echo');
+        if status ~= 0
+            warning('Brain mask interpolation to TOF space failed with message: %s', result);
+        else
+            disp(['Brain mask interpolated to TOF space: ' fMemprageBrainMaskInTofSpace]);
+        end
+    else
+        disp(['Brain mask in TOF space already exists: ' fMemprageBrainMaskInTofSpace]);
+    end
+
+    %%% tof N4 bias correction
+    fTofBiasCorr = fullfile(derivDir, 'tof_n4.nii.gz');
+    if force || ~exist(fTofBiasCorr, 'file')
+        cmd = {src.ants};
+        cmd{end+1} = ['N4BiasFieldCorrection -d 3 -i ' fTof ' -o ' fTofBiasCorr ' -x ' fMemprageBrainMaskInTofSpace];
+        disp('Running ANTs N4 bias field correction on TOF image...');
+        [status, result] = system(strjoin(cmd,newline),'-echo');
+        if status ~= 0
+            warning('N4 bias correction for TOF failed with message: %s', result);
+            % Fall back to original image if bias correction fails
+            fTofBiasCorr = fTof;
+            disp('Using original TOF image due to N4 failure.');
+        else
+            disp(['Bias corrected TOF file created: ' fTofBiasCorr]);
+        end
+    else
+        disp(['Bias corrected TOF file already exists: ' fTofBiasCorr]);
+    end
+
+
+    %%% tof brain masking
+    fTofBiasCorrBrain = fullfile(derivDir, 'tof_n4_brain.nii.gz');
+    if force || ~exist(fTofBiasCorrBrain, 'file')
+        disp('Applying brain mask to TOF image using FreeSurfer mri_mask...');
+        cmd = {src.fs};
+        % Use mri_mask to apply the brain mask to the TOF image
+        cmd{end+1} = ['mri_mask ' fTofBiasCorr ' ' fMemprageBrainMask ' ' fTofBiasCorrBrain];
+        
+        % Execute the FreeSurfer command
+        [status, result] = system(strjoin(cmd,newline),'-echo');
+        if status ~= 0
+            warning('FreeSurfer brain masking failed with message: %s', result);
+        else
+            disp(['Brain-extracted TOF created: ' fTofBiasCorrBrain]);
+        end
+    else
+        disp(['Brain-extracted TOF already exists: ' fTofBiasCorrBrain]);
+    end
+    
+
+
+
+
+
+    % %%% Create average of functional data
+    % fAvCatAv = fullfile(derivDir, 'avCatAv.nii.gz');
+    % fCatAv = fullfile(derivDir, 'catAv.nii.gz');
+    
+    % This section assumes these files are created elsewhere
+    % If they don't exist, we should handle that case
+    if ~exist(fAvCatAv, 'file') || ~exist(fCatAv, 'file')
+        warning('Average functional data files not found. These should be created before this point.');
+    end
+    
+
+
+
+    %% Draw vessel rois
     %%% find earlier vessel rois file in derivatives
     fVesselRoi_deriv = {};
     for T = 1:length(taskList)
-        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'vessxxel.nii.gz'));
-        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'*','vesxxsel.nii.gz'));
-        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'*','*','vesxxsel.nii.gz'));
+        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'vessel.nii.gz'));
+        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'*','vessel.nii.gz'));
+        fVesselRoi_deriv{end+1} = dir(fullfile(rCond.(taskList{T}).dirsOrig.bidsDeriv,'*','*','vessel.nii.gz'));
     end
     fVesselRoi_deriv(cellfun('isempty',fVesselRoi_deriv)) = [];
 
     %%% copy vessel roi from derivatives or use vesselness
-    fVesselRoi        = fullfile(maskDir,'vessel.nii.gz');
+    fVesselRoi = fullfile(maskDir,'vessel.nii.gz');
     if ~isempty(fVesselRoi_deriv)
         fVesselRoi_deriv = fVesselRoi_deriv{1}; fVesselRoi_deriv = fullfile(fVesselRoi_deriv.folder,fVesselRoi_deriv.name);
         copyfile(fVesselRoi_deriv,fVesselRoi);
@@ -178,14 +343,124 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         fVesselRoi_deriv  = fullfile(derivDir,'vessel.nii.gz'); 
         copyfile(fVesselness,fVesselRoi);
     end
-
-
-
+    fVesselRoiMaxVox  = fullfile(derivDir,'vesselMaxVox.nii.gz'); copyfile(fVesselRoi,fVesselRoiMaxVox);
+    fVesselRoiDilated = fullfile(derivDir,'vesselDilated.nii.gz'); copyfile(fVesselRoi,fVesselRoiDilated);
     
-fAvCatAv
-fCatAv
-fVesselRoi
-fVesselness
+
+
+    %%% Draw in neurodesk
+    fNeurodeskList = {
+        fMemprage
+        fTofBiasCorrBrain
+        fAvMapEchoCatCnfrm
+        fAvCatAv
+        fCatAv
+        fVesselRoiDilated
+        fVesselRoi
+        fVesselRoiMaxVox
+        fVesselness
+        };
+    tmpDir = tempname; mkdir(tmpDir);
+    for i = 1:length(fNeurodeskList)
+        copyfile(fNeurodeskList{i},tmpDir);
+    end
+
+    [~,fMemprage2,~]          = fileparts(replace(fMemprage         ,'.nii.gz','')); fMemprage2          = [fMemprage2,'.nii.gz'];
+    [~,fTofBiasCorrBrain2,~]  = fileparts(replace(fTofBiasCorrBrain ,'.nii.gz','')); fTofBiasCorrBrain2  = [fTofBiasCorrBrain2,'.nii.gz'];
+    [~,fAvMapEchoCat2,~]      = fileparts(replace(fAvMapEchoCat     ,'.nii.gz','')); fAvMapEchoCat2      = [fAvMapEchoCat2,'.nii.gz'];
+    [~,fAvMapEchoCatCnfrm2,~] = fileparts(replace(fAvMapEchoCatCnfrm,'.nii.gz','')); fAvMapEchoCatCnfrm2 = [fAvMapEchoCatCnfrm2,'.nii.gz'];
+    [~,fAvCatAv2,~]           = fileparts(replace(fAvCatAv          ,'.nii.gz','')); fAvCatAv2           = [fAvCatAv2,'.nii.gz'];
+    [~,fCatAv2  ,~]           = fileparts(replace(fCatAv            ,'.nii.gz','')); fCatAv2             = [fCatAv2,'.nii.gz'];
+    [~,fVesselRoi2,~]         = fileparts(replace(fVesselRoi        ,'.nii.gz','')); fVesselRoi2         = [fVesselRoi2,'.nii.gz'];
+    [~,fVesselRoiDilated2,~]  = fileparts(replace(fVesselRoiDilated ,'.nii.gz','')); fVesselRoiDilated2  = [fVesselRoiDilated2,'.nii.gz'];
+    [~,fVesselRoiMaxVox2,~]   = fileparts(replace(fVesselRoiMaxVox  ,'.nii.gz','')); fVesselRoiMaxVox2   = [fVesselRoiMaxVox2,'.nii.gz'];
+    [~,fVesselness2,~]        = fileparts(replace(fVesselness       ,'.nii.gz','')); fVesselness2        = [fVesselness2,'.nii.gz'];
+        
+
+    %%% To draw masks, copy to neurocloud, use freeview there, then copy back
+    subDir = ['sub-' sub '_' acqLabel];
+    cmd = {src.fs};
+    cmd{end+1} = ['mkdir -p ~/' subDir];
+    cmd{end+1} = ['cd ~/' subDir];
+    cmd{end+1} = ['rsync sebp@takoyaki1:' tmpDir '/* .'];
+    cmd{end+1} = 'echo draw VESSEL ROIs (aretery=902, vein=914, left-vessel=30, right-vessel=62)';
+    cmd{end+1} = 'freeview -v \';
+    cmd{end+1} = [fCatAv2             ':grayscale=0,1000 \'];
+    cmd{end+1} = [fMemprage2          ':resample=cubic:visible=0 \'];
+    cmd{end+1} = [fTofBiasCorrBrain2  ':resample=cubic:visible=0 \'];
+    cmd{end+1} = [fAvMapEchoCatCnfrm2 ':resample=cubic \'];
+    cmd{end+1} = [fAvCatAv2           ':grayscale=0,1000 \'];
+    cmd{end+1} = [fVesselness2        ':colormap=heat \'];
+    cmd{end+1} = [fVesselRoiDilated2  ':colormap=lut \'];
+    cmd{end+1} = [fVesselRoi2         ':colormap=lut \'];
+    cmd{end+1} = [fVesselRoiMaxVox2   ':colormap=lut'];
+    cmd{end+1} = ['rsync ./* sebp@takoyaki1:' tmpDir '/'];
+
+    cmdFile = [tmpDir '.sh'];
+    fileID = fopen(cmdFile, 'w');
+    fprintf(fileID, '%s\n', cmd{:});
+    fclose(fileID);
+    disp('++++++++++++++++++++++++++++++++++++++++')
+    disp('Commands for vessel roi drawing are in file:')
+    disp(cmdFile)
+    disp('Paste in freeview capable remote to transfer data, create masks and transfer back.')
+    %%% Wait for user to confirm mask drawing is done
+    done = '';
+    while ~strcmpi(done, 'done')
+        disp('When done, type "done"')
+        done = input('', 's');
+    end
+    disp('++++++++++++++++++++++++++++++++++++++++')
+    
+
+return
+
+for s = 1:length(subList(sesIndList))
+    S = sesIndList(s);
+    for rs = 1:length(runSet{S})
+        if isempty(runSet{S}{rs}.fList); continue; end
+        fBase = char(runSet{S}{rs}.initFiles.fPlumbSmr.sesCat.runAv.fList(:,1));
+        % fMask = replace(fBase,'_volTs.nii.gz','_volBrainMaskInv.nii.gz');
+        % runSet{S}{rs}.fMasks.fMaskInv = fMask;
+        if forceThis || ~exist(runSet{S}{rs}.fMasks.fMaskInv,'file')
+            if forceThis>1 || ~exist(runSet{S}{rs}.fMasks.fMaskInv,'file')
+                mri     = MRIread(fBase,1);
+                mri.vol = ones(mri.volsize);
+                MRIwrite(mri,runSet{S}{rs}.fMasks.fMaskInv);
+            end
+            cmd{end+1} = ['scp sebp@takoyaki1:' runSet{S}{rs}.fMasks.fMaskInv ' sebp@takoyaki1:' fBase ' .'];
+            cmd{end+1} = 'echo draw EXCLUSION mask for the BRAIN (brain=0, nonBrain=1)';
+            cmd{end+1} = 'freeview -v \';
+            cmd{end+1} = [replace(fBase,[fileparts(fBase) filesep],'./') ' \'];
+            cmd{end+1} = [replace(runSet{S}{rs}.fMasks.fMaskInv,[fileparts(runSet{S}{rs}.fMasks.fMaskInv) filesep],'./') ':colormap=heat:opacity=0.33'];
+            cmd{end+1} = ['scp ' replace(runSet{S}{rs}.fMasks.fMaskInv,[fileparts(runSet{S}{rs}.fMasks.fMaskInv) filesep],'./') ' sebp@takoyaki1:' runSet{S}{rs}.fMasks.fMaskInv ''];
+        end
+    end
+end
+
+%%% Write commands to a file instead of copying to clipboard
+if length(cmd)==1
+    disp('all masks found in database bids derivative, no need to draw')
+else
+    cmdFile = fullfile(info.prcDir, 'prc', 'mask_creation_commands.sh');
+    fileID = fopen(cmdFile, 'w');
+    fprintf(fileID, '%s\n', cmd{:});
+    fclose(fileID);
+    disp('++++++++++++++++++++++++++++++++++++++++')
+    % disp('Command for mask creation is in clipboard.')
+    % disp('Paste in freeview capable remote to transfer data, create masks and transfer back.')
+    disp('Commands for mask creation are in file:')
+    disp(cmdFile)
+    disp('Paste in freeview capable remote to transfer data, create masks and transfer back.')
+    %%% Wait for user to confirm mask drawing is done
+    done = '';
+    while ~strcmpi(done, 'done')
+        disp('When done, type "done"')
+        done = input('', 's');
+    end
+    disp('++++++++++++++++++++++++++++++++++++++++')
+end
+
 
 
 
