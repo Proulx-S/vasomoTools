@@ -25,6 +25,10 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     acqLabel = ['acq-' acq '_prsc-' prsc '_venc-' vencAcq];
 
 
+    % volAnat in all subfields should now be exactly the same
+    volAnat = rCond.(taskList{1}).volAnat;
+
+
     % %%% Combine runs
     % fList = cell(size(taskList));
     % for T = 1:length(taskList)
@@ -82,7 +86,7 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
 
     %%% Combine masks
     fMaskBrainInv = unique(fMaskList); fMaskBrainInv(cellfun('isempty',fMaskBrainInv)) = [];
-    maskDir = strsplit(rCond.task_50sPrd1sDur.dirs.bidsDeriv,filesep);
+    maskDir = strsplit(rCond.(taskList{1}).dirs.bidsDeriv,filesep);
     ind = contains(maskDir,'sub-');
     if nnz(ind)>1; dbstack; error('more than one mask found'); end
     maskDir = strjoin([maskDir(1:find(ind)) {acqLabel 'anat'}],filesep);
@@ -163,27 +167,67 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     
 
     %% Process other anatomical images
-
-    %%% find volAnat in rCond
-    volAnat  = cell(size(taskList));
-    nonEmpty = false(size(taskList));
-    for T = 1:length(taskList)
-        volAnat{T} = rCond.(taskList{T}).volAnat;
-        acqAnatList = fields(volAnat{T});
-        tmp = false;
-        for A = 1:length(acqAnatList)
-            tmp = tmp | numel(volAnat{T}.(acqAnatList{A}))>0;
-        end
-        nonEmpty(T) = tmp;
-    end
-    if nnz(nonEmpty)>1; dbstack; error('more than one volAnat found'); end
-    volAnat = rCond.(taskList{nonEmpty}).volAnat;
+    
 
 
-    %%% find avMap
+    % % %%% find volAnat in rCond
+    % % volAnat  = cell(size(taskList));
+    % % nonEmpty = false(size(taskList));
+    % % for T = 1:length(taskList)
+    % %     volAnat{T} = rCond.(taskList{T}).volAnat;
+    % %     acqAnatList = fields(volAnat{T});
+    % %     tmp = false;
+    % %     for A = 1:length(acqAnatList)
+    % %         tmp = tmp | numel(volAnat{T}.(acqAnatList{A}))>0;
+    % %     end
+    % %     nonEmpty(T) = tmp;
+    % % end
+    % % if nnz(nonEmpty)>1; dbstack; error('more than one volAnat found'); end
+    % % volAnat = rCond.(taskList{nonEmpty}).volAnat;
+    % taskList2 = fields(rCond); taskList2 = taskList2(contains(taskList2,'task_'));
+    % volAnatTmp = [];
+    % for T = 1:length(taskList2)
+    %     % acqAnatList = fields(rCond.(taskList2{T}).volAnat);
+    %     volAnatTmpTmp = rCond.(taskList2{T}).volAnat;
+    %     if isfield(volAnatTmpTmp,'label'); volAnatTmpTmp = rmfield(volAnatTmpTmp,'label'); end
+    %     if isfield(volAnatTmpTmp,'roi');   volAnatTmpTmp = rmfield(volAnatTmpTmp,'roi');   end
+    %     volAnatTmp = cat(1,volAnatTmp,volAnatTmpTmp);
+    % end
+    % % combine volAnat
+    % imList = fields(volAnatTmp);
+    % volAnat = [];
+    % for i = 1:length(imList)
+    %     volAnat.(imList{i}) = cat(1,volAnatTmp.(imList{i}));
+    %     [~,b,~] = unique(fullfile({volAnat.(imList{i}).folder},{volAnat.(imList{i}).name}));
+    %     volAnat.(imList{i}) = volAnat.(imList{i})(b);
+    % end
+    % % redistribute volAnat
+    % for T = 1:length(taskList2)
+    %     rCond.(taskList2{T}).volAnat = volAnat;
+    % end
+
+
+
+
+    %%% find and sort avMap
     fAvMapEchoCat     = fullfile(derivDir,'avMapEchoCat.nii.gz');
     fAvMapEchoCat_reg = fullfile(derivDir,'avMapEchoCat.lta');
-    f = fullfile({volAnat.avMap.folder},{volAnat.avMap.name});
+    fTmp = fullfile({volAnat.avMap.folder},{volAnat.avMap.name});
+    [a,b,c] = unique(regexprep(fTmp, '_echo-\d+_', '_'));
+    if length(a)>1
+        % pick one
+        switch sub
+            case {'vsmDiamCenSurP1' 'vsmDiamCenSurP7' 'vsmDiamCenSurP10'}
+                f = fTmp(c==2);
+            case {'vsmDiamCenSurP2' 'vsmDiamCenSurP4' 'vsmDiamCenSurP5'}
+                f = fTmp(c==1);
+            otherwise
+                fTmp
+                dbstack; keyboard;
+        end
+    else
+        f = fTmp;
+    end
     mriOut = MRIread(f{1},1);
     for E = 1:length(f)
         mri = MRIread(f{E});
@@ -204,107 +248,118 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     fTof     = fullfile(derivDir,'tof.nii.gz');
     fTof_reg = fullfile(derivDir,'tof.lta');
     f = fullfile({volAnat.tof.folder},{volAnat.tof.name});
+    % just pick the first one if more than one
     copyfile(f{1},fTof);
     
-    %%% findmemprage
+    %%% find memprage
     fMemprage     = fullfile(derivDir,'memprage.nii.gz');
     fMemprage_reg = fullfile(derivDir,'memprage.lta');
     f = fullfile({volAnat.memprage.folder},{volAnat.memprage.name});
-    f = f{contains(f,'proc-rms','IgnoreCase',true)};
-    copyfile(f,fMemprage);
+    f = f(contains(f,'proc-rms','IgnoreCase',true));
+    % just pick the first one if more than one
+    if isempty(f)
+        fMemprage = []; fMemprage_reg = [];
+    else
+        copyfile(f{1},fMemprage);
+    end
 
 
     %%% memprage N4 bias correction
-    fMemprageBiasCorr = fullfile(derivDir, 'memprage_n4.nii.gz');
-    if force || ~exist(fMemprageBiasCorr, 'file')
-        cmd = {src.ants};
-        cmd{end+1} = ['N4BiasFieldCorrection -d 3 -i ' fMemprage ' -o ' fMemprageBiasCorr];
-        disp('Running ANTs N4 bias field correction...');
-        [status, result] = system(strjoin(cmd,newline),'-echo');
-        if status ~= 0
-            warning('N4 bias correction failed with message: %s', result);
-            % Fall back to original image if bias correction fails
-            fMemprageBiasCorr = fMemprage;
-            disp('Using original image for brain extraction due to N4 failure.');
+    if ~isempty(fMemprage)
+        fMemprageBiasCorr = fullfile(derivDir, 'memprage_n4.nii.gz');
+        if force || ~exist(fMemprageBiasCorr, 'file')
+            cmd = {src.ants};
+            cmd{end+1} = ['N4BiasFieldCorrection -d 3 -i ' fMemprage ' -o ' fMemprageBiasCorr];
+            disp('Running ANTs N4 bias field correction...');
+            [status, result] = system(strjoin(cmd,newline),'-echo');
+            if status ~= 0
+                warning('N4 bias correction failed with message: %s', result);
+                % Fall back to original image if bias correction fails
+                fMemprageBiasCorr = fMemprage;
+                disp('Using original image for brain extraction due to N4 failure.');
+            else
+                disp(['Bias corrected file created: ' fMemprageBiasCorr]);
+            end
         else
-            disp(['Bias corrected file created: ' fMemprageBiasCorr]);
+            disp(['Bias corrected file already exists: ' fMemprageBiasCorr]);
         end
-    else
-        disp(['Bias corrected file already exists: ' fMemprageBiasCorr]);
-    end
-    
-    %%% memprage brain extraction using FreeSurfer's machine learning based tools
-    fMemprageBrain = fullfile(derivDir, 'memprage_brain.nii.gz');
-    fMemprageBrainMask = fullfile(derivDir, 'memprage_brain_mask.nii.gz');
-    if force || ~exist(fMemprageBrain, 'file')
-        cmd = {src.fs};
-        cmd{end+1} = ['mri_synthstrip -i ' fMemprageBiasCorr ' -o ' fMemprageBrain ' -m ' fMemprageBrainMask];
-        disp('Running FreeSurfer SynthStrip brain extraction (machine learning based)...');
-        [status, result] = system(strjoin(cmd,newline),'-echo');
-        if status ~= 0
-            warning('FreeSurfer brain extraction failed with message: %s', result);
-        else
-            disp(['Brain extracted file created: ' fMemprageBrain]);
-            disp(['Brain mask file created: ' fMemprageBrainMask]);
-        end
-    else
-        disp(['Brain extracted file already exists: ' fMemprageBrain]);
-    end
-
-    %%% interpolate memprage brain mask to TOF space
-    fMemprageBrainMaskInTofSpace = fullfile(derivDir, 'memprage_brain_mask_tof_space.nii.gz');
-    if force || ~exist(fMemprageBrainMaskInTofSpace, 'file')
-        disp('Interpolating brain mask to TOF space...');
-        cmd = {src.fs};
-        cmd{end+1} = ['mri_vol2vol --mov ' fMemprageBrainMask ' --targ ' fTof ' --regheader --o ' fMemprageBrainMaskInTofSpace ' --nearest'];
-        [status, result] = system(strjoin(cmd,newline),'-echo');
-        if status ~= 0
-            warning('Brain mask interpolation to TOF space failed with message: %s', result);
-        else
-            disp(['Brain mask interpolated to TOF space: ' fMemprageBrainMaskInTofSpace]);
-        end
-    else
-        disp(['Brain mask in TOF space already exists: ' fMemprageBrainMaskInTofSpace]);
-    end
-
-    %%% tof N4 bias correction
-    fTofBiasCorr = fullfile(derivDir, 'tof_n4.nii.gz');
-    if force || ~exist(fTofBiasCorr, 'file')
-        cmd = {src.ants};
-        cmd{end+1} = ['N4BiasFieldCorrection -d 3 -i ' fTof ' -o ' fTofBiasCorr ' -x ' fMemprageBrainMaskInTofSpace];
-        disp('Running ANTs N4 bias field correction on TOF image...');
-        [status, result] = system(strjoin(cmd,newline),'-echo');
-        if status ~= 0
-            warning('N4 bias correction for TOF failed with message: %s', result);
-            % Fall back to original image if bias correction fails
-            fTofBiasCorr = fTof;
-            disp('Using original TOF image due to N4 failure.');
-        else
-            disp(['Bias corrected TOF file created: ' fTofBiasCorr]);
-        end
-    else
-        disp(['Bias corrected TOF file already exists: ' fTofBiasCorr]);
-    end
-
-
-    %%% tof brain masking
-    fTofBiasCorrBrain = fullfile(derivDir, 'tof_n4_brain.nii.gz');
-    if force || ~exist(fTofBiasCorrBrain, 'file')
-        disp('Applying brain mask to TOF image using FreeSurfer mri_mask...');
-        cmd = {src.fs};
-        % Use mri_mask to apply the brain mask to the TOF image
-        cmd{end+1} = ['mri_mask ' fTofBiasCorr ' ' fMemprageBrainMask ' ' fTofBiasCorrBrain];
         
-        % Execute the FreeSurfer command
-        [status, result] = system(strjoin(cmd,newline),'-echo');
-        if status ~= 0
-            warning('FreeSurfer brain masking failed with message: %s', result);
+        %%% memprage brain extraction using FreeSurfer's machine learning based tools
+        fMemprageBrain = fullfile(derivDir, 'memprage_brain.nii.gz');
+        fMemprageBrainMask = fullfile(derivDir, 'memprage_brain_mask.nii.gz');
+        if force || ~exist(fMemprageBrain, 'file')
+            cmd = {src.fs};
+            cmd{end+1} = ['mri_synthstrip -i ' fMemprageBiasCorr ' -o ' fMemprageBrain ' -m ' fMemprageBrainMask];
+            disp('Running FreeSurfer SynthStrip brain extraction (machine learning based)...');
+            [status, result] = system(strjoin(cmd,newline),'-echo');
+            if status ~= 0
+                warning('FreeSurfer brain extraction failed with message: %s', result);
+            else
+                disp(['Brain extracted file created: ' fMemprageBrain]);
+                disp(['Brain mask file created: ' fMemprageBrainMask]);
+            end
         else
-            disp(['Brain-extracted TOF created: ' fTofBiasCorrBrain]);
+            disp(['Brain extracted file already exists: ' fMemprageBrain]);
+        end
+
+        %%% interpolate memprage brain mask to TOF space
+        fMemprageBrainMaskInTofSpace = fullfile(derivDir, 'memprage_brain_mask_tof_space.nii.gz');
+        if force || ~exist(fMemprageBrainMaskInTofSpace, 'file')
+            disp('Interpolating brain mask to TOF space...');
+            cmd = {src.fs};
+            cmd{end+1} = ['mri_vol2vol --mov ' fMemprageBrainMask ' --targ ' fTof ' --regheader --o ' fMemprageBrainMaskInTofSpace ' --nearest'];
+            [status, result] = system(strjoin(cmd,newline),'-echo');
+            if status ~= 0
+                warning('Brain mask interpolation to TOF space failed with message: %s', result);
+            else
+                disp(['Brain mask interpolated to TOF space: ' fMemprageBrainMaskInTofSpace]);
+            end
+        else
+            disp(['Brain mask in TOF space already exists: ' fMemprageBrainMaskInTofSpace]);
+        end
+
+        %%% tof N4 bias correction
+        fTofBiasCorr = fullfile(derivDir, 'tof_n4.nii.gz');
+        if force || ~exist(fTofBiasCorr, 'file')
+            cmd = {src.ants};
+            cmd{end+1} = ['N4BiasFieldCorrection -d 3 -i ' fTof ' -o ' fTofBiasCorr ' -x ' fMemprageBrainMaskInTofSpace];
+            disp('Running ANTs N4 bias field correction on TOF image...');
+            [status, result] = system(strjoin(cmd,newline),'-echo');
+            if status ~= 0
+                warning('N4 bias correction for TOF failed with message: %s', result);
+                % Fall back to original image if bias correction fails
+                fTofBiasCorr = fTof;
+                disp('Using original TOF image due to N4 failure.');
+            else
+                disp(['Bias corrected TOF file created: ' fTofBiasCorr]);
+            end
+        else
+            disp(['Bias corrected TOF file already exists: ' fTofBiasCorr]);
+        end
+    
+        %%% tof brain masking
+        fTofBiasCorrBrain = fullfile(derivDir, 'tof_n4_brain.nii.gz');
+        if force || ~exist(fTofBiasCorrBrain, 'file')
+            disp('Applying brain mask to TOF image using FreeSurfer mri_mask...');
+            cmd = {src.fs};
+            % Use mri_mask to apply the brain mask to the TOF image
+            cmd{end+1} = ['mri_mask ' fTofBiasCorr ' ' fMemprageBrainMask ' ' fTofBiasCorrBrain];
+            
+            % Execute the FreeSurfer command
+            [status, result] = system(strjoin(cmd,newline),'-echo');
+            if status ~= 0
+                warning('FreeSurfer brain masking failed with message: %s', result);
+            else
+                disp(['Brain-extracted TOF created: ' fTofBiasCorrBrain]);
+            end
+        else
+            disp(['Brain-extracted TOF already exists: ' fTofBiasCorrBrain]);
         end
     else
-        disp(['Brain-extracted TOF already exists: ' fTofBiasCorrBrain]);
+        fTofBiasCorr = fTof;
+        fTofBiasCorrBrain = fTof;
     end
+
     
 
 
@@ -362,23 +417,38 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
         };
     tmpDir = tempname; mkdir(tmpDir);
     for i = 1:length(fNeurodeskList)
-        copyfile(fNeurodeskList{i},tmpDir);
-        if exist(replace(fNeurodeskList{i},'.nii.gz','.lta'),'file')
-            copyfile(replace(fNeurodeskList{i},'.nii.gz','.lta'),tmpDir);
+        if ~isempty(fNeurodeskList{i})
+            copyfile(fNeurodeskList{i},tmpDir);
+            if exist(replace(fNeurodeskList{i},'.nii.gz','.lta'),'file')
+                copyfile(replace(fNeurodeskList{i},'.nii.gz','.lta'),tmpDir);
+            end
         end
     end
 
-    [~,fMemprage2,~]          = fileparts(replace(fMemprage         ,'.nii.gz','')); fMemprage2          = [fMemprage2,'.nii.gz'];
+    if ~isempty(fMemprage)
+        [~,fMemprage2,~]          = fileparts(replace(fMemprage         ,'.nii.gz','')); fMemprage2          = [fMemprage2,'.nii.gz'];
+    else
+        fMemprage2 = [];
+    end
     [~,fTofBiasCorrBrain2,~]  = fileparts(replace(fTofBiasCorrBrain ,'.nii.gz','')); fTofBiasCorrBrain2  = [fTofBiasCorrBrain2,'.nii.gz'];
     [~,fAvMapEchoCat2,~]      = fileparts(replace(fAvMapEchoCat     ,'.nii.gz','')); fAvMapEchoCat2      = [fAvMapEchoCat2,'.nii.gz'];
     [~,fAvMapEchoCatCnfrm2,~] = fileparts(replace(fAvMapEchoCatCnfrm,'.nii.gz','')); fAvMapEchoCatCnfrm2 = [fAvMapEchoCatCnfrm2,'.nii.gz'];
     [~,fAvCatAv2,~]           = fileparts(replace(fAvCatAv          ,'.nii.gz','')); fAvCatAv2           = [fAvCatAv2,'.nii.gz'];
     [~,fCatAv2  ,~]           = fileparts(replace(fCatAv            ,'.nii.gz','')); fCatAv2             = [fCatAv2,'.nii.gz'];
     [~,fVesselRoi2,~]         = fileparts(replace(fVesselRoi        ,'.nii.gz','')); fVesselRoi2         = [fVesselRoi2,'.nii.gz'];
-    % [~,fVesselRoiDilated2,~]  = fileparts(replace(fVesselRoiDilated ,'.nii.gz','')); fVesselRoiDilated2  = [fVesselRoiDilated2,'.nii.gz'];
-    % [~,fVesselRoiMaxVox2,~]   = fileparts(replace(fVesselRoiMaxVox  ,'.nii.gz','')); fVesselRoiMaxVox2   = [fVesselRoiMaxVox2,'.nii.gz'];
     [~,fVesselness2,~]        = fileparts(replace(fVesselness       ,'.nii.gz','')); fVesselness2        = [fVesselness2,'.nii.gz'];
-        
+    if ~isempty(fMemprage)
+        if exist(replace(fMemprage,'.nii.gz','.lta'),'file');          fMemprage3          = [fMemprage2 ':reg=' replace(fMemprage2,'.nii.gz','.lta')];                   else fMemprage3          = fMemprage2; end
+    else
+        fMemprage3 = [];
+    end
+    if exist(replace(fTofBiasCorrBrain,'.nii.gz','.lta'),'file');  fTofBiasCorrBrain3  = [fTofBiasCorrBrain2 ':reg=' replace(fTofBiasCorrBrain2,'.nii.gz','.lta')];   else fTofBiasCorrBrain3  = fTofBiasCorrBrain2; end
+    if exist(replace(fAvMapEchoCat,'.nii.gz','.lta'),'file');      fAvMapEchoCat3      = [fAvMapEchoCat2 ':reg=' replace(fAvMapEchoCat2,'.nii.gz','.lta')];           else fAvMapEchoCat3      = fAvMapEchoCat2; end            
+    if exist(replace(fAvMapEchoCatCnfrm,'.nii.gz','.lta'),'file'); fAvMapEchoCatCnfrm3 = [fAvMapEchoCatCnfrm2 ':reg=' replace(fAvMapEchoCatCnfrm2,'.nii.gz','.lta')]; else fAvMapEchoCatCnfrm3 = fAvMapEchoCatCnfrm2; end
+    if exist(replace(fAvCatAv,'.nii.gz','.lta'),'file');           fAvCatAv3           = [fAvCatAv2 ':reg=' replace(fAvCatAv2,'.nii.gz','.lta')];                     else fAvCatAv3           = fAvCatAv2; end
+    if exist(replace(fCatAv,'.nii.gz','.lta'),'file');             fCatAv3             = [fCatAv2 ':reg=' replace(fCatAv2,'.nii.gz','.lta')];                         else fCatAv3             = fCatAv2; end
+    if exist(replace(fVesselRoi,'.nii.gz','.lta'),'file');         fVesselRoi3         = [fVesselRoi2 ':reg=' replace(fVesselRoi2,'.nii.gz','.lta')];                 else fVesselRoi3         = fVesselRoi2; end
+    if exist(replace(fVesselness,'.nii.gz','.lta'),'file');        fVesselness3        = [fVesselness2 ':reg=' replace(fVesselness2,'.nii.gz','.lta')];               else fVesselness3        = fVesselness2; end
 
     
     %%% To draw masks, copy to neurocloud, use freeview there, then copy back
@@ -389,16 +459,16 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     cmd{end+1} = ['rsync sebp@takoyaki1:' tmpDir '/*{.nii.gz,.lta} .'];
     cmd{end+1} = 'echo draw VESSEL ROIs (aretery=902, vein=914, left-vessel=30, right-vessel=62)';
     cmd{end+1} = 'freeview -v \';
-    cmd{end+1} = [fCatAv2             ':grayscale=0,1000 \'];
-    cmd{end+1} = [fMemprage2          ':resample=cubic \'];
-    cmd{end+1} = [fTofBiasCorrBrain2  ':resample=cubic \'];
-    cmd{end+1} = [fAvMapEchoCatCnfrm2 ':resample=cubic \'];
-    cmd{end+1} = [fAvCatAv2           ':grayscale=0,1000 \'];
-    cmd{end+1} = [fVesselness2        ':colormap=heat \'];
-    % cmd{end+1} = [fVesselRoiDilated2  ':colormap=lut \'];
-    cmd{end+1} = [fVesselRoi2         ':colormap=lut'];
-    % cmd{end+1} = [fVesselRoiMaxVox2   ':colormap=lut'];
-    cmd{end+1} = ['rsync ./*{.nii.gz,.lta} sebp@takoyaki1:' tmpDir '/'];
+    cmd{end+1} = [fCatAv3             ':grayscale=0,1000 \'];
+    if ~isempty(fMemprage)
+        cmd{end+1} = [fMemprage3          ':resample=cubic \'];
+    end
+    cmd{end+1} = [fTofBiasCorrBrain3  ':resample=cubic \'];
+    cmd{end+1} = [fAvMapEchoCatCnfrm3 ':resample=cubic \'];
+    cmd{end+1} = [fAvCatAv3           ':grayscale=0,1000 \'];
+    cmd{end+1} = [fVesselness3        ':colormap=heat \'];
+    cmd{end+1} = [fVesselRoi3         ':colormap=lut'];
+    cmd{end+1} = ['rsync ./*{.nii.gz,.lta,.vtk} sebp@takoyaki1:' tmpDir '/'];
 
     cmdFile = [tmpDir '.sh'];
     fileID = fopen(cmdFile, 'w');
@@ -409,27 +479,37 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     disp(cmdFile)
     disp('Paste in freeview capable remote to transfer data, create masks and transfer back.')
     %%% Wait for user to confirm mask drawing is done
-    done = '';
-    while ~strcmpi(done, 'done')
-        disp('When done, type "done"')
-        done = input('', 's');
-    end
-    disp('++++++++++++++++++++++++++++++++++++++++')
-
-    % move out of tmpDir
-    movefile(fullfile(tmpDir,fVesselRoi2),fVesselRoi)
-    movefile(fullfile(tmpDir,replace(fAvMapEchoCatCnfrm2,'.nii.gz','.lta')),replace(fAvMapEchoCatCnfrm,'.nii.gz','.lta'));
-    for i = 1:length(fNeurodeskList)
-        [~,fName,~] = fileparts(replace(fNeurodeskList{i},'.nii.gz',''));
-        if exist(fullfile(tmpDir,[fName '.lta']),'file')
-            movefile(fullfile(tmpDir,[fName '.lta']),replace(fNeurodeskList{i},'.nii.gz','.lta'));
+    if force || ~exist(fVesselRoi_deriv,'file')
+        keyboard
+        done = '';
+        while ~strcmpi(done, 'done')
+            disp('When done, type "done"')
+            done = input('', 's');
         end
+        disp('++++++++++++++++++++++++++++++++++++++++')
+
+        % move out of tmpDir
+        copyfile(fullfile(tmpDir,fVesselRoi2),fVesselRoi)
+        if exist(fullfile(tmpDir,replace(fAvMapEchoCatCnfrm2,'.nii.gz','.lta')),'file')
+            copyfile(fullfile(tmpDir,replace(fAvMapEchoCatCnfrm2,'.nii.gz','.lta')),replace(fAvMapEchoCatCnfrm,'.nii.gz','.lta'));
+        end
+        for i = 1:length(fNeurodeskList)
+            if ~isempty(fNeurodeskList{i})
+                [~,fName,~] = fileparts(replace(fNeurodeskList{i},'.nii.gz',''));
+                if exist(fullfile(tmpDir,[fName '.lta']),'file')
+                    copyfile(fullfile(tmpDir,[fName '.lta']),replace(fNeurodeskList{i},'.nii.gz','.lta'));
+                end
+                if exist(fullfile(tmpDir,[fName '.vtk']),'file')
+                    copyfile(fullfile(tmpDir,[fName '.vtk']),replace(fNeurodeskList{i},'.nii.gz','.vtk'));
+                end
+            end
+        end
+
+
+
+        %%% Store to permanent bids derivatives
+        copyfile(fVesselRoi,fVesselRoi_deriv)
     end
-
-
-
-    %%% Store to permanent bids derivatives
-    copyfile(fVesselRoi,fVesselRoi_deriv)
     
 
 
@@ -438,7 +518,11 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
     volAnat.label.calcarineVessel.label     = {'artery' 'vein' 'Left-vessel' 'Right-vessel'};
     volAnat.label.calcarineVessel.labelVal  = [902 914 30 62];
     volAnat.label.calcarineVessel.fBase     = fAvCatAv;
-    volAnat.label.calcarineVessel.fBaseList = {fCatAv fVesselness fAvMapEchoCatCnfrm fTofBiasCorrBrain fMemprage};
+    if ~isempty(fMemprage)
+        volAnat.label.calcarineVessel.fBaseList = {fCatAv fVesselness fAvMapEchoCatCnfrm fTofBiasCorrBrain fMemprage};
+    else
+        volAnat.label.calcarineVessel.fBaseList = {fCatAv fVesselness fAvMapEchoCatCnfrm fTofBiasCorrBrain};
+    end
     volAnat.label.calcarineVessel.fFig      = fSegFig;
     
 
@@ -505,6 +589,19 @@ function [volAnat,rCond] = volAnatPreproc6(rCond,force,verbose)
             rCond.(char(taskList{T})).volAnat = volAnat;
         end
     end
+
+
+
+    %%%%%
+    disp('!!!!!!!!!!!!!!!!!!!!!!!!')
+    disp('------------------------')
+    disp('manually backup drawing')
+    bkDir = '/local/users/Proulx-S/db/vsmDiamCenSur';
+    if ~exist(fullfile(bkDir,subDir),'dir'); mkdir(fullfile(bkDir,subDir)); end
+    disp(['cp ' fVesselRoi_deriv ' ' [fullfile(bkDir,subDir) filesep]])
+    ls(fullfile(bkDir,'*','*'))
+    disp('------------------------')
+    disp('!!!!!!!!!!!!!!!!!!!!!!!!')
 
 
 

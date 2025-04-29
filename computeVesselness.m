@@ -150,19 +150,26 @@ function [fComp,fNonComp,fSegFig,fVol] = computeVesselness(fVol,fMask,force,verb
     %% Label components
     labelList = repmat({'?'},k,1);
     
-    %%%% Narrowest component is brain
-    [~,b] = min(GMModel.Sigma);
-    labelList{b} = 'brain';
-    
-    %%%% Highest component is vessel
-    [~,b] = max(GMModel.mu);
-    labelList{b} = 'vessel';
-
     % exception
-    if strcmp(fVol,'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
-        %%%% Second highest component is also vessel
+    if all(ismember(fVol,{
+        '/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP9/ses-1/acq-vfMRI_prsc-dflt/sub-vsmDiamCenSurP4_ses-1_acq-vfMRIinflow_task-fixOnly_run-1_angio/N4_av_preproc_volTs.nii.gz'
+        '/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP9/ses-1/acq-vfMRI_prsc-dflt/sub-vsmDiamCenSurP4_ses-1_acq-vfMRIinflow_task-fixOnly_run-2_angio/N4_av_preproc_volTs.nii.gz'
+        }))
         [~,b] = sort(GMModel.mu,'descend');
-        labelList{b(2)} = 'vessel';
+        labelList(b) = {'vessel' 'vessel' 'brain'};
+    else
+        %%%% Narrowest component is brain
+        [~,b] = min(GMModel.Sigma);
+        labelList{b} = 'brain';
+        
+        %%%% Highest component is vessel
+        [~,b] = max(GMModel.mu);
+        labelList{b} = 'vessel';
+
+    % if strcmp(fVol,'/scratch/users/Proulx-S/doIt_generalPreproc/vsmDiamCenSur/prc/sub-vsmDiamCenSurP2/ses-1/acq-vfMRI_prsc-dflt/N4_av_cat_av_preproc_volTs.nii.gz')
+        %%%% Second highest component is also vessel
+        % [~,b] = sort(GMModel.mu,'descend');
+        % labelList{b(2)} = 'vessel';
     end
 
     %%%% The rest
