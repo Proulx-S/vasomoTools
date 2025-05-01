@@ -1,8 +1,8 @@
-function plotAct(rCond,metric,roi,H)
+function plotResp(rCond,metric,roi,H)
     if ~exist('roi','var');       roi = struct; end    
     if ~exist('H','var');           H = []    ; end
     if ~exist('metric','var'); metric = {}; end
-    if isempty(metric);        metric = {'psd'}; end
+    if isempty(metric);        metric = {'resp'}; end
     metric = cellstr(metric);
 
     %% Assert
@@ -28,44 +28,35 @@ function plotAct(rCond,metric,roi,H)
         hA = [hA{:}]; hA = hA(:);
     end
 
-    if isfield(roi(1),'im') && (isfield(roi(1).im,'resp') || isfield(roi(1).im,'act'))
+    if isfield(roi(1),'im') && isfield(roi(1).im,'resp')
         roiDataFlag = true;
     else
         roiDataFlag = false;
     end
     
 
-    %% Plot activation pattern
+    %% Plot response time course
     if roiDataFlag
-        % lineStyle = {'-','-'};
-        % lineColor = {[0 0 0],[0.5 0.5 0.5]};
-        cLim = cell(1,length(metric));
+        lineStyle = {'-','-'};
+        lineColor = {[0 0 0],[0.5 0.5 0.5]};
         for i = 1:length(roi)
             hold(hA(i),'on');
-            if length(metric)>1; dbstack; error('accept only one metric, code that'); end
             for m = 1:length(metric)
                 switch metric{m}
-                    case 'coef'
-                        x = roi(i).im.act.x;
-                        y = roi(i).im.act.y;
-                        im = roi(i).im.act.im(:,:,:,1);
+                    case 'resp'
+                        im = permute(roi(i).im.resp.im,[4 1 2 3]);
+                        tsNeg = mean(im(:,  roi(i).im.act.im(:,:,:,1)<0  &  roi(i).im.actP.im<0.05)  ,2);
+                        tsPos = mean(im(:,roi(i).im.act.im(:,:,:,1)>0 & roi(i).im.actP.im<0.05),2);
+                        
+
+                        % roi(i).poly.mask = roi(i).mask;
 
                         % figure('WindowStyle','docked');
-                        % imagesc(x,y,roi(i).im.act.im(:,:,:,1));
-                        % figure('WindowStyle','docked');
-                        % imagesc(roi(i).im.base.im(:,:,:,1));
-                        
-                        % f    = roi(i).vec.mt.psd.f;
-                        % spec = mean(roi(i).vec.mt.psd.vec,6);
-                    case 'psdPS'
-                        f    = roi(i).vec.mt.psdTrialGram.f;
-                        spec = mean(roi(i).vec.mt.psdTrialGram.vec(:,:,:,:,:,:,end),6);
+                        % imagesc(roi(i).mask);
                     otherwise
-                        error('metric not found');
                 end
-                imagesc(hA(i),x,y,im);
-                cLim{m}(end+1) = max(abs(im(:)));
-                % plot(hA(i),squeeze(f),squeeze(spec),lineStyle{m},'Color',lineColor{m});
+                plot(hA(i),tsPos,'-');
+                plot(hA(i),tsNeg,'-');
             end
         end
     else
@@ -85,11 +76,12 @@ function plotAct(rCond,metric,roi,H)
     % end
 
 
+
     %% Adjust axes
-    axis(hA,'image')
-    set(hA,'CLim',[-1 1].*max([cLim{:}]),'Colormap',jet,'XTick',[],'YTick',[],'YDir','reverse')
     for i = 1:length(H)
         hA(i).XAxis.Color = H(i).XAxis.Color; hA(i).XAxis.LineWidth = H(i).XAxis.LineWidth;
         hA(i).YAxis.Color = H(i).YAxis.Color; hA(i).YAxis.LineWidth = H(i).YAxis.LineWidth;
     end
-    
+    axis(hA,'tight'); yLim = get(hA,'YLim'); yLim = [min([yLim{:}]) max([yLim{:}])];
+    set(hA,'YLim',yLim,'YScale','linear','XGrid','on','YGrid','on','XMinorGrid','on','YMinorGrid','on');
+

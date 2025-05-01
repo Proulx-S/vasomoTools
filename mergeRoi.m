@@ -4,14 +4,14 @@ function roiGrpMrgd = mergeRoi(roiGrp,commonFrameFlag)
     
     
     % Extract full-size underlay image from roi
-    UL = [roiGrp{:}]; UL = [UL.im]; UL = [UL.base];
+    UL = cat(1,roiGrp{:}); UL = cat(1,UL.im); UL = cat(1,UL.base);
     UL = unique({UL.fName});
     if length(UL) ~= 1; dbstack; error('UL should be a single file name'); end;
     UL = char(UL);
 
     % use common frame
     if commonFrameFlag
-        base = [roiGrp{:}]; base = [base.im]; base = [base.base];
+        base = cat(1,roiGrp{:}); base = cat(1,base.im); base = cat(1,base.base);
         base(end+1).fName = unique({base.fName}); if length(base(end).fName) ~= 1; dbstack; error('multiple fNames in roiGrp'); end; base(end).fName = char(base(end).fName);
         base(end  ).x  = cat(1,base.x)    ; base(end).x  = [min(base(end).x(:,1)) max(base(end).x(:,2))];
         base(end  ).y  = cat(1,base.y)    ; base(end).y  = [min(base(end).y(:,1)) max(base(end).y(:,2))];
@@ -34,8 +34,8 @@ function roiGrpMrgd = mergeRoi(roiGrp,commonFrameFlag)
 
 
         % merge roi fields
-        roiGrpMrgd{g}.poly  = [roiGrp{g}.poly];
-        roiGrpMrgd{g}.mask  = any(cat(4,roiGrp{g}.mask),4);
+        roiGrpMrgd{g}.poly  = cat(1,roiGrp{g}.poly);
+        roiGrpMrgd{g}.cropMask  = any(cat(4,roiGrp{g}.cropMask),4);
         roiGrpMrgd{g}.class = unique({roiGrp{g}.class});
         if length(roiGrpMrgd{g}.class) == 1
             roiGrpMrgd{g}.class = char(roiGrpMrgd{g}.class);
@@ -44,7 +44,7 @@ function roiGrpMrgd = mergeRoi(roiGrp,commonFrameFlag)
         end
         roiGrpMrgd{g}.id = inf;
         roiGrpMrgd{g}.label = [roiGrpMrgd{g}.class 'All'];
-        roiGrpMrgd{g}.com = {roiGrp{g}.com};
+        roiGrpMrgd{g}.com = cat(1,roiGrp{g}.com);
         roiGrpMrgd{g}.im.base = base(end);
 
 

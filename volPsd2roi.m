@@ -1,4 +1,4 @@
-function roi = vol2roi(vol,roi)
+function roi = volPsd2roi(vol,roi)
     
     inFields  = fields(vol);
     outFields = {'psd' 'psdTrialGramMD'};
@@ -10,7 +10,7 @@ function roi = vol2roi(vol,roi)
         switch outFields{d}
             case 'psd'
                 for r = 1:length(roi)
-                    roi(r).vec.mt.psd.vec   = vol.psd.PSD(:,:,:,:,:,roi(r).mask(dataMask),:,:);
+                    roi(r).vec.mt.psd.vec   = vol.psd.PSD(:,:,:,:,:,roi(r).cropMask(dataMask),:,:);
                     % roi(r).vec.mt.psd.vecAv = mean(roi(r).vec.mt.psd.vec   ,6);
                     % roi(r).vec.mt.psd.vecEr = std( roi(r).vec.mt.psd.vec,[],6);
                     roi(r).vec.mt.psd.f     = vol.psd.f;
@@ -20,7 +20,7 @@ function roi = vol2roi(vol,roi)
                 end            
             case 'psdTrialGramMD'
                 for r = 1:length(roi)
-                    roi(r).vec.mt.psdTrialGram.vec   = vol.psdTrialGramMD.vec.psdPC(:,:,:,:,:,roi(r).mask(dataMask),:,:);
+                    roi(r).vec.mt.psdTrialGram.vec   = vol.psdTrialGramMD.vec.psdPC(:,:,:,:,:,roi(r).cropMask(dataMask),:,:);
                     % roi(r).vec.mt.psdTrialGram.vecAv = mean(roi(r).vec.mt.psdTrialGram.vec   ,6);
                     % roi(r).vec.mt.psdTrialGram.vecEr = std( roi(r).vec.mt.psdTrialGram.vec,[],6);
                     roi(r).vec.mt.psdTrialGram.f         = vol.psdTrialGramMD.f;

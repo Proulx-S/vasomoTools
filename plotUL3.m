@@ -52,6 +52,7 @@ function tiling = plotUL3(roi,UL,cLim,numRow)
         tiling.sub.right.row = tiling.sub.right.row+tiling.sub.right.axesSize(1);
     end
 
+    drawnow;
 
 
 
@@ -67,7 +68,7 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
     end
 
     % loop through rois
-    for rc = 1:length(roi)
+    for rc = 1:size(roi,1)
         switch roi(rc).class
             case 'phys'
                 dbstack; error('code that')
@@ -112,9 +113,9 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
         switch roi(rc).class
             case {'artery','vein','unknown'}
                 % add roi contours
-                plot(tilingSub.hA{end}{end},roi(rc).poly,'FaceColor','none','EdgeColor',c);
+                plot(tilingSub.hA{end}{end},roi(rc).poly(1),'FaceColor','none','EdgeColor',c);
                 if ~isempty(tilingSubExtra)
-                    plot(tilingSubExtra.hA,roi(rc).poly,'FaceColor','none','EdgeColor',c);
+                    plot(tilingSubExtra.hA,roi(rc).poly(1),'FaceColor','none','EdgeColor',c);
                 end
                 if ~iscell(roi(rc).com)
                     % add roi center of mass
@@ -138,3 +139,5 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
 
     % concatenate axes handles
     tilingSub.hA{end} = cat(2,tilingSub.hA{end}{:});
+
+    drawnow;

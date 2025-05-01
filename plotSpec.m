@@ -1,7 +1,10 @@
-function plotSpec(rCond,roi,H)
-    if ~exist('roi','var'); roi = struct; end    
-    if ~exist('H','var');     H = []    ; end
-    
+function plotSpec(rCond,metric,roi,H)
+    if ~exist('roi','var');       roi = struct; end    
+    if ~exist('H','var');           H = []    ; end
+    if ~exist('metric','var'); metric = {}; end
+    if isempty(metric);        metric = {'psd'}; end
+    metric = cellstr(metric);
+
     %% Assert
     if iscell(roi)
         roi = [roi{:}];
@@ -34,10 +37,22 @@ function plotSpec(rCond,roi,H)
 
     %% Plot spectra
     if roiDataFlag
+        lineStyle = {'-','-'};
+        lineColor = {[0 0 0],[0.5 0.5 0.5]};
         for i = 1:length(roi)
-            f    = roi(i).vec.mt.psd.f;
-            spec = mean(roi(i).vec.mt.psd.vec,6);
-            plot(hA(i),squeeze(f),squeeze(spec),'k');
+            hold(hA(i),'on');
+            for m = 1:length(metric)
+                switch metric{m}
+                    case 'psd'
+                        f    = roi(i).vec.mt.psd.f;
+                        spec = mean(roi(i).vec.mt.psd.vec,6);
+                    case 'psdPS'
+                        f    = roi(i).vec.mt.psdTrialGram.f;
+                        spec = mean(roi(i).vec.mt.psdTrialGram.vec(:,:,:,:,:,:,end),6);
+                        otherwise
+                end
+                plot(hA(i),squeeze(f),squeeze(spec),lineStyle{m},'Color',lineColor{m});
+            end
         end
     else
         dbstack; error('double check roi data format');
