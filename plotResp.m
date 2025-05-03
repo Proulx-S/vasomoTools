@@ -1,4 +1,4 @@
-function plotResp(rCond,metric,roi,H)
+function roi = plotResp(rCond,metric,roi,H)
     if ~exist('roi','var');       roi = struct; end    
     if ~exist('H','var');           H = []    ; end
     if ~exist('metric','var'); metric = {}; end
@@ -43,16 +43,18 @@ function plotResp(rCond,metric,roi,H)
             hold(hA(i),'on');
             for m = 1:length(metric)
                 switch metric{m}
-                    case 'resp'
+                    case 'resp_dilate1_actQ_actSgn'
                         im = permute(roi(i).im.resp.im,[4 1 2 3]);
-                        tsNeg = mean(im(:,  roi(i).im.act.im(:,:,:,1)<0  &  roi(i).im.actP.im<0.05)  ,2);
-                        tsPos = mean(im(:,roi(i).im.act.im(:,:,:,1)>0 & roi(i).im.actP.im<0.05),2);
+                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
+                        indSig        = false(size(roi(i).im.actP.im));
+                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                        indNeg        = roi(i).im.act.im(:,:,:,1)<0;
+                        indPos        = roi(i).im.act.im(:,:,:,1)>0;
                         
-
-                        % roi(i).poly.mask = roi(i).mask;
-
-                        % figure('WindowStyle','docked');
-                        % imagesc(roi(i).mask);
+                        tsNeg = mean(im(:,indIm&indSig&indNeg),2);
+                        tsPos = mean(im(:,indIm&indSig&indPos),2);
+                        roi(i).ts.vec = [tsNeg tsPos];
+                        roi(i).ts.t   = roi(i).im.resp.t;
                     otherwise
                 end
                 plot(hA(i),tsPos,'-');

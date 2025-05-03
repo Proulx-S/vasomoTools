@@ -132,7 +132,7 @@ if force || ~exist(char(fMat.fMatFig),'file')
             error('code that')
     end
     clim([-1 1])
-    if ~isempty(cnsr)
+    if ~isempty(cnsr) && any(cnsr)
         if length(cnsr)~=size(mat,1); dbstack; error('censoring vector length does not match timeseries length, check dummyIgnore??'); end
         yline(find(cnsr),'r')
     end
