@@ -85,17 +85,30 @@ pInd(1:nPoly) = true;
 iStim = iStim+nnz(pInd);
 
 
-fMatCnsr = replace(char(fMat(1).fMat),'.xmat.1D','.xmatCnsrClmn.1D');
-if exist(fMatCnsr,'file')
-    cmdX = {src.afni};
-    cmdX{end+1} = ['1dcat ' fMatCnsr];
-    [~,cmdout] = system(strjoin(cmdX,newline));
-    matX = str2num(cmdout);
-    nCnsr = size(matX,2) - size(mat,2);
-    cnsr = any(matX(:,end-nCnsr+1:end),2);
-else
-    cnsr = [];
+%%% Censoring
+fCnsr = replace(fMat.fIn,'.nii.gz',''); [fCnsr,b,~] = fileparts(fCnsr); fCnsr = fullfile(fCnsr,strcat('allCnsr_',b,'.csv'));
+cnsr = cell(size(fCnsr));
+for i = 1:length(fCnsr)
+    cnsr{i} = readmatrix(fCnsr{i});
+    cnsr{i} = ~logical(cnsr{i}(:,2));
 end
+cnsr = cat(1,cnsr{:});
+
+% if any(cnsr)
+%     fMatCnsr = replace(char(fMat(1).fMat),'.xmat.1D','.xmatCnsrClmn.1D');
+%     if exist(fMatCnsr,'file')
+%         cmdX = {src.afni};
+%         cmdX{end+1} = ['1dcat ' fMatCnsr];
+%         [~,cmdout] = system(strjoin(cmdX,newline));
+%         matX = str2num(cmdout);
+%         nCnsr = size(matX,2) - size(mat,2);
+%         cnsr = any(matX(:,end-nCnsr+1:end),2);
+%     else
+%         dbstack; error('censor points detected but no censored design matrix found')
+%     end
+% else
+%     cnsr = [];
+% end
 
 
 
@@ -120,6 +133,7 @@ if force || ~exist(char(fMat.fMatFig),'file')
     end
     clim([-1 1])
     if ~isempty(cnsr)
+        if length(cnsr)~=size(mat,1); dbstack; error('censoring vector length does not match timeseries length, check dummyIgnore??'); end
         yline(find(cnsr),'r')
     end
 

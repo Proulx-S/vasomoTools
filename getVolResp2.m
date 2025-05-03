@@ -1,13 +1,15 @@
-function [volResp,volRespCmplx,volRespCmplxMag1] = getVolResp2(volTs,volAnat,dsgn,info,force,verbose)
+function [volResp,volRespCmplx,volRespCmplxMag1] = getVolResp2(volTs,volAnat,dsgn,param,force,verbose)
 if ~exist('volAnat','var'); volAnat = []; end
 if ~exist('dsgn','var');       dsgn = []; end
-if ~exist('info','var');       info = []; end
+if ~exist('param','var');     param = []; end
 if ~exist('force','var');     force = []; end
 if ~exist('verbose','var'); verbose = []; end
 
 if isempty(force);     force = 0; end
 if isempty(verbose); verbose = 1; end
         
+
+param.cnsrFiles = {'fCnsr' 'fCnsr_mainClust'};
 
 %%%%%%%%%
 %% Assert
@@ -48,6 +50,45 @@ else
 end
 % param.trDecon       = dsgn.dt;
 %% %%%%%%
+
+%%%%%%%%%%%%%%%%%%%
+%% Get censor files
+%%%%%%%%%%%%%%%%%%%
+%%% read all censor files
+ind  = cell(size(volTs.fPreprocList,1),length(param.cnsrFiles));
+cnsr = cell(size(volTs.fPreprocList,1),length(param.cnsrFiles));
+for c = 1:length(param.cnsrFiles)
+    if isempty(volTs.(param.cnsrFiles{c})); dbstack; error('censor file %s not found',fCnsr); end
+    for R = 1:length(volTs.(param.cnsrFiles{c}))
+        fCnsrTmp = volTs.(param.cnsrFiles{c}){R};
+        if ~exist(fCnsrTmp,'file'); dbstack; error('censor file %s not found',fCnsrTmp); end
+        cnsrTmp = readmatrix(fCnsrTmp,'Filetype','text');
+        cnsr{R,c} = cnsrTmp(:,2);
+        ind{R,c}  = cnsrTmp(:,1);
+    end
+end
+%%% combine censor files
+for R = 1:size(cnsr,1)
+    cnsr{R,1} = all(cat(2,cnsr{R,:}),2);
+    cnsr{R,1} = [ind{R,1} cnsr{R,1}];
+end
+cnsr(:,2:end) = [];
+%%% write combined censor files
+[fCnsr,b,~] = fileparts(replace(fList,'.nii.gz',''));
+fCnsr = fullfile(fCnsr,strcat('allCnsr_',b,'.csv'));
+for R = 1:size(fCnsr,1)
+    writematrix(cnsr{R,1},fCnsr{R},'Delimiter',',');
+end
+param.fCnsrList = fCnsr;
+
+
+
+
+
+
+
+%% %%%%%%%%%%%%%%%%
+
 
 
 

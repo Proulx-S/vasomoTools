@@ -52,6 +52,16 @@ if any((param.nFrameOrig-param.nFrame).*param.tr > param.dsgn.onsetList(1))
     % dbstack; error('too many dummy removed->timeseries begins after first event');
 end
 
+%% Assert censor files
+if isfield(param,'fCnsrList')
+    fCnsrList = param.fCnsrList;
+    if size(fVolTs,1)~=size(fCnsrList,1)
+        dbstack; error('number of runs in fVolTs and fCnsrList do not match');
+    end
+else
+    fCnsrList = cell(size(fVolTs,1),1);
+end
+
 
 %% Run afni's 3dDeconvolve for response timecourse estimation
 param.model = 'TENTzero';
@@ -60,14 +70,14 @@ R = size(fVolTs,1);
 clear fRespRun
 for r = 1:R
     if param.PCflag
-        fRespRun(r,:) = runAfni(fVolTs(r,:,:),[r R],param,fMask(r,1),force,verbose); % analysis performed on each echoe within that function
+        fRespRun(r,:) = runAfni(fVolTs(r,:,:),[r R],param,fMask(r,1),fCnsrList(r,1),force,verbose); % analysis performed on each echoe within that function
     else
-        fRespRun(r,:) = runAfni(fVolTs(r,1),[r R],param,fMask(r,1),force,verbose); % analysis performed on each echoe within that function
+        fRespRun(r,:) = runAfni(fVolTs(r,1),[r R],param,fMask(r,1),fCnsrList(r,1),force,verbose); % analysis performed on each echoe within that function
     end
 end
 % On catenated runs
 if R>1
-    fRespCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+    fRespCat      = runAfni(fVolTs,     [0 R],param,fMask,fCnsrList,force,verbose); % analysis performed on each echoe within that function
 end
 
 
@@ -102,7 +112,7 @@ for r = 1:R
     if param.PCflag
         fActRun(r,:) = struct;
     else
-        fActRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+        fActRun(r,:) = runAfni(fVolTs(r,:),[r R],param,fMask,fCnsrList(r,1),force,verbose); % analysis performed on each echoe within that function
     end
 end
 % On catenated runs
@@ -110,7 +120,7 @@ if R>1
     if param.PCflag
         fActCat      = struct;
     else
-        fActCat      = runAfni(fVolTs,     [0 R],param,fMask,force,verbose); % analysis performed on each echoe within that function
+        fActCat      = runAfni(fVolTs,     [0 R],param,fMask,fCnsrList,force,verbose); % analysis performed on each echoe within that function
     end
 end
 
@@ -332,10 +342,11 @@ end
 
 
 
-function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
+function fRes = runAfni(fList,rR,param,fMask,fCnsr,force,verbose,passDown)
     global src
     if ~exist('rR','var');                     rR = []; end
     if ~exist('fMask','var');               fMask = []; end
+    if ~exist('fCnsr','var');               fCnsr = []; end
     if ~exist('force','var');               force = []; end
     if ~exist('verbose','var');           verbose = []; end
     if ~exist('passDown','var');         passDown = []; end
@@ -432,10 +443,12 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
 
         if param.PCflag
             fStat  = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats']); % let's let afni use its native file format, it is sometimes glitchy otherwise
-            fFit   = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+            % fFit   = fullfile(fileparts(replace(replace(fOut(:,:,1),'part-real','part-realImag'),'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+            fFit   = '';
         else
             fStat  = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_stats']); % let's let afni use its native file format, it is sometimes glitchy otherwise
-            fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+            % fFit   = fullfile(fileparts(replace(fOut,'.nii.gz','')),['task-' param.dsgn.task '_cond-FULL_model-' HRmodel '_fit.nii.gz']);
+            fFit   = '';
         end
         if param.getResid
             dbstack; error('double-check that')
@@ -505,6 +518,7 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
    
 
         fRes(1,E).fIn      = fIn;
+        fRes(1,E).fCnsr    = fCnsr;
         fRes(1,E).fFit     = fFit;
         fRes(1,E).fResid   = fResid;
         fRes(1,E).fStat    = fStat;
@@ -527,7 +541,7 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
             cmdTmp{end+1} = ['echo ' num2str(E) '/' num2str(size(fList,2))];
         end
 
-        [cmdTmpTmp,param.dsgn.nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,param.dryRun);
+        [cmdTmpTmp,param.dsgn.nReg] = afniCmd(fIn,fStim,fMask,fCnsr,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,param.dryRun);
         
         %SPECIAL CASE
         if ~isempty(passDown)
@@ -573,12 +587,12 @@ function fRes = runAfni(fList,rR,param,fMask,force,verbose,passDown)
     end
 
     %% Run afni command
-    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,'ERROR','IgnoreCase',false); dbstack; error(cmdout); end
+    [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,{'ERROR','Program Death'},'IgnoreCase',false); dbstack; error(cmdout); end
 
 
 
 
-function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,dryRun)
+function [cmd,nReg] = afniCmd(fIn,fStim,fMask,fCnsr,param,fResp,fRespStd,fFit,fResid,fMat,fStat,verbose,dryRun)
     % function [cmd,nReg] = afniCmd2(fIn,fMask,fStim,nDummyIgnore,tr,startSeq,durSeq,condSeq,HRmodel,label,param,fResp,fFit,fResid,fMat,fStat,verbose,nDummyRemoved,trDecon,dryRun,nFrame)
     % param.nDummyRemoved [int]: number of initial frames that are already removed from the
     % timeseries. The stimulus timeseries must therefore be adjusted
@@ -605,7 +619,7 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
         %%% Censored time points
         cnsr = cell(size(fIn));
         for i = 1:length(fIn)
-            cnsr{i} = readmatrix(replace(fIn{i},'preproc_volTs.nii.gz','censor_preproc_volTs.csv'));
+            cnsr{i} = readmatrix(fCnsr{i});
             cnsr{i} = cnsr{i}(param.nDummyIgnore+1:end,2);
         end
         cnsr = find(cat(1,cnsr{:})==0);
@@ -659,7 +673,9 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
 
     % Set outputs
     if ~dryRun
-        cmd{end+1} = ['-fitts ' char(fFit) ' \'];
+        if ~isempty(fFit)
+            cmd{end+1} = ['-fitts ' char(fFit) ' \'];
+        end
         if ~isempty(fResid)
             dbstack; error('code that')
             cmd{end+1} = ['-errts ' char(fResid) ' \'];
@@ -669,11 +685,13 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     %%%%%%%%%%%%%%
     %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
     fMatTmp = [tempname '.xmat.1D'];
+    % fMatTmp2 = replace(fMatTmp,'.xmat.1D','X.xmat.1D');
     cmd{end+1} = ['-x1D_uncensored ' char(fMatTmp) ' \'];
-    if ~isempty(cnsr)
-        fMatTmp2 = replace(fMatTmp,'.xmat.1D','X.xmat.1D');
-        cmd{end+1} = ['-x1D_regcensored ' char(fMatTmp2) ' \'];
-    end
+    % if ~isempty(cnsr)
+    %     cmd{end+1} = ['-x1D_regcensored ' char(fMatTmp2) ' \'];
+    % elseif exist(fMatTmp2,'file') % if this file exists, it is garbage from a previous run and can interfere in plotDsgnMat.m
+    %     delete(fMatTmp2);
+    % end
     %%%%%%%%%%%%%%
     if ~dryRun
         if verbose>0
@@ -686,10 +704,13 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,param,fResp,fRespStd,fFit,fResid,f
     end
     %%%%%%%%%%%%%%
     %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
+    % fMatTmp3 = char(replace(fMat,'.xmat.1D','.xmatCnsrClmn.1D'));
     cmd{end+1} = ['cp ' char(fMatTmp) ' ' char(fMat)];
-    if ~isempty(cnsr)
-        cmd{end+1} = ['cp ' char(fMatTmp2) ' ' char(replace(fMat,'.xmat.1D','.xmatCnsrClmn.1D'))];
-    end
+    % if ~isempty(cnsr)
+    %     cmd{end+1} = ['cp ' char(fMatTmp2) ' ' fMatTmp3];
+    % elseif exist(fMatTmp3,'file') % if this file exists, it is garbage from a previous run and can interfere in plotDsgnMat.m
+    %     delete(fMatTmp3);
+    % end
     %%%%%%%%%%%%%%
 
 

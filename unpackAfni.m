@@ -412,7 +412,7 @@ end
 
 %% Transform coefficients -- from the double gamma fit, find the main vector (principal response delay across voxels) and adjust accordingly
 for k = 1:fRes.param.dsgn.condK
-    if fRes.r==0 && strcmp(fRes.param.model,'SPMG2') % only for analysis on catenated runs for sufficient precision in delay estimation
+    if (fRes.r==0 || fRes.R==1) && strcmp(fRes.param.model,'SPMG2') % only for analysis on catenated runs for sufficient precision in delay estimation
         
         % Extract coefficients
         fIn = char(stats.fStat);
@@ -435,20 +435,24 @@ for k = 1:fRes.param.dsgn.condK
         stats.fCondPolar{1,k} = fOutPolar;
         fOutCoef = replace(fIn,'_coefs.nii.gz','_coefsAdj.nii.gz');
         stats.fCondCoef_adj{1,k} = fOutCoef;
-        if force || ~exist(fOutPolar,'file') || ~exist(fOutCoef,'file') || ~exist(fFig,'file')
+        fOutCoefFlag = replace(fOutCoef,'.nii.gz','.flag');
+        stats.fCondCoef_adjFlag{1,k} = fOutCoefFlag;
+        if force || ~exist(fOutPolar,'file') || ~exist(fOutCoef,'file') || ~exist(fOutCoefFlag,'file') || ~exist(fFig,'file')
             mriCoef = MRIread(fIn);
             mriCoef.vol = complex(mriCoef.vol(:,:,:,1), mriCoef.vol(:,:,:,2));
             
             % Get slope (main vector) of the data from significant voxels
             mriQ = MRIread(stats.fCondF_qVal{1,k});
             mask = mriQ.vol<0.05;
-            if any(mask(:))
-                nullFlag = 0;
+            if nnz(mask(:))>15
+                coefAdjFlag = 1;
             else
-                nullFlag = 1;
+                coefAdjFlag = 0;
                 mriP = MRIread(stats.fCondF_pVal{1,k});
                 mask = mriP.vol<0.05;
             end
+            fid = fopen(fOutCoefFlag, 'w'); fprintf(fid, '%d', coefAdjFlag); fclose(fid);
+            
             slp = real(mriCoef.vol(mask))\imag(mriCoef.vol(mask));
             v = complex(1,slp); v = v./abs(v);
 
@@ -462,8 +466,8 @@ for k = 1:fRes.param.dsgn.condK
             legend('Voxels','Main Vector');
             [a,b,~] = fileparts(replace(fIn,'.nii.gz',''));
             [~,a,~] = fileparts(a);
-            if nullFlag
-                title([a newline b newline 'WARNING: showing p<0.05 voxels, delay not corrected (no q<0.05 voxels)'],'Interpreter','none');
+            if ~coefAdjFlag
+                title([a newline b newline '!!!WARNING!!! showing p<0.05 voxels, delay not corrected (less than 15 q<0.05 voxels)'],'Interpreter','none');
             else
                 title([a newline b],'Interpreter','none');
             end
@@ -480,7 +484,7 @@ for k = 1:fRes.param.dsgn.condK
 
             % Adjusting relative to principal vector
             rho   = abs(mriCoef.vol);                         % Magnitude
-            if nullFlag
+            if ~coefAdjFlag
                 theta = angle(mriCoef.vol);
             else
                 theta = wrapToPi(angle(mriCoef.vol) - angle(v));  % Phase
@@ -493,7 +497,13 @@ for k = 1:fRes.param.dsgn.condK
             mriCoef.fspec = fOutCoef;
             [mriCoef.vol(:,:,:,1),mriCoef.vol(:,:,:,2)] = pol2cart(theta,rho);
             MRIwrite(mriCoef,fOutCoef);
-        end    
+        else
+            coefAdjFlag = readmatrix(fOutCoefFlag,'FileType','text');
+        end
+        if ~coefAdjFlag
+            % Erase fCondCoef_adj because fCondCoef was not adjusted
+            stats.fCondCoef_adj{1,k} = '';
+        end
     else
         stats.fCondCoef{1,k}            = '';
         stats.fCondCoef_mainVector{1,k} = '';

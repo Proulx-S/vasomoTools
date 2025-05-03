@@ -82,6 +82,7 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
                 % create new axe
                 tilingSub.hA{end}{1,end+1} = nexttile(tilenum(tilingMain.hT,tilingSub.row,tilingSub.col),tilingSub.axesSize);
         end
+        drawnow;
 
         % plot base image
         imagesc(roi(rc).im.base.x,roi(rc).im.base.y,roi(rc).im.base.im,cLim);
@@ -91,7 +92,8 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
                 dbstack; error('code that')
                 tiling.hA{end}.PlotBoxAspectRatio = [7 1 1];
             otherwise
-                tilingSub.hA{end}{end}.DataAspectRatio = [1 1 1];
+                tilingSub.hA{end}{end}.DataAspectRatio    = [1 1 1];
+                tilingSub.hA{end}{end}.PlotBoxAspectRatio = [1 1 1];
         end
 
         % roi class specific colors
@@ -101,7 +103,7 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
             case 'vein'
                 c = 'b';
             case 'unknown'
-                c = [0.5 0.5 0];
+                c = 'y';
             case 'phys'
                 c = 'k';
             otherwise
