@@ -39,11 +39,15 @@ function roi = plotResp(rCond,metric,roi,H)
     if roiDataFlag
         lineStyle = {'-','-'};
         lineColor = {[0 0 0],[0.5 0.5 0.5]};
+        hTs = cell(length(roi),length(metric));
         for i = 1:length(roi)
             hold(hA(i),'on');
             for m = 1:length(metric)
                 switch metric{m}
                     case 'resp_dilate1_actQ_actSgn'
+                        % response within the vessel ROI dilated by 1 voxel,
+                        % including only active voxels based on SPMG2 activation detection,
+                        % and segregated by sign of activation
                         im = permute(roi(i).im.resp.im,[4 1 2 3]);
                         indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
                         indSig        = false(size(roi(i).im.actP.im));
@@ -53,12 +57,25 @@ function roi = plotResp(rCond,metric,roi,H)
                         
                         tsNeg = mean(im(:,indIm&indSig&indNeg),2);
                         tsPos = mean(im(:,indIm&indSig&indPos),2);
-                        roi(i).ts.vec = [tsNeg tsPos];
-                        roi(i).ts.t   = roi(i).im.resp.t;
+                        t     = (0:size(tsNeg,1)-1).*roi(i).im.resp.dt;
+                        
+                        roi(i).ts{m}.vec     = [tsNeg tsPos];
+                        roi(i).ts{m}.nVox    = [nnz(indIm&indSig&indNeg) nnz(indIm&indSig&indPos)];
+                        roi(i).ts{m}.nVoxRoi = [nnz(indIm)];
+                        roi(i).ts{m}.t       = t;
+                        roi(i).ts{m}.label   = {'neg','pos'};
+                        roi(i).ts{m}.metric  = metric{m};
+
+
+                        hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec);
+                        
                     otherwise
                 end
-                plot(hA(i),tsPos,'-');
-                plot(hA(i),tsNeg,'-');
+
+                
+
+                % hTs{i}.UserData.labels = roi(i).ts.label;
+
             end
         end
     else
@@ -85,5 +102,36 @@ function roi = plotResp(rCond,metric,roi,H)
         hA(i).YAxis.Color = H(i).YAxis.Color; hA(i).YAxis.LineWidth = H(i).YAxis.LineWidth;
     end
     axis(hA,'tight'); yLim = get(hA,'YLim'); yLim = [min([yLim{:}]) max([yLim{:}])];
-    set(hA,'YLim',yLim,'YScale','linear','XGrid','on','YGrid','on','XMinorGrid','on','YMinorGrid','on');
+    set(hA,...
+    'YLim',yLim,...
+    'YScale','linear',...
+    'XGrid','on','YGrid','on',...
+    'XMinorGrid','on','YMinorGrid','on',...
+    'GridColor',[0.5 0.5 0.5],'MinorGridColor',[0.5 0.5 0.5]);
+    drawnow;
+
+    m = length(metric);
+    for i = 1:length(roi)
+        % Add text annotations for voxel counts
+        % Bottom left corner - total ROI voxel count
+        text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.01, min(hA(i).YLim)+range(hA(i).YLim)*0.01, ...
+            [num2str(roi(i).ts{m}.nVoxRoi) 'vox'], ...
+            'HorizontalAlignment', 'left', ...
+            'VerticalAlignment', 'bottom', ...
+            'FontSize', 8);
+        % Top right corner - positive and significant voxel count
+        text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.99, min(hA(i).YLim)+range(hA(i).YLim)*0.99, ...
+            [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'pos'))) 'posVox'], ...
+            'HorizontalAlignment', 'right', ...
+            'VerticalAlignment', 'top', ...
+            'FontSize', 8);
+        % Bottom right corner - negative and significant voxel count
+        text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.99, min(hA(i).YLim)+range(hA(i).YLim)*0.01, ...
+            [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'neg'))) 'negVox'], ...
+            'HorizontalAlignment', 'right', ...
+            'VerticalAlignment', 'bottom', ...
+            'FontSize', 8);
+    end
+
+    
 
