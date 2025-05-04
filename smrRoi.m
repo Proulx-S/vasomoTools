@@ -57,41 +57,123 @@ function roi = smrRoi(rCond,metric,roi,H)
                         indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
                         indSig        = false(size(roi(i).im.actP.im));
                         indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
-                        vec = mean(roi(i).mt.psd.vec(:,:,:,:,:,indIm&indSig,:,:),6);
-                        f   = roi(i).mt.psd.f;
                         
-                        roi(i).smr{m}.vec     = permute(vec,[5 6 1 2 3 4 7 8]);
-                        roi(i).smr{m}.nVox    = [];
-                        roi(i).smr{m}.nVoxRoi = [nnz(indIm)];
-                        roi(i).smr{m}.x       = permute(f,[5 6 1 2 3 4 7 8]);
-                        roi(i).smr{m}.label   = [];
+                        roi(i).smr{m}.vec     = mean(roi(i).mt.psd.vec(:,:,:,:,:,indIm&indSig,:,:),6);
+                        roi(i).smr{m}.nVox    = nnz(indIm&indSig);
+                        roi(i).smr{m}.nVoxRoi = nnz(indIm);
+                        roi(i).smr{m}.f       = roi(i).mt.psd.f;
+                        roi(i).smr{m}.label   = 'psd';
                         roi(i).smr{m}.metric  = metric{m};
+                        roi(i).smr{m}.info    = roi(i).mt.psd.info;
+                        roi(i).smr{m}.nRun    = roi(i).R;
+
+                        if ~isempty(H)
+                            hTs{i,m} = plot(hA{m}(i),squeeze(roi(i).smr{m}.f),squeeze(roi(i).smr{m}.vec),'k');
+                            yScale    = 'log';
+                            yLabel    = 'PSD';
+                            majorGrid = 'on';
+                            minorGrid = 'on';
+                        end
+
+                    case 'psdTrialGram_dilate1_actQ'
+                        % PSDtrialGram (time-frequency spectrogram) within the vessel ROI dilated by 1 voxel,
+                        % including only active voxels based on SPMG2 activation detection
+                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
+                        indSig        = false(size(roi(i).im.actP.im));
+                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                        
+                        roi(i).smr{m}.vec     = mean(roi(i).mt.psdTrialGram.vec(:,:,:,:,:,indIm&indSig,:,:),6);
+                        roi(i).smr{m}.nVox    = nnz(indIm&indSig);
+                        roi(i).smr{m}.nVoxRoi = nnz(indIm);
+                        roi(i).smr{m}.f       = roi(i).mt.psdTrialGram.f;
+                        roi(i).smr{m}.t       = mean(roi(i).mt.psdTrialGram.t - roi(i).mt.psdTrialGram.param.dsgn.onsetList,2);
+                        roi(i).smr{m}.label   = 'psdTrialGram';
+                        roi(i).smr{m}.metric  = metric{m};
+                        roi(i).smr{m}.info    = roi(i).mt.psdTrialGram.info;
+                        roi(i).smr{m}.nRun    = roi(i).R;
+
+                        if ~isempty(H)
+                            imagesc(hA{m}(i),squeeze(mean(roi(i).smr{m}.t,1)),squeeze(roi(i).smr{m}.f),squeeze(roi(i).smr{m}.vec));
+                            hA{m}(i).ColorScale = 'log';
+                            yScale    = 'linear';
+                            yLabel    = 'Hz';
+                            majorGrid = 'off';
+                            minorGrid = 'off';
+                        end
+
+
+
+
+
+
+                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
+                        indSig        = false(size(roi(i).im.actP.im));
+                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                        
+                        roi(i).smr{m}.vec     = mean(roi(i).mt.psdTrialGram.vec(:,:,:,:,:,indIm&indSig,:,:),6);
+                        roi(i).smr{m}.nVox    = nnz(indIm&indSig);
+                        roi(i).smr{m}.nVoxRoi = nnz(indIm);
+                        roi(i).smr{m}.f       = roi(i).mt.psdTrialGram.f;
+                        roi(i).smr{m}.t       = roi(i).mt.psdTrialGram.t;
+                        roi(i).smr{m}.label   = 'psd';
+                        roi(i).smr{m}.metric  = metric{m};
+                        roi(i).smr{m}.info    = roi(i).mt.psdTrialGram.info;
                         
                         
                     case 'resp_dilate1_actQ_actSgn'
                         % response within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection,
                         % and segregated by sign of activation
-                        im = permute(roi(i).im.resp.im,[4 1 2 3]);
                         indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
                         indSig        = false(size(roi(i).im.actP.im));
                         indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                         indNeg        = roi(i).im.act.im(:,:,:,1)<0;
                         indPos        = roi(i).im.act.im(:,:,:,1)>0;
+                        nTrial        = [1; roi(i).nTrial; 1];
                         
+                        im = permute(roi(i).im.resp.im,[4 1 2 3]);
                         tsNeg = mean(im(:,indIm&indSig&indNeg),2);
                         tsPos = mean(im(:,indIm&indSig&indPos),2);
-                        t     = (0:size(tsNeg,1)-1).*roi(i).im.resp.dt;
+                        if isfield(roi(i).im,'respSd') && ~isempty(roi(i).im.respSd)
+                            % pool variance across voxels
+                            % thi is a very conservative approach because squared deviations cannot average out
+                            % (for accurate measure of error of the voxel-averaged responses, one needs to work from the residuals or perform another fit on the voxel-averaged full timeseries)
+                            imSd    = permute(roi(i).im.respSd.im,[4 1 2 3]);
+                            imSdNeg = sqrt(sum(imSd(:,indIm&indSig&indNeg).^2,2)/nnz(indIm&indSig&indNeg));
+                            imSdPos = sqrt(sum(imSd(:,indIm&indSig&indPos).^2,2)/nnz(indIm&indSig&indPos));
+                            tsNegEr = imSdNeg./sqrt(nTrial);
+                            tsPosEr = imSdPos./sqrt(nTrial);
+                        else
+                            tsNegEr = [];
+                            tsPosEr = [];
+                        end
+                        t     = ((0:size(tsNeg,1)-1).*roi(i).im.resp.dt)';
                         
                         roi(i).smr{m}.vec     = [tsNeg tsPos];
+                        if ~isempty(tsNegEr) && ~isempty(tsPosEr)
+                            roi(i).smr{m}.vecEr   = [tsNegEr tsPosEr];
+                        else
+                            roi(i).smr{m}.vecEr   = [];
+                        end
                         roi(i).smr{m}.nVox    = [nnz(indIm&indSig&indNeg) nnz(indIm&indSig&indPos)];
                         roi(i).smr{m}.nVoxRoi = [nnz(indIm)];
-                        roi(i).smr{m}.x       = t;
+                        roi(i).smr{m}.t       = t;
+                        roi(i).smr{m}.nTrial  = nTrial;
                         roi(i).smr{m}.label   = {'neg','pos'};
                         roi(i).smr{m}.metric  = metric{m};
+                        roi(i).smr{m}.info    = strjoin({'time' 'compartment'},' x ');
 
                         if ~isempty(H)
-                            hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec);
+                            if ~isempty(roi(i).smr{m}.vecEr)
+                                hTs{i,m} = shplot(roi(i).smr{m}.t,roi(i).smr{m}.vec(:,1),roi(i).smr{m}.vecEr(:,1),hA{m}(i));
+                                hTs{i,m} = shplot(roi(i).smr{m}.t,roi(i).smr{m}.vec(:,2),roi(i).smr{m}.vecEr(:,2),hA{m}(i));
+                            else
+                                hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec);
+                            end
+                            yScale    = 'linear';
+                            yLabel    = 'MR signal change';
+                            majorGrid = 'on';
+                            minorGrid = 'off';
                         end
                         
                     otherwise
@@ -124,41 +206,86 @@ function roi = smrRoi(rCond,metric,roi,H)
         for m = 1:length(metric)
             %% Adjust axes
             for i = 1:length(H)
-                hA{m}{i}.XAxis.Color = H(i).XAxis.Color; hA{m}{i}.XAxis.LineWidth = H(i).XAxis.LineWidth;
-                hA{m}{i}.YAxis.Color = H(i).YAxis.Color; hA{m}{i}.YAxis.LineWidth = H(i).YAxis.LineWidth;
+                hA{m}(i).XAxis.Color = H(i).XAxis.Color; hA{m}(i).XAxis.LineWidth = H(i).XAxis.LineWidth;
+                hA{m}(i).YAxis.Color = H(i).YAxis.Color; hA{m}(i).YAxis.LineWidth = H(i).YAxis.LineWidth;
             end
-            axis(hA{m},'tight'); yLim = get(hA{m},'YLim'); yLim = [min([yLim{:}]) max([yLim{:}])];
-            set(hA{m},...
+            axis(hA{m},'tight');
+            
+            yLim = get(hA{m}([roi.anot_sig]),'YLim'); yLim = [min([yLim{:}]) max([yLim{:}])];
+            set(hA{m}([roi.anot_sig]),...
             'YLim',yLim,...
-            'YScale','linear',...
+            'YScale',yScale,...
             'XGrid','on','YGrid','on',...
-            'XMinorGrid','on','YMinorGrid','on',...
+            'XMinorGrid',minorGrid,'YMinorGrid',minorGrid,...
             'GridColor',[0.5 0.5 0.5],'MinorGridColor',[0.5 0.5 0.5]);
+            if strcmp(metric{m},'psdTrialGram_dilate1_actQ')
+                cLim = get(hA{m}([roi.anot_sig]),'CLim'); cLim = [min([cLim{:}]) max([cLim{:}])];
+                set(hA{m}([roi.anot_sig]),'CLim',cLim);
+            end
+            
             drawnow;
         end
 
         for m = 1:length(metric)
             for i = 1:length(roi)
                 % Add text annotations for voxel counts
-                % Bottom left corner - total ROI voxel count
-                text(hA{m}{i}, min(hA{m}{i}.XLim)+range(hA{m}{i}.XLim)*0.01, min(hA{m}{i}.YLim)+range(hA{m}{i}.YLim)*0.01, ...
-                    [num2str(roi(i).ts{m}.nVoxRoi) 'vox'], ...
-                    'HorizontalAlignment', 'left', ...
-                'VerticalAlignment', 'bottom', ...
-                    'FontSize', 8);
-                % Top right corner - positive and significant voxel count
-                text(hA{m}{i},...
-                min(hA{m}{i}.XLim)+range(hA{m}{i}.XLim)*0.99, min(hA{m}{i}.YLim)+range(hA{m}{i}.YLim)*0.99, ...
-                [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'pos'))) 'posVox'], ...
-                'HorizontalAlignment', 'right', ...
-                'VerticalAlignment', 'top', ...
-                'FontSize', 8);
-            % Bottom right corner - negative and significant voxel count
-                text(hA{m}{i}, min(hA{m}{i}.XLim)+range(hA{m}{i}.XLim)*0.99, min(hA{m}{i}.YLim)+range(hA{m}{i}.YLim)*0.01, ...
-                    [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'neg'))) 'negVox'], ...
-                    'HorizontalAlignment', 'right', ...
-                    'VerticalAlignment', 'bottom', ...
-                    'FontSize', 8);
+                if strcmp(metric{m},'resp_dilate1_actQ_actSgn')
+                    nTrial = round(max(roi(i).smr{m}.nTrial(2:end-1)));
+                else
+                    nTrial = roi(i).R*6;
+                end
+                switch metric{m}
+                    case 'resp_dilate1_actQ_actSgn'
+                        % Bottom left corner - total ROI voxel count
+                        text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.01, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.01, ...
+                            [num2str(roi(i).smr{m}.nVoxRoi) 'vox'], ...
+                            'HorizontalAlignment', 'left', ...
+                            'VerticalAlignment', 'bottom', ...
+                            'FontSize', 8);
+                        % Top right corner - positive and significant voxel count
+                        if strcmp(metric{m},'resp_dilate1_actQ_actSgn')
+                            text(hA{m}(i),...
+                            min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.99, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.99, ...
+                            [num2str(roi(i).smr{m}.nVox(ismember(roi(i).smr{m}.label,'pos'))) 'posVox'], ...
+                            'HorizontalAlignment', 'right', ...
+                            'VerticalAlignment', 'top', ...
+                            'FontSize', 8);
+                        end
+                        % Bottom right corner - negative and significant voxel count
+                        if strcmp(metric{m},'resp_dilate1_actQ_actSgn')
+                            text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.99, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.01, ...
+                            [num2str(roi(i).smr{m}.nVox(ismember(roi(i).smr{m}.label,'neg'))) 'negVox'], ...
+                            'HorizontalAlignment', 'right', ...
+                            'VerticalAlignment', 'bottom', ...
+                            'FontSize', 8);
+                        end
+                        % top left corner - number of trials
+                        text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.01, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.99, ...
+                        [num2str(nTrial) 'trials'], ...
+                        'HorizontalAlignment', 'left', ...
+                        'VerticalAlignment', 'top', ...
+                        'FontSize', 8);
+                    case {'psd_dilate1_actQ' 'psdTrialGram_dilate1_actQ'}
+                        % Bottom left corner - number of significant voxels over total ROI voxel count
+                        text(hA{m}(i), ...
+                            0.01, ...
+                            0.01, ...
+                            [num2str(roi(i).smr{m}.nVox) '/' num2str(roi(i).smr{m}.nVoxRoi) 'vox'], ...
+                            'Units', 'normalized', ...
+                            'HorizontalAlignment', 'left', ...
+                            'VerticalAlignment', 'bottom', ...
+                            'FontSize', 8);
+                        % top right corner - number of trials
+                        text(hA{m}(i), ...
+                            0.99, 0.99, ...
+                            [num2str(nTrial) 'trials'], ...
+                            'Units', 'normalized', ...
+                            'HorizontalAlignment', 'right', ...
+                            'VerticalAlignment', 'top', ...
+                            'FontSize', 8);
+                    otherwise
+                        dbstack; error('double check metric');
+                end
             end
         end
 
