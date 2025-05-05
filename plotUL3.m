@@ -48,6 +48,7 @@ function tiling = plotUL3(roi,UL,cLim,numRow)
         tiling.sub.right.col = tiling.sub.right.col0;
         % plot roi row
         [tiling.sub.right,tiling.sub.left] = plotRoiRow(tiling.main,tiling.sub.right,tiling.sub.left,roi{rc},cLim);
+        tiling.sub.right.hA = [tiling.sub.right.hA{:}];
         % update row
         tiling.sub.right.row = tiling.sub.right.row+tiling.sub.right.axesSize(1);
     end
