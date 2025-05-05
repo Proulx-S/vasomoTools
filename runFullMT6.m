@@ -1548,7 +1548,7 @@ end
         %%% loop over windows
         if verbose>1
             fprintf([repmat('|',1,W) '\n\n']);
-end
+        end
         
         for wInd = 1:W
             %%% Compute J
@@ -1597,7 +1597,8 @@ end
                 res.trialGramMD.COH(:,:,:,:,:,:,wInd,:) = coh;
             end
 
-
+            % tmp = load('forDavid/inputTo-runFullMT6.mat');
+            % save forDavid/inputTo-runFullMT6.mat Fs Nw E onsets R V d F f
             %%% Now adjusting time for phase coherent cross-trial averaging
             tt = reshape(reshape(t,Nw,E) - onsets,Nw*E,1); % aligning the time vector to 0 at stimulus onset effectively enforces coherent phase averaging across trials
 

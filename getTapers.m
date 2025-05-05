@@ -25,7 +25,7 @@ if isempty(MDslepianAlgo); MDslepianAlgo = 'eigs'; end % 'eigs' or 'eig'
 Fs = 1/tr;
 [TW,W,K] = K2W(N/Fs,K,0);
 
-if (isempty(t) || max(abs(diff(t,2)))<1e-10) && ~forceMDslepian
+if (isempty(t) || max(abs(diff(t,2)))<1e-10) && ~forceMDslepian % if no gaps in time vector, fall back to the more efficient dpsschk
     [tp,eigs] = dpsschk([TW K],N,Fs); % check tapers
     eigs = permute(eigs,[2 1]);
     % t = permute(0:tr:((N-1)*tr),[2 1]);

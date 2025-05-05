@@ -1,8 +1,10 @@
-function [roi,hF,hA] = smrRoi(rCond,metric,roi,H)
+function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
     if ~exist('roi','var');           roi = struct; end    
     if ~exist('H','var');               H = []    ; end
     if ~exist('metric','var');     metric = {}; end
     if isempty(metric);            metric = {'resp'}; end
+
+    redoMT = 1;
 
     metric = cellstr(metric);
 
@@ -33,6 +35,40 @@ function [roi,hF,hA] = smrRoi(rCond,metric,roi,H)
         end
     end
 
+
+    %% Recompute mt
+    if any(ismember(metric,{'psd_dilate1_actQ' 'psdTrialGram_dilate1_actQ'}))
+        if redoMT
+            K   = [1 3 5]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
+            W   = [];
+            win = [22 0.840]; % in seconds [lenght, step]
+            skipSVD = 1;
+            skipPSD = 0;
+            mask = any(cat(4,roi.cropMask),4);
+            if ~all(mask(:)==roi(1).mt.psd.param.fMask(:)); dbstack; error('mask does not match'); end
+            roi(1).mt.psd.K
+            roi(1).mt.psd.param.dsgn.winSec
+            roi(1).mt.psd.param.dsgn.win
+            rCond = runFullMT6(rCond,W,K,win,rCond.dsgn,mask,skipSVD,skipPSD,0,1);
+            roi = volPsd2roi(rCond.volMt.runAv,roi);
+            return
+
+            winList = squeeze(mean(roi(1).mt.psdTrialGram.t - roi(1).mt.psdTrialGram.onsetList',2));
+            [~,b] = min(abs(winList(1,:)))
+            roi(1).mt.psdTrialGram.postStimWin0 = b;
+            disp('first post-stimulus window:')
+            disp(winList(:,b))
+            disp('last post-stimulus window:')
+            disp(winList(:,end))
+            disp('ISI:')
+            disp(mean(diff(roi(1).mt.psdTrialGram.onsetList)))
+        end
+    end
+
+
+
+
+
     if isfield(roi(1),'im') && isfield(roi(1).im,'resp')
         roiDataFlag = true;
     else
@@ -52,6 +88,7 @@ function [roi,hF,hA] = smrRoi(rCond,metric,roi,H)
                 end    
                 switch metric{m}
                     case 'psd_dilate1_actQ'
+
                         % PSD within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection
                         indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
