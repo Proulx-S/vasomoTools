@@ -67,6 +67,7 @@ if isempty(testFlag); testFlag = 0; end
 for I = 1:size(rCond.fPreprocList,1)
     rCond.r = I;
     rCond.R = size(rCond.fPreprocList,1);
+    disp(['RUN ' num2str(rCond.r) '/ ' num2str(rCond.R)]);
     if isempty(rCond.volTs)
         rCond.volTs = vol2vec(MRIread(rCond.fPreprocList{I,1,1}));
     else
@@ -80,7 +81,8 @@ volTs = rCond.volTs;
 rCond.volTs(2:end) = [];
 rCond.volTs(1).vol = mean(cat(5,volTs.vol),5);
 rCond.r = 1; % in getVolResp2, 0 indicates the analysis is to be performed on volTs catenated across runs
-rCond.R = 1; 
+rCond.R = 1;
+disp('RUN AVG');
 volMt.runAv = doIt(rCond,W,K,winSec,dsgn,mask,extra,skipSVD,skipPSD,verbose,taperPerm,phaseRand,[],[],testFlag);
 
 rCond.volTs = volTs; clear volTs;
@@ -1353,7 +1355,7 @@ for runInd = 1:nRun
         %%% loop over windows
         if verbose>1
             fprintf([repmat('|',1,W) '\n\n']);
-end
+        end
         
         for wInd = 1:W
             %%% Compute J
@@ -1573,7 +1575,7 @@ end
             tpTmp = permute(reshape(permute(tp,[3 4 5 6 7 8 1 2]),[1 K 1 1 1 1 N/E E]),[7 8 1 2 3 4 5 6]);
             fTmp  = permute(reshape(permute(f ,[3 4 5 6 7 8 1 2]),[1 1 F 1 1 1 1   1]),[7 8 1 2 3 4 5 6]);
             J = getJ4(dTmp,tpTmp,ttTmp,fTmp,[],testFlag)/Fs; % [N E R K F V W]
-            J = sum(J,2);
+            J = sum(J,2); % sum across trials
 
 
             %%%% Compute psd
