@@ -87,11 +87,12 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                     hold(hA{m}(i),'on');
                 end    
                 switch metric{m}
-                    case 'psd_dilate1_actQ'
+                    case {'psd_dilate1_actQ' 'psd_original_actQ'}
+                        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
 
                         % PSD within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
+                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
                         indSig        = false(size(roi(i).im.actP.im));
                         indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                         
@@ -112,10 +113,11 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                             minorGrid = 'on';
                         end
 
-                    case 'psdTrialGram_dilate1_actQ'
+                    case {'psdTrialGram_dilate1_actQ' 'psdTrialGram_original_actQ'}
+                        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
                         % PSDtrialGram (time-frequency spectrogram) within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
+                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
                         indSig        = false(size(roi(i).im.actP.im));
                         indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                         
@@ -137,31 +139,13 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                             majorGrid = 'off';
                             minorGrid = 'off';
                         end
-
-
-
-
-
-
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
-                        indSig        = false(size(roi(i).im.actP.im));
-                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                         
-                        roi(i).smr{m}.vec     = mean(roi(i).mt.psdTrialGram.vec(:,:,:,:,:,indIm&indSig,:,:),6);
-                        roi(i).smr{m}.nVox    = nnz(indIm&indSig);
-                        roi(i).smr{m}.nVoxRoi = nnz(indIm);
-                        roi(i).smr{m}.f       = roi(i).mt.psdTrialGram.f;
-                        roi(i).smr{m}.t       = roi(i).mt.psdTrialGram.t;
-                        roi(i).smr{m}.label   = 'psd';
-                        roi(i).smr{m}.metric  = metric{m};
-                        roi(i).smr{m}.info    = roi(i).mt.psdTrialGram.info;
-                        
-                        
-                    case 'resp_dilate1_actQ_actSgn'
+                    case {'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'}
+                        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
                         % response within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection,
                         % and segregated by sign of activation
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,'dilate1')};
+                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
                         indSig        = false(size(roi(i).im.actP.im));
                         indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                         indNeg        = roi(i).im.act.im(:,:,:,1)<0;
@@ -202,8 +186,8 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
 
                         if ~isempty(H)
                             if ~isempty(roi(i).smr{m}.vecEr)
-                                hTs{i,m} = shplot(roi(i).smr{m}.t,roi(i).smr{m}.vec(:,1),roi(i).smr{m}.vecEr(:,1),hA{m}(i));
-                                hTs{i,m} = shplot(roi(i).smr{m}.t,roi(i).smr{m}.vec(:,2),roi(i).smr{m}.vecEr(:,2),hA{m}(i));
+                                hTs{i,m} = shplot2(roi(i).smr{m}.t,roi(i).smr{m}.vec(:,1),roi(i).smr{m}.vecEr(:,1),hA{m}(i));
+                                hTs{i,m} = shplot2(roi(i).smr{m}.t,roi(i).smr{m}.vec(:,2),roi(i).smr{m}.vecEr(:,2),hA{m}(i));
                             else
                                 hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec);
                             end
@@ -214,6 +198,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                         end
                         
                     otherwise
+                        dbstack; error('double check metric');
                 end
 
                 
@@ -279,13 +264,13 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
         for m = 1:length(metric)
             for i = 1:length(roi)
                 % Add text annotations for voxel counts
-                if strcmp(metric{m},'resp_dilate1_actQ_actSgn')
+                if ismember(metric{m},{'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'})
                     nTrial = round(max(roi(i).smr{m}.nTrial(2:end-1)));
                 else
                     nTrial = roi(i).R*6;
                 end
                 switch metric{m}
-                    case 'resp_dilate1_actQ_actSgn'
+                    case {'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'}
                         % Bottom left corner - total ROI voxel count
                         text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.01, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.01, ...
                             [num2str(roi(i).smr{m}.nVoxRoi) 'vox'], ...
@@ -293,7 +278,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                             'VerticalAlignment', 'bottom', ...
                             'FontSize', 8);
                         % Top right corner - positive and significant voxel count
-                        if strcmp(metric{m},'resp_dilate1_actQ_actSgn')
+                        if ismember(metric{m},{'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'})
                             text(hA{m}(i),...
                             min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.99, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.99, ...
                             [num2str(roi(i).smr{m}.nVox(ismember(roi(i).smr{m}.label,'pos'))) 'posVox'], ...
@@ -302,7 +287,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                             'FontSize', 8);
                         end
                         % Bottom right corner - negative and significant voxel count
-                        if strcmp(metric{m},'resp_dilate1_actQ_actSgn')
+                        if ismember(metric{m},{'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'})
                             text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.99, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.01, ...
                             [num2str(roi(i).smr{m}.nVox(ismember(roi(i).smr{m}.label,'neg'))) 'negVox'], ...
                             'HorizontalAlignment', 'right', ...
@@ -315,7 +300,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                         'HorizontalAlignment', 'left', ...
                         'VerticalAlignment', 'top', ...
                         'FontSize', 8);
-                    case 'psd_dilate1_actQ'
+                    case {'psd_dilate1_actQ' 'psd_original_actQ'}
                         % Bottom left corner - number of significant voxels over total ROI voxel count
                         text(hA{m}(i), ...
                             0.01, ...
@@ -333,7 +318,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                             'HorizontalAlignment', 'right', ...
                             'VerticalAlignment', 'top', ...
                             'FontSize', 8);
-                    case 'psdTrialGram_dilate1_actQ'
+                    case {'psdTrialGram_dilate1_actQ' 'psdTrialGram_original_actQ'}
                         % Top left corner - number of significant voxels over total ROI voxel count
                         text(hA{m}(i), ...
                             0.01, ...
