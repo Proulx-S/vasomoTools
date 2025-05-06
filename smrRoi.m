@@ -4,7 +4,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
     if ~exist('metric','var');     metric = {}; end
     if isempty(metric);            metric = {'resp'}; end
 
-    redoMT = 1;
+    redoMT = 0;
 
     metric = cellstr(metric);
 
@@ -51,7 +51,7 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
             roi(1).mt.psd.param.dsgn.win
             rCond = runFullMT6(rCond,W,K,win,rCond.dsgn,mask,skipSVD,skipPSD,0,1);
             roi = volPsd2roi(rCond.volMt.runAv,roi);
-            return
+            
 
             winList = squeeze(mean(roi(1).mt.psdTrialGram.t - roi(1).mt.psdTrialGram.onsetList',2));
             [~,b] = min(abs(winList(1,:)))

@@ -1,4 +1,5 @@
-function rCond = runFullMT6(rCond,W,K,winSec,dsgn,mask,skipSVD,skipPSD,force,verbose)
+function rCond = runFullMT6(rCond,W,K,winSec,dsgn,mask,skipSVD,skipPSD)
+    verbose = true;
 % Wrapper for the Chronux's mtspectrumc function for multitaper estimation of
 % pds spectra, compatible with MRI data imported by MRIread.m.
 %
