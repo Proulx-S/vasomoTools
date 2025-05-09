@@ -35,79 +35,78 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
         end
     end
 
-
+    m = ismember(metric,{'coh_dilate1' 'coh_original' 'cohTrialGram_dilate1' 'cohTrialGram_original'});
     %% Recompute mt (relevant for coherence within single vessels)
-    switch metric{m}
-        case {'coh_dilate1' 'coh_original' 'cohTrialGram_dilate1' 'cohTrialGram_original'}
-            % if length(metric)>1; dbstack; error('multiple metrics not supported'); end
-            m = 1;
-            polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
-            
-    
-            K = [
-                rCond.volMt.run(1).psdGram.K
-                rCond.volMt.run(1).psdTrialGramMD.K
-                rCond.volMt.run(1).psd.K
-                ]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
-            % K   = [1 3 5]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
-            W   = [];
-            win = rCond.volMt.run(1).param.psdTrialGram.dsgn.winSec; % in seconds [lenght, step]
-            skipSVD = 0;
-            skipPSD = 0;
-    
-            for r = 1:length(roi)
+    if any(m)
+        m = find(m,1);
+        % if length(metric)>1; dbstack; error('multiple metrics not supported'); end
+        
+        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+        
 
-                disp('--------------------------------');
-                disp(['Doing vessel ',num2str(r),' of ',num2str(length(roi))]);
-                disp('--------------------------------');
-    
-                % create mask for polyRoi within vesselRoi
-                mask = roi(r).cropMask;
-                polyInd = ismember(roi(r).polyLabel,polyLabel);
-                mask(mask) = roi(r).polyMask{polyInd};
-    
-                % recompute svd within the mask
-                rCondX = runFullMT6(rCond,W,K,win,rCond.dsgn,mask,skipSVD,skipPSD,0);
-    
-                % put new results (svd only) into roi
-                roi(r) = volPsd2roi(rCondX.volMt.run,roi(r),{'svd' 'svdTrialGramMD'});
-            end
-    
-    
-    
-            % f   = squeeze(rCondX.volMt.run(3).psdTrialGramMD.f);
-            % t   = squeeze(mean(rCondX.volMt.run(3).psdTrialGramMD.t - rCondX.volMt.run(3).psdTrialGramMD.onsetList',2));
-            % psd = mean(rCondX.volMt.run(1).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1),6);
-            % psd = cat(3,psd,mean(rCondX.volMt.run(2).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1),6));
-            % psd = cat(3,psd,mean(rCondX.volMt.run(3).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1),6));
-            % figure('WindowStyle','docked');
-            % imagesc(mean(t,1),f,squeeze(mean(psd,3)));
-            % set(gca,'ColorScale','log');
-    
-    
-            % f   = squeeze(rCondX.volMt.run(3).svd.f);
-            % coh = squeeze(rCondX.volMt.run(3).svd.COH(:,:,:,:,:,:,:,1));
-            % figure('WindowStyle','docked');
-            % plot(f,coh);
-            
-            % f   = squeeze(rCondX.volMt.run(3).svdTrialGramMD.f);
-            % t   = squeeze(mean(rCondX.volMt.run(3).svdTrialGramMD.t - rCondX.volMt.run(3).svdTrialGramMD.onsetList',2));
-            % winSz = mean(diff(t,[],1),7);
-            % coh = squeeze(rCondX.volMt.run(3).svdTrialGramMD.vec.cohEPC(:,:,:,:,:,:,:,1));
-            % coh = cat(3,coh,squeeze(rCondX.volMt.run(2).svdTrialGramMD.vec.cohEPC(:,:,:,:,:,:,:,1)))
-            % coh = cat(3,coh,squeeze(rCondX.volMt.run(1).svdTrialGramMD.vec.cohEPC(:,:,:,:,:,:,:,1)));
-            % figure('WindowStyle','docked');
-            % imagesc(mean(t,1),f,mean(coh,3));
-            
-    
-            % psd =           squeeze(rCondX.volMt.run(3).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1));
-            % psd = cat(3,psd,squeeze(rCondX.volMt.run(2).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1)));
-            % psd = cat(3,psd,squeeze(rCondX.volMt.run(1).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1)));
-            % figure('WindowStyle','docked');
-            % imagesc(mean(t,1),f,mean(psd,3));
-            % set(gca,'ColorScale','log');
-            % colorscale = 'log';
-        otherwise
+        K = [
+            rCond.volMt.run(1).psdGram.K
+            rCond.volMt.run(1).psdTrialGramMD.K
+            rCond.volMt.run(1).psd.K
+            ]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
+        % K   = [1 3 5]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
+        W   = [];
+        win = rCond.volMt.run(1).param.psdTrialGram.dsgn.winSec; % in seconds [lenght, step]
+        skipSVD = 0;
+        skipPSD = 0;
+
+        for r = 1:length(roi)
+
+            disp('--------------------------------');
+            disp(['Doing vessel ',num2str(r),' of ',num2str(length(roi))]);
+            disp('--------------------------------');
+
+            % create mask for polyRoi within vesselRoi
+            mask = roi(r).cropMask;
+            polyInd = ismember(roi(r).polyLabel,polyLabel);
+            mask(mask) = roi(r).polyMask{polyInd};
+
+            % recompute svd within the mask
+            rCondX = runFullMT6(rCond,W,K,win,rCond.dsgn,mask,skipSVD,skipPSD,0);
+
+            % put new results (svd only) into roi
+            roi(r) = volPsd2roi(rCondX.volMt.run,roi(r),{'svd' 'svdTrialGramMD'});
+        end
+
+
+
+        % f   = squeeze(rCondX.volMt.run(3).psdTrialGramMD.f);
+        % t   = squeeze(mean(rCondX.volMt.run(3).psdTrialGramMD.t - rCondX.volMt.run(3).psdTrialGramMD.onsetList',2));
+        % psd = mean(rCondX.volMt.run(1).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1),6);
+        % psd = cat(3,psd,mean(rCondX.volMt.run(2).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1),6));
+        % psd = cat(3,psd,mean(rCondX.volMt.run(3).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1),6));
+        % figure('WindowStyle','docked');
+        % imagesc(mean(t,1),f,squeeze(mean(psd,3)));
+        % set(gca,'ColorScale','log');
+
+
+        % f   = squeeze(rCondX.volMt.run(3).svd.f);
+        % coh = squeeze(rCondX.volMt.run(3).svd.COH(:,:,:,:,:,:,:,1));
+        % figure('WindowStyle','docked');
+        % plot(f,coh);
+        
+        % f   = squeeze(rCondX.volMt.run(3).svdTrialGramMD.f);
+        % t   = squeeze(mean(rCondX.volMt.run(3).svdTrialGramMD.t - rCondX.volMt.run(3).svdTrialGramMD.onsetList',2));
+        % winSz = mean(diff(t,[],1),7);
+        % coh = squeeze(rCondX.volMt.run(3).svdTrialGramMD.vec.cohEPC(:,:,:,:,:,:,:,1));
+        % coh = cat(3,coh,squeeze(rCondX.volMt.run(2).svdTrialGramMD.vec.cohEPC(:,:,:,:,:,:,:,1)))
+        % coh = cat(3,coh,squeeze(rCondX.volMt.run(1).svdTrialGramMD.vec.cohEPC(:,:,:,:,:,:,:,1)));
+        % figure('WindowStyle','docked');
+        % imagesc(mean(t,1),f,mean(coh,3));
+        
+
+        % psd =           squeeze(rCondX.volMt.run(3).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1));
+        % psd = cat(3,psd,squeeze(rCondX.volMt.run(2).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1)));
+        % psd = cat(3,psd,squeeze(rCondX.volMt.run(1).psdTrialGramMD.vec.psdPC(:,:,:,:,:,:,:,1)));
+        % figure('WindowStyle','docked');
+        % imagesc(mean(t,1),f,mean(psd,3));
+        % set(gca,'ColorScale','log');
+        % colorscale = 'log';
     end
 
 
@@ -316,7 +315,7 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                         roi(i).smr{m}.nTrial  = nTrial;
                         roi(i).smr{m}.label   = {'neg','pos'};
                         roi(i).smr{m}.metric  = metric{m};
-                        roi(i).smr{m}.info    = strjoin({'time' 'compartment' 'vox'},' x ');
+                        roi(i).smr{m}.info    = strjoin({'time' '???' 'vox'},' x ');
 
                         if ~isempty(H)
                             % if ~isempty(roi(i).smr{m}.vecEr)
@@ -406,11 +405,11 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                 hCb.Position = [sum(hA{m}(end).Position([1 3])), hA{m}(end).Position(2), 0.1*hA{m}(end).Position(3), hA{m}(end).Position(4)];
                 if strcmp(metric{m},'psdTrialGram_dilate1_actQ')
                     if length(hCb.Ticks) == 1
-                        tick100   = round(cLim/100  ); tick1000(tick100   ==0) = 1; tick100(  tick100>10)   = 9; tick100   = (tick100(  1):tick100(  end))*  100;
-                        tick1000  = round(cLim/1000 ); tick1000(tick1000  ==0) = 1; tick1000( tick1000>10)  = 9; tick1000  = (tick1000( 1):tick1000( end))* 1000;
-                        tick10000 = round(cLim/10000); tick10000(tick10000==0) = 1; tick10000(tick10000>10) = 9; tick10000 = (tick10000(1):tick10000(end))*10000;
+                        tick100   = round(cLim{m}/100  ); tick1000(tick100   ==0) = 1; tick100(  tick100>10)   = 9; tick100   = (tick100(  1):tick100(  end))*  100;
+                        tick1000  = round(cLim{m}/1000 ); tick1000(tick1000  ==0) = 1; tick1000( tick1000>10)  = 9; tick1000  = (tick1000( 1):tick1000( end))* 1000;
+                        tick10000 = round(cLim{m}/10000); tick10000(tick10000==0) = 1; tick10000(tick10000>10) = 9; tick10000 = (tick10000(1):tick10000(end))*10000;
                         tick = [tick100 tick1000 tick10000];
-                        tick(tick<cLim(1)) = []; tick(tick>cLim(2)) = [];
+                        tick(tick<cLim{m}(1)) = []; tick(tick>cLim{m}(2)) = [];
                         hCb.Ticks = tick;
                     end
                     ylabel(hCb, 'PSD');

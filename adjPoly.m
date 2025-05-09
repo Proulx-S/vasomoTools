@@ -28,7 +28,7 @@ function adjPoly(hIO,label,color,keepFlag)
                 else
                     hPoly(1).Shape = hIO.UserData.roi.poly(ismember(hIO.UserData.roi.polyLabel,label));
                 end
-                hPoly(1).LineWidth = 2.5;
+                hPoly(1).LineWidth = 1.5;
                 hPoly(1).EdgeColor = color;
             otherwise
                 error('Invalid label: %s',label);
