@@ -85,17 +85,25 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
             for m = 1:length(metric)
                 if ~isempty(H)
                     hold(hA{m}(i),'on');
-                end    
+                end
+                
+                polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+                indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
+                indSig        = false(size(roi(i).im.actP.im));
+                indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                indNeg        = roi(i).im.act.im(:,:,:,1)<0;
+                indPos        = roi(i).im.act.im(:,:,:,1)>0;
+                nTrial        = [1; roi(i).nTrial; 1];
+                
                 switch metric{m}
                     case {'psd_dilate1_actQ' 'psd_original_actQ'}
-                        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
-
-                        % PSD within the vessel ROI dilated by 1 voxel,
+                        % polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
                         % including only active voxels based on SPMG2 activation detection
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
-                        indSig        = false(size(roi(i).im.actP.im));
-                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                        % indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
+                        % indSig        = false(size(roi(i).im.actP.im));
+                        % indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                         
+                        % PSD within the vessel ROI dilated by 1 voxel,
                         roi(i).smr{m}.vec     = mean(roi(i).mt.psd.vec(:,:,:,:,:,indIm&indSig,:,:),6);
                         roi(i).smr{m}.nVox    = nnz(indIm&indSig);
                         roi(i).smr{m}.nVoxRoi = nnz(indIm);
@@ -114,13 +122,13 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                         end
 
                     case {'psdTrialGram_dilate1_actQ' 'psdTrialGram_original_actQ'}
-                        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+                        % polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+                        % indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
+                        % indSig        = false(size(roi(i).im.actP.im));
+                        % indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                        
                         % PSDtrialGram (time-frequency spectrogram) within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
-                        indSig        = false(size(roi(i).im.actP.im));
-                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
-                        
                         roi(i).smr{m}.vec     = mean(roi(i).mt.psdTrialGram.vec(:,:,:,:,:,indIm&indSig,:,:),6);
                         roi(i).smr{m}.nVox    = nnz(indIm&indSig);
                         roi(i).smr{m}.nVoxRoi = nnz(indIm);
@@ -141,17 +149,17 @@ function [roi,hF,hA,rCond] = smrRoi(rCond,metric,roi,H)
                         end
                         
                     case {'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'}
-                        polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+                        % polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+                        % indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
+                        % indSig        = false(size(roi(i).im.actP.im));
+                        % indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                        % indNeg        = roi(i).im.act.im(:,:,:,1)<0;
+                        % indPos        = roi(i).im.act.im(:,:,:,1)>0;
+                        % nTrial        = [1; roi(i).nTrial; 1];
+                        
                         % response within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection,
                         % and segregated by sign of activation
-                        indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
-                        indSig        = false(size(roi(i).im.actP.im));
-                        indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
-                        indNeg        = roi(i).im.act.im(:,:,:,1)<0;
-                        indPos        = roi(i).im.act.im(:,:,:,1)>0;
-                        nTrial        = [1; roi(i).nTrial; 1];
-                        
                         im = permute(roi(i).im.resp.im,[4 1 2 3]);
                         tsNeg = mean(im(:,indIm&indSig&indNeg),2);
                         tsPos = mean(im(:,indIm&indSig&indPos),2);
