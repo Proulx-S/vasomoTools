@@ -1,6 +1,6 @@
-function roi = volPsd2roi(vol,roi,outFields)
+function roi = volPsd2roi(vol,roi,outFields,skipSpSV)
     if ~exist('outFields','var'); outFields = []   ; end
-    
+    if ~exist('skipSpSV','var');   skipSpSV = false; end
     if isempty(outFields)
         outFields = {'psd' 'psdTrialGramMD'};
     end
@@ -20,7 +20,9 @@ function roi = volPsd2roi(vol,roi,outFields)
             case 'svd'
                 for r = 1:length(roi)
                     vec   = cell(size(vol));
-                    vecSV = cell(size(vol));
+                    if ~skipSpSV
+                        vecSV = cell(size(vol));
+                    end
                     f     = cell(size(vol));
                     info  = cell(size(vol));
                     param = cell(size(vol));
@@ -28,7 +30,9 @@ function roi = volPsd2roi(vol,roi,outFields)
                     % figure('WindowStyle','docked');
                     for R = 1:size(vol,1)
                         vec{R}   = vol(R).svd.COH(:,:,:,:,:,:,:,1);
-                        vecSV{R} = vol(R).svd.spSV(:,:,:,:,:,:,:,1);
+                        if ~skipSpSV
+                            vecSV{R} = vol(R).svd.spSV(:,:,:,:,:,:,:,1);
+                        end
                         % roi(r).vec.mt.psd.vecAv = mean(roi(r).vec.mt.psd.vec   ,6);
                         % roi(r).vec.mt.psd.vecEr = std( roi(r).vec.mt.psd.vec,[],6);
                         f{R}     = vol(R).svd.f;
@@ -39,11 +43,15 @@ function roi = volPsd2roi(vol,roi,outFields)
 
                     % average over runs
                     vec   = cat(3,vec{:});
-                    vecSV = cat(3,vecSV{:});
+                    if ~skipSpSV
+                        vecSV = cat(3,vecSV{:});
+                    end
                     f   = cat(3,f{:});
                     if max(max(abs(diff(f,[],3))))./max(f(end,:)) > 1e-5; dbstack; error('freqs are not equal'); end
                     roi(r).mt.svd.vec   = mean(vec,3);
-                    roi(r).mt.svd.vecSV = mean(vecSV,3);
+                    if ~skipSpSV
+                        roi(r).mt.svd.vecSV = mean(vecSV,3);
+                    end
                     roi(r).mt.svd.f     = mean(f,3);
                     roi(r).mt.svd.info  = info{1};
                     roi(r).mt.svd.param = param{1};
@@ -82,7 +90,7 @@ function roi = volPsd2roi(vol,roi,outFields)
             case 'svdTrialGramMD'
                 for r = 1:length(roi)
                     vec   = cell(size(vol));
-                    vecSV = cell(size(vol));
+                    % vecSV = cell(size(vol));
                     f     = cell(size(vol));
                     t     = cell(size(vol));
                     info  = cell(size(vol));

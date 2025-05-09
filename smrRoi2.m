@@ -44,13 +44,22 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
             polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
             
     
-            K   = [1 3 5]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
+            K = [
+                rCond.volMt.run(1).psdGram.K
+                rCond.volMt.run(1).psdTrialGramMD.K
+                rCond.volMt.run(1).psd.K
+                ]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
+            % K   = [1 3 5]; % K(end)->full timeseries, K(1)->time-resolved, K(2)->trial-triggered based on missing data
             W   = [];
-            win = [25 0.840]; % in seconds [lenght, step]
+            win = rCond.volMt.run(1).param.psdTrialGram.dsgn.winSec; % in seconds [lenght, step]
             skipSVD = 0;
             skipPSD = 0;
     
             for r = 1:length(roi)
+
+                disp('--------------------------------');
+                disp(['Doing vessel ',num2str(r),' of ',num2str(length(roi))]);
+                disp('--------------------------------');
     
                 % create mask for polyRoi within vesselRoi
                 mask = roi(r).cropMask;
@@ -172,7 +181,7 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
 
                         if ~isempty(H)
                             hTs{i,m} = plot(hA{m}(i),squeeze(roi(i).smr{m}.f),squeeze(roi(i).smr{m}.vec),'k');
-                            yLim{m}    = [0 1];
+                            yLim{m}    = [1/K(3) 1];
                             yScale{m}    = 'linear';
                             yLabel{m}    = 'coherence';
                             cLim{m}      = [];
@@ -205,7 +214,7 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                             yLim{m}      = [];
                             yScale{m}    = 'linear';
                             yLabel{m}    = 'Hz';
-                            cLim{m}      = [0 1];
+                            cLim{m}      = [1/K(2) 1];
                             majorGrid{m} = 'off';
                             minorGrid{m} = 'off';
                         end
@@ -375,7 +384,7 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
             axis(hA{m},'tight');
             
             vInd = [roi.anot_sig];
-            if contains(metric{m},'coh_')
+            if contains(metric{m},{'coh_' 'cohTrialGram_'})
                 vInd = true(size(vInd));
             end
 
@@ -489,7 +498,7 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                             'HorizontalAlignment', 'right', ...
                             'VerticalAlignment', 'top', ...
                             'FontSize', 8);
-                    case {'coh_dilate1' 'coh_original'}
+                    case {'coh_dilate1' 'coh_original' 'cohTrialGram_dilate1' 'cohTrialGram_original'}
                         yline(hA{m}(i),1/roi(i).mt.svd.K,':k');
                         % bottom right corner - significance
                         if roi(i).anot_sig
