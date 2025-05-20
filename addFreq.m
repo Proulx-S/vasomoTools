@@ -1,7 +1,7 @@
 function h = addFreq(H,onsets,ondurs,freqFlag)
 if ~exist('ondurs','var');     ondurs = []; end
 if ~exist('freqFlag','var'); freqFlag = []; end
-if isempty(freqFlag);        freqFlag = 0; end
+if isempty(freqFlag);        freqFlag =  0; end
 if isempty(H)
     H = gca;
 else
