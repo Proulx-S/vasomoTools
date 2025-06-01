@@ -16,6 +16,7 @@ classdef runCond
       vencAcq
       vencRec
       task
+      cond
       dsgn
       dirs
       dirsOrig
