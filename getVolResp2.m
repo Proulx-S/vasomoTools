@@ -7,8 +7,10 @@ if ~exist('verbose','var'); verbose = []; end
 
 if isempty(force);     force = 0; end
 if isempty(verbose); verbose = 1; end
-        
 
+if ~isfield(param,'PCflag'); param.PCflag = []   ; end
+if isempty(param.PCflag)   ; param.PCflag = false; end
+        
 param.cnsrFiles = {'fCnsr' 'fCnsr_mainClust'};
 
 %%%%%%%%%
@@ -49,14 +51,39 @@ else
     param.trDecon       = mean(param.tr);
 end
 % param.trDecon       = dsgn.dt;
+
+%%% detect phase contrast data
+[~,a,~] = fileparts(fileparts(fList));
+% realInd = all(all(contains(a,'part-real'),1),2);
+% imagInd = all(all(contains(a,'part-imag'),1),2);
+realInd = contains(a,'part-real');
+imagInd = contains(a,'part-imag');
+if nnz([realInd imagInd])
+    PCflag = true;
+    if nnz(all(all(realInd,1),2))==1 && nnz(all(all(imagInd,1),2))==1
+        % complex data properly formated
+    elseif nnz(all(all(realInd,1),3))==1 && nnz(all(all(imagInd,1),3))==1
+        % complex data poorly formated, let's fix that
+        fList = permute(fList,[1 3 2]);
+        [~,a,~] = fileparts(fileparts(fList));
+        realInd = contains(a,'part-real');
+        imagInd = contains(a,'part-imag');
+    else
+        error('this looks like phase contrast data but something is not rigth')
+    end
+    realInd = all(all(realInd,1),2);
+    imagInd = all(all(imagInd,1),2);
+else
+    PCflag = false; clear realInd imagInd
+end
 %% %%%%%%
 
 %%%%%%%%%%%%%%%%%%%
 %% Get censor files
 %%%%%%%%%%%%%%%%%%%
 %%% read all censor files
-ind  = cell(size(volTs.fPreprocList,1),length(param.cnsrFiles));
-cnsr = cell(size(volTs.fPreprocList,1),length(param.cnsrFiles));
+ind  = cell(size(fList,1),length(param.cnsrFiles));
+cnsr = cell(size(fList,1),length(param.cnsrFiles));
 for c = 1:length(param.cnsrFiles)
     if isempty(volTs.(param.cnsrFiles{c})); dbstack; error('censor file %s not found',fCnsr); end
     for R = 1:length(volTs.(param.cnsrFiles{c}))
@@ -79,14 +106,7 @@ fCnsr = fullfile(fCnsr,strcat('allCnsr_',b,'.csv'));
 for R = 1:size(fCnsr,1)
     writematrix(cnsr{R,1},fCnsr{R},'Delimiter',',');
 end
-param.fCnsrList = fCnsr;
-
-
-
-
-
-
-
+param.fCnsrList = fCnsr(:,1);
 %% %%%%%%%%%%%%%%%%
 
 
@@ -95,6 +115,7 @@ param.fCnsrList = fCnsr;
 forceThis   = force;
 verboseThis = verbose;
 param.durDecon = 0.95; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
+param.PCflag   = false;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response and activation --- magnitude-only data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -109,6 +130,8 @@ volResp.actRun = fActRun;
 
 
 if 0
+
+    error('double-check that')
 
 forceThis   = force;
 verboseThis = verbose;
@@ -150,93 +173,101 @@ else
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-forceThis   = force;
-verboseThis = verbose;
+else
+
+volRespCmplx     = [];
+
+end
+
+
+
+if PCflag
+
+forceThis   = force; %force;
+verboseThis = verbose; %verbose;
 param.durDecon = 0.66; % fraction of the default duration of the deconvolution kernel. Default duration is the smallest ISI (computed with a virtual event at the end of the run).
+param.PCflag   = true;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute response --- phase-contrast-only data (mag=1) in complex domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-if param.PCflag
-    % Remove magnitude data from complex-domain data
-    disp('Converting to phase-only complex data (setting magnitude to 1)...');
-    fListMag1 = replace(replace(fList(:,[realInd imagInd]),'part-real','part-realMag1'),'part-imag','part-imagMag1');
-    for r = 1:size(fListMag1,1)
-        disp(['run ' num2str(r) ' of ' num2str(size(fListMag1,1))])
-        if ~exist(fileparts(fListMag1{r,1}),'dir'); mkdir(fileparts(fListMag1{r,1})); end
-        if ~exist(fileparts(fListMag1{r,2}),'dir'); mkdir(fileparts(fListMag1{r,2})); end
-            
-        if force || ~exist(fListMag1{r,1},'file') || ~exist(fListMag1{r,2},'file')
-            % Read real and imaginary parts
-            mriR = MRIread(fList{r,realInd});
-            mriI = MRIread(fList{r,imagInd});
-            
-            % Convert to polar
-            mriPhase = rmfield(mriR,'vol');
-            [mriPhase.vol,~] = cart2pol(mriR.vol,mriI.vol);
-            mriMag = rmfield(mriR,'vol');
-            mriMag.vol = ones(size(mriR.vol)).*4096;
-            
-            % Convert back to cartesian
-            [mriR.vol,mriI.vol] = pol2cart(mriPhase.vol,mriMag.vol);
 
-            % Write
-            MRIwrite(mriR,fListMag1{r,1});
-            MRIwrite(mriI,fListMag1{r,2});
+% Remove magnitude data from complex-domain data
+disp('Converting to phase-only complex data (setting magnitude to 1)...');
+fListMag1 = replace(replace(fList(:,[find(realInd) find(imagInd)]),'part-real','part-realMag1'),'part-imag','part-imagMag1');
+for r = 1:size(fListMag1,1)
+    disp(['run ' num2str(r) ' of ' num2str(size(fListMag1,1))])
+    if ~exist(fileparts(fListMag1{r,1}),'dir'); mkdir(fileparts(fListMag1{r,1})); end
+    if ~exist(fileparts(fListMag1{r,2}),'dir'); mkdir(fileparts(fListMag1{r,2})); end
+        
+    if forceThis || ~exist(fListMag1{r,1},'file') || ~exist(fListMag1{r,2},'file')
+        % Read real and imaginary parts
+        mriR = MRIread(fList{r,realInd});
+        mriI = MRIread(fList{r,imagInd});
+        
+        % Convert to polar
+        mriPhase = rmfield(mriR,'vol');
+        [mriPhase.vol,~] = cart2pol(mriR.vol,mriI.vol);
+        mriMag = rmfield(mriR,'vol');
+        mriMag.vol = ones(size(mriR.vol)).*4096;
+        
+        % Convert back to cartesian
+        [mriR.vol,mriI.vol] = pol2cart(mriPhase.vol,mriMag.vol);
 
-            % % Read again to confirm phase is fine
-            % mriR2 = MRIread(fListMag1{r,1});
-            % mriI2 = MRIread(fListMag1{r,2});
-            % [theta,rho2] = cart2pol(mriR2.vol,mriI2.vol);
-            % figure('WindowStyle','docked')
-            % min(abs(mriPhase.vol(:) - theta(:)))
-            % max(abs(mriPhase.vol(:) - theta(:)))
+        % Write
+        MRIwrite(mriR,fListMag1{r,1});
+        MRIwrite(mriI,fListMag1{r,2});
 
-        else
-            disp('already done, skipping')
-        end
+        % % Read again to confirm phase is fine
+        % mriR2 = MRIread(fListMag1{r,1});
+        % mriI2 = MRIread(fListMag1{r,2});
+        % [theta,rho2] = cart2pol(mriR2.vol,mriI2.vol);
+        % figure('WindowStyle','docked')
+        % min(abs(mriPhase.vol(:) - theta(:)))
+        % max(abs(mriPhase.vol(:) - theta(:)))
+
+    else
+        disp('already done, skipping')
     end
-    
-    % Fit timeseries in complex domain
-    [fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fListMag1,[1 3 2]),dsgn,mList,param,force,verbose);
-
-
-
-    % % Confirm fitting baseline phase in the complex domain is really the same as averaging in the phase domain
-    % close all
-    % r = 1;
-    % mriR = MRIread(fList{r,realInd});
-    % mriI = MRIread(fList{r,imagInd});
-    % [theta,rho] = cart2pol(mean(mriR.vol,4),mean(mriI.vol,4));
-    % figure('WindowStyle','docked')
-    % imagesc(theta,[-pi pi]); colormap gray
-    % colorbar
-    % ax2 = gca;
-
-    % p0real = MRIread(fRespRun(r).stats.fPoly0Base{1});
-    % p0imag = MRIread(fRespRun(r).stats.fPoly0Base{2});
-    % [p0theta,p0rho] = cart2pol(p0real.vol,p0imag.vol);
-    % figure('WindowStyle','docked')
-    % imagesc(p0theta,[-pi pi]); colormap gray
-    % colorbar
-    % ax3 = gca;
-    % linkaxes([ax2 ax3])
-    % set([ax2 ax3],'PlotBoxAspectRatio',[1 1 1],'DataAspectRatio',[1 1 1])
-
-
-
-
-    volRespCmplxMag1.respCat = fRespCat;
-    volRespCmplxMag1.respRun = fRespRun;
-    volRespCmplxMag1.actCat = [];
-    volRespCmplxMag1.actRun = [];
-else
-    volRespCmplxMag1 = [];
 end
+
+% Fit timeseries in complex domain
+[fRespCat,fRespRun,fActCat,fActRun] = getRespAndAct2(permute(fListMag1,[1 3 2]),dsgn,mList,param,forceThis,verboseThis);
+
+
+
+% % Confirm fitting baseline phase in the complex domain is really the same as averaging in the phase domain
+% close all
+% r = 1;
+% mriR = MRIread(fList{r,realInd});
+% mriI = MRIread(fList{r,imagInd});
+% [theta,rho] = cart2pol(mean(mriR.vol,4),mean(mriI.vol,4));
+% figure('WindowStyle','docked')
+% imagesc(theta,[-pi pi]); colormap gray
+% colorbar
+% ax2 = gca;
+
+% p0real = MRIread(fRespRun(r).stats.fPoly0Base{1});
+% p0imag = MRIread(fRespRun(r).stats.fPoly0Base{2});
+% [p0theta,p0rho] = cart2pol(p0real.vol,p0imag.vol);
+% figure('WindowStyle','docked')
+% imagesc(p0theta,[-pi pi]); colormap gray
+% colorbar
+% ax3 = gca;
+% linkaxes([ax2 ax3])
+% set([ax2 ax3],'PlotBoxAspectRatio',[1 1 1],'DataAspectRatio',[1 1 1])
+
+
+
+
+volRespCmplxMag1.respCat = fRespCat;
+volRespCmplxMag1.respRun = fRespRun;
+volRespCmplxMag1.actCat = [];
+volRespCmplxMag1.actRun = [];
+param.PCflag = false;
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 else
 
-volRespCmplx     = [];
 volRespCmplxMag1 = [];
     
 end
@@ -251,6 +282,14 @@ end
 
 return
     
+
+
+
+
+
+
+
+
 %% Mask
 if isstruct(volAnat) && isfield(volAnat,'f')
     fMask = volAnat.f;

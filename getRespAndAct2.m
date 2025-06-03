@@ -69,11 +69,11 @@ R = size(fVolTs,1);
 % On each run
 clear fRespRun
 for r = 1:R
-    if param.PCflag
+    % if param.PCflag
         fRespRun(r,:) = runAfni(fVolTs(r,:,:),[r R],param,fMask(r,1),fCnsrList(r,1),force,verbose); % analysis performed on each echoe within that function
-    else
-        fRespRun(r,:) = runAfni(fVolTs(r,1),[r R],param,fMask(r,1),fCnsrList(r,1),force,verbose); % analysis performed on each echoe within that function
-    end
+    % else
+    %     fRespRun(r,:) = runAfni(fVolTs(r,1),[r R],param,fMask(r,1),fCnsrList(r,1),force,verbose); % analysis performed on each echoe within that function
+    % end
 end
 % On catenated runs
 if R>1
@@ -617,14 +617,17 @@ function [cmd,nReg] = afniCmd(fIn,fStim,fMask,fCnsr,param,fResp,fRespStd,fFit,fR
         end
 
         %%% Censored time points
-        cnsr = cell(size(fIn));
-        for i = 1:length(fIn)
+        cnsr = cell(size(fIn,1),1);
+        for i = 1:size(fIn,1)
             cnsr{i} = readmatrix(fCnsr{i});
             cnsr{i} = cnsr{i}(param.nDummyIgnore+1:end,2);
         end
+        sz = size(fIn);
+        cnsr = repmat(cnsr,sz);
+
         cnsr = find(cat(1,cnsr{:})==0);
         if ~isempty(cnsr)
-            if param.PCflag; dbstack; error('need to adapt implementation of censorship when real and imaginary data are catenated in time as in here'); end
+            % if param.PCflag; dbstack; error('need to adapt implementation of censorship when real and imaginary data are catenated in time as in here'); end
             cmd{end+1} = ['-CENSORTR ' strjoin(arrayfun(@num2str,cnsr-1,'UniformOutput',false),',') ' \'];
         end
     

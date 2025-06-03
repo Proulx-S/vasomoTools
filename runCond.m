@@ -20,7 +20,7 @@ classdef runCond
       dirs
       dirsOrig
       fList         % [run x 1]
-      fPreprocList  % [run x 1]
+      fPreprocList  % at preproc [run x multiVar x preprocStep] OR after preproc [run x echo x complexDataDerivatives]
       fPreprocMaskList % [run x 1 x preprocStep]
       fTransList    % [run x 1]
       fTransCatList % [run x 1]

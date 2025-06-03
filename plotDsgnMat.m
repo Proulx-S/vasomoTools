@@ -86,11 +86,27 @@ iStim = iStim+nnz(pInd);
 
 
 %%% Censoring
-fCnsr = replace(fMat.fIn,'.nii.gz',''); [fCnsr,b,~] = fileparts(fCnsr); fCnsr = fullfile(fCnsr,strcat('allCnsr_',b,'.csv'));
+if isfield(fMat,'fCnsr') && ~isempty(fMat.fCnsr)
+    fCnsr = fMat.fCnsr;
+else
+    fCnsr = replace(fMat.fIn,'.nii.gz',''); [fCnsr,b,~] = fileparts(fCnsr); fCnsr = fullfile(fCnsr,strcat('allCnsr_',b,'.csv'));
+    fMat.fCnsr = fCnsr;
+end
+sz = size(fCnsr,[1 2 3]);
+if sz(3)==1 && size(fMat.fIn,3)>1
+    fCnsr = repmat(fCnsr,1,1,size(fMat.fIn,3));
+elseif sz(3)~=size(fMat.fIn,3)
+    dbstack; error('fCnsr and fMat.fIn have different lengths in third dimension')
+end
+sz = size(fCnsr,[1 2 3]);
+sz(2) = 1;
+
 cnsr = cell(size(fCnsr));
-for i = 1:length(fCnsr)
-    cnsr{i} = readmatrix(fCnsr{i});
-    cnsr{i} = ~logical(cnsr{i}(:,2));
+for ii = 1:sz(3)
+    for i = 1:sz(1)
+        cnsr{i,1,ii} = readmatrix(fCnsr{i,1,ii});
+        cnsr{i,1,ii} = ~logical(cnsr{i,1,ii}(:,2));
+    end
 end
 cnsr = cat(1,cnsr{:});
 
