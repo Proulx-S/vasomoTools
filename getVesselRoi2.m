@@ -32,7 +32,9 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
     %% Read in data to crop
     fIm = cell(size(im));
     for d = 1:length(im)
-        if ischar(im{d}) && ~isempty(im{d})
+        if isMRI(im{d})
+            im{d} = im{d}.vol;
+        elseif ischar(im{d}) && ~isempty(im{d})
             fIm{d} = im{d};
                 im{d} = MRIread(fIm{d});
                 im{d} = im{d}.vol;
