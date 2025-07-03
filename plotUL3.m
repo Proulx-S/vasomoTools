@@ -1,11 +1,21 @@
-function tiling = plotUL3(roi,UL,cLim,numRow)
+function tiling = plotUL3(roi,ULlabel,cLim,numRow)
     if isstruct(roi); roi = {roi}; end
-    if ~exist('UL','var')  ;       UL = [     ]  ; end
-    if ~exist('cLim','var');     cLim = [     ]  ; end
-    if ~exist('numRow','var'); numRow = [     ]  ; end
-    if isempty(cLim)       ;     cLim = [100 800]; end
+    if ~exist('UL','var')  ;         UL = [     ]  ; end
+    if ~exist('cLim','var');       cLim = [     ]  ; end
+    if ~exist('numRow','var');   numRow = [     ]  ; end
+    if ~exist('ULlabel','var'); ULlabel = 'base'   ; end
+    if isempty(cLim)
+        switch ULlabel
+            case 'base'
+                cLim = [100 800];
+            case 'basePhase'
+                cLim = [-pi pi];
+            otherwise
+                error('Unknown ULlabel');
+        end
+    end
     if isempty(UL) % extract full-size underlay image from roi
-        UL = [roi{:}]; UL = [UL.im]; UL = [UL.base]; UL = unique({UL.fName}); if length(UL) ~= 1; dbstack; error('UL should be a single file name'); end; UL = char(UL);
+        UL = [roi{:}]; UL = [UL.im]; UL = [UL.(ULlabel)]; UL = unique({UL.fName}); if length(UL) ~= 1; dbstack; error('UL should be a single file name'); end; UL = char(UL);
     end
     if isempty(numRow); numRow = 4; end;
 
@@ -47,7 +57,7 @@ function tiling = plotUL3(roi,UL,cLim,numRow)
         % reset starting column
         tiling.sub.right.col = tiling.sub.right.col0;
         % plot roi row
-        [tiling.sub.right,tiling.sub.left] = plotRoiRow(tiling.main,tiling.sub.right,tiling.sub.left,roi{rc},cLim);
+        [tiling.sub.right,tiling.sub.left] = plotRoiRow(tiling.main,tiling.sub.right,tiling.sub.left,roi{rc},cLim,ULlabel);
         tiling.sub.right.hA = [tiling.sub.right.hA{:}];
         % update row
         tiling.sub.right.row = tiling.sub.right.row+tiling.sub.right.axesSize(1);
@@ -59,7 +69,8 @@ function tiling = plotUL3(roi,UL,cLim,numRow)
 
 
 
-function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubExtra,roi,cLim)
+function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubExtra,roi,cLim,ULlabel)
+    if ~exist('ULlabel','var') || isempty(ULlabel); ULlabel = 'base'; end
 
     % intiate axes handles
     if ~isfield(tilingSub,'hA');
@@ -86,7 +97,7 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
         drawnow;
 
         % plot base image
-        imagesc(roi(rc).im.base.x,roi(rc).im.base.y,roi(rc).im.base.im,cLim);
+        imagesc(roi(rc).im.(ULlabel).x,roi(rc).im.(ULlabel).y,roi(rc).im.(ULlabel).im,cLim);
         colormap(tilingSub.hA{end}{end},'gray'); hold on
         switch roi(rc).class
             case 'phys'

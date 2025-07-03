@@ -157,13 +157,19 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                     hold(hA{m}(i),'on');
                 end
                 
-                polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
+                polyLabel = strsplit(metric{m},'_');
+                if strcmp(metric{m},'respPhs_peakBasePhsInDilate1')
+                    polyLabel = 'dilate1';
+                else
+                    polyLabel = polyLabel{2};
+                end
                 indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
                 indSig        = false(size(roi(i).im.actP.im));
                 indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
                 indNeg        = roi(i).im.act.im(:,:,:,1)<0;
                 indPos        = roi(i).im.act.im(:,:,:,1)>0;
                 nTrial        = [1; roi(i).nTrial; 1];
+                
                 
                 switch metric{m}
                     case {'coh_dilate1' 'coh_original'}
@@ -280,6 +286,16 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                             majorGrid{m} = 'off';
                             minorGrid{m} = 'off';
                         end
+                        
+                    case {'respPhs_peakBasePhsInDilate1'}
+                        %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                        %%%%%% CONTINUTE HERE %%%%%%
+                        im = permute(roi(i).im.resp.im,[4 1 2 3]);
+                        imBase = roi(i).im.base.im;
+                        [peakInfo, watershedInfo] = getRoiBckgrndPhase(imBase);
+                        %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                        %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
                         
                     case {'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'}
                         % polyLabel = strsplit(metric{m},'_'); polyLabel = polyLabel{2};
