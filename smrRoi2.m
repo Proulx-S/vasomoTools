@@ -160,14 +160,16 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                 polyLabel = strsplit(metric{m},'_');
                 if strcmp(metric{m},'respPhs_peakBasePhsInDilate1')
                     polyLabel = 'dilate1';
+                    indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
+                
                 else
                     polyLabel = polyLabel{2};
+                    indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
+                    indSig        = false(size(roi(i).im.actP.im));
+                    indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
+                    indNeg        = roi(i).im.act.im(:,:,:,1)<0;
+                    indPos        = roi(i).im.act.im(:,:,:,1)>0;
                 end
-                indIm         = roi(i).polyMask{ismember(roi(i).polyLabel,polyLabel)};
-                indSig        = false(size(roi(i).im.actP.im));
-                indSig(indIm) = mafdr(roi(i).im.actP.im(indIm),'BHFDR',true)<0.05;
-                indNeg        = roi(i).im.act.im(:,:,:,1)<0;
-                indPos        = roi(i).im.act.im(:,:,:,1)>0;
                 nTrial        = [1; roi(i).nTrial; 1];
                 
                 
@@ -290,9 +292,54 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                     case {'respPhs_peakBasePhsInDilate1'}
                         %%%%%%%%%%%%%%%%%%%%%%%%%%%%
                         %%%%%% CONTINUTE HERE %%%%%%
-                        im = permute(roi(i).im.resp.im,[4 1 2 3]);
-                        imBase = roi(i).im.base.im;
-                        [peakInfo, watershedInfo] = getRoiBckgrndPhase(imBase);
+                        im     = permute(roi(i).im.resp.im,[4 1 2 3]);
+                        imBase = roi(i).im.basePhase.im;
+                        bckgrndMask = getRoiBckgrndMask(roi(i).im.base.im,0);
+                        [xBase,yBase] = pol2cart(imBase,1);
+                        [bckgrndPhs,~] = cart2pol(mean(xBase(bckgrndMask)),mean(yBase(bckgrndMask)));
+                        im = im - bckgrndPhs;
+                        [~,ind] = max(abs(im(1,:)));
+                        ts   = im(:,ind);
+                        t     = ((0:size(ts,1)-1).*roi(i).im.resp.dt)';
+
+                        roi(i).smr{m}.vec     = ts;
+                        roi(i).smr{m}.vecEr   = [];
+                        roi(i).smr{m}.nVox    = 1;
+                        roi(i).smr{m}.nVoxRoi = [nnz(indIm)];
+                        roi(i).smr{m}.neg     = [];
+                        roi(i).smr{m}.t       = t;
+                        roi(i).smr{m}.nTrial  = nTrial;
+                        roi(i).smr{m}.label   = {''};
+                        roi(i).smr{m}.metric  = metric{m};
+                        roi(i).smr{m}.info    = strjoin({'time' '???' 'vox'},' x ');
+                        roi(i).smr{m}.bckgrndPhs = bckgrndPhs;
+
+                        if ~isempty(H)
+                            % if ~isempty(roi(i).smr{m}.vecEr)
+                                t     = roi(i).smr{m}.t;
+                                vecAv =      roi(i).smr{m}.vec;
+                                % thi is a very conservative approach because squared deviations cannot average out
+                                % (for accurate measure of error of the voxel-averaged responses, one needs to work from the residuals or perform another fit on the voxel-averaged full timeseries)
+                                
+                                hTs{i,m}(1) = plot(hA{m}(i),t,vecAv);
+                                
+                                ind   = ~roi(i).smr{m}.neg;
+                                t     = roi(i).smr{m}.t;
+                                vecAv =      mean( roi(i).smr{m}.vec(  :,:,ind)    ,3);
+                                vecEr = sqrt(mean( roi(i).smr{m}.vecEr(:,:,ind).^2 ,3));
+                                
+                                % hTs{i,m}(2) = shplot2(t,vecAv,vecEr,hA{m}(i));
+                            % else
+                            %     dbstack; error('double check that');
+                            %     hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec);
+                            % end
+                            yLim{m}{i}      = [-pi pi] - roi(i).smr{m}.bckgrndPhs;
+                            yScale{m}    = 'linear';
+                            yLabel{m}    = 'MR pc change rel. baseline';
+                            cLim{m}      = [];
+                            majorGrid{m} = 'on';
+                            minorGrid{m} = 'off';
+                        end
                         %%%%%%%%%%%%%%%%%%%%%%%%%%%%
                         %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -398,20 +445,30 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
             end
             axis(hA{m},'tight');
             
-            vInd = [roi.anot_sig];
-            if contains(metric{m},{'coh_' 'cohTrialGram_'})
-                vInd = true(size(vInd));
+            if ismember(metric{m},{'respPhs_peakBasePhsInDilate1'})
+                for i = 1:length(roi)
+                    set(hA{m}(i),...
+                        'YLim',yLim{m}{i},...
+                        'YScale',yScale{m},...
+                        'XGrid','on','YGrid','on',...
+                        'XMinorGrid',minorGrid{m},'YMinorGrid',minorGrid{m},...
+                        'GridColor',[0.5 0.5 0.5],'MinorGridColor',[0.5 0.5 0.5]);
+                end
+            else
+                vInd = [roi.anot_sig];
+                if contains(metric{m},{'coh_' 'cohTrialGram_'})
+                    vInd = true(size(vInd));
+                end
+                if ~exist('yLim','var') || isempty(yLim{m})
+                    yLim{m} = get(hA{m}(vInd),'YLim'); yLim{m} = [min([yLim{m}{:}]) max([yLim{m}{:}])];
+                end
+                set(hA{m}(vInd),...
+                'YLim',yLim{m},...
+                'YScale',yScale{m},...
+                'XGrid','on','YGrid','on',...
+                'XMinorGrid',minorGrid{m},'YMinorGrid',minorGrid{m},...
+                'GridColor',[0.5 0.5 0.5],'MinorGridColor',[0.5 0.5 0.5]);
             end
-
-            if ~exist('yLim','var') || isempty(yLim{m})
-                yLim{m} = get(hA{m}(vInd),'YLim'); yLim{m} = [min([yLim{m}{:}]) max([yLim{m}{:}])];
-            end
-            set(hA{m}(vInd),...
-            'YLim',yLim{m},...
-            'YScale',yScale{m},...
-            'XGrid','on','YGrid','on',...
-            'XMinorGrid',minorGrid{m},'YMinorGrid',minorGrid{m},...
-            'GridColor',[0.5 0.5 0.5],'MinorGridColor',[0.5 0.5 0.5]);
             if strcmp(metric{m},'psdTrialGram_dilate1_actQ') || strcmp(metric{m},'cohTrialGram_dilate1')
                 if ~exist('cLim','var') || isempty(cLim{m})
                     cLim{m} = get(hA{m}(vInd),'CLim'); cLim{m} = [min([cLim{m}{:}]) max([cLim{m}{:}])];
@@ -447,13 +504,15 @@ function [roi,hF,hA,rCond] = smrRoi2(rCond,metric,roi,H)
                     nTrial = roi(i).R*6;
                 end
                 switch metric{m}
-                    case {'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'}
+                    case {'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn' 'respPhs_peakBasePhsInDilate1'}
                         % Bottom left corner - total ROI voxel count
-                        text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.01, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.01, ...
-                            [num2str(roi(i).smr{m}.nVoxRoi) 'vox'], ...
-                            'HorizontalAlignment', 'left', ...
-                            'VerticalAlignment', 'bottom', ...
-                            'FontSize', 8);
+                        if ~ismember(metric{m},{'respPhs_peakBasePhsInDilate1'})
+                            text(hA{m}(i), min(hA{m}(i).XLim)+range(hA{m}(i).XLim)*0.01, min(hA{m}(i).YLim)+range(hA{m}(i).YLim)*0.01, ...
+                                [num2str(roi(i).smr{m}.nVoxRoi) 'vox'], ...
+                                'HorizontalAlignment', 'left', ...
+                                'VerticalAlignment', 'bottom', ...
+                                'FontSize', 8);
+                        end
                         % Top right corner - positive and significant voxel count
                         if ismember(metric{m},{'resp_dilate1_actQ_actSgn' 'resp_original_actQ_actSgn'})
                             text(hA{m}(i),...
