@@ -10,6 +10,8 @@ function tiling = plotUL3(roi,ULlabel,cLim,numRow)
                 cLim = [100 800];
             case 'basePhase'
                 cLim = [-pi pi];
+            case 'bckgrndMask'
+                cLim = [0 1];
             otherwise
                 error('Unknown ULlabel');
         end

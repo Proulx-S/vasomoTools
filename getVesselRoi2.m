@@ -36,8 +36,8 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
             im{d} = im{d}.vol;
         elseif ischar(im{d}) && ~isempty(im{d})
             fIm{d} = im{d};
-                im{d} = MRIread(fIm{d});
-                im{d} = im{d}.vol;
+            im{d} = MRIread(fIm{d});
+            im{d} = im{d}.vol;
         elseif isempty(im{d})
             im{d} = [];
         else
