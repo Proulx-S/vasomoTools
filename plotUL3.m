@@ -8,7 +8,7 @@ function tiling = plotUL3(roi,ULlabel,cLim,numRow)
         switch ULlabel
             case 'base'
                 cLim = [100 800];
-            case 'basePhase'
+            case {'basePhase','basePhase_tsAv'}
                 cLim = [-pi pi];
             case 'bckgrndMask'
                 cLim = [0 1];
@@ -16,8 +16,12 @@ function tiling = plotUL3(roi,ULlabel,cLim,numRow)
                 error('Unknown ULlabel');
         end
     end
-    if isempty(UL) % extract full-size underlay image from roi
-        UL = [roi{:}]; UL = [UL.im]; UL = [UL.(ULlabel)]; UL = unique({UL.fName}); if length(UL) ~= 1; dbstack; error('UL should be a single file name'); end; UL = char(UL);
+    % extract full-size underlay image from roi
+    if isempty(UL)
+        UL = [roi{:}]; UL = [UL.im]; UL = [UL.(ULlabel)];
+        UL = unique({UL.fName});
+        if length(UL) ~= 1; dbstack; error('UL should be a single file name'); end;
+        UL = char(UL);
     end
     if isempty(numRow); numRow = 4; end;
 
