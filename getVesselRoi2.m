@@ -40,6 +40,17 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
             im{d} = im{d}.vol;
         elseif isempty(im{d})
             im{d} = [];
+        elseif iscell(im{d})
+            for i = 1:length(im{d})
+                if isMRI(im{d}{i})
+                    fIm{d}{i} = im{d}{i}.fspec;
+                    im{d}{i}  = im{d}{i}.vol;
+                elseif ischar(im{d}{i}) && ~isempty(im{d}{i})
+                    fIm{d}{i} = im{d}{i};
+                    im{d}{i} = MRIread(im{d}{i});
+                    im{d}{i} = im{d}{i}.vol;
+                end
+            end
         else
             dbstack; error('im should be a char or a struct');
         end
@@ -48,7 +59,11 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
     %% Get individual vessel ROIs
     roi = cell(1,length(mask));
     for l = 1:length(mask)
-        roi{l} = doIt(mask(l).vol,mask(l).label,imField,im,fIm,cropSz);
+        try
+            roi{l} = doIt(mask(l).vol,mask(l).label,imField,im,fIm,cropSz);
+        catch
+            roi{l} = [];
+        end
     end
     roi = cat(1,roi{:});
     roi(cellfun('isempty',{roi.label})) = [];
@@ -129,7 +144,13 @@ for p = 1:length(P)
         roi(p).im.(imField{i}).mask  = roi(p).polyMask{1};
         roi(p).im.(imField{i}).im = [];
         if ~isempty(im{i})
-            roi(p).im.(imField{i}).im = im{i}(roi(p).im.(imField{i}).y(1):roi(p).im.(imField{i}).y(2),roi(p).im.(imField{i}).x(1):roi(p).im.(imField{i}).x(2),:,:,:);
+            if iscell(im{i})
+                for ii = 1:length(im{i})
+                    roi(p).im.(imField{i}).im{ii} = im{i}{ii}(roi(p).im.(imField{i}).y(1):roi(p).im.(imField{i}).y(2),roi(p).im.(imField{i}).x(1):roi(p).im.(imField{i}).x(2),:,:,:);
+                end
+            else
+                roi(p).im.(imField{i}).im = im{i}(roi(p).im.(imField{i}).y(1):roi(p).im.(imField{i}).y(2),roi(p).im.(imField{i}).x(1):roi(p).im.(imField{i}).x(2),:,:,:);
+            end
         end
     end    
 end
