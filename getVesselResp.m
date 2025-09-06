@@ -7,58 +7,81 @@ function vessel = getVesselResp(vessel)
     % SurrVoxResp: surround voxel response [vox x time]
 
     for v = 1:length(vessel)
-        vessel(v).resp = doIt(vessel(v));
+        [vessel(v).svdResp,vessel(v).im.respArea,vessel(v).im.respVel,vessel(v).im.respPeakVox,vessel(v).im.respSurVox] = doIt(vessel(v));
     end
 
-    function resp = doIt(vessel)
+    function [svdResp,respArea,respVel,respPeakVox,respSurVox] = doIt(vessel)
         respIm = permute(vessel.im.resp.im,[4 1 2 3]);
         wMask = vessel.polyMask{ismember(vessel.polyLabel,'peakVox')};
-        zMask = vessel.polyMask{ismember(vessel.polyLabel,'dilate1p5')};
+        zMask = vessel.polyMask{ismember(vessel.polyLabel,'dilate1p5')}; zMask(wMask) = false;
         tMask = vessel.polyMask{ismember(vessel.polyLabel,'tissue')};
         d2Mask = vessel.polyMask{ismember(vessel.polyLabel,'dilate2')};
         
         % SVD transform
-        [U,S,V] = svd(respIm(:,tMask|d2Mask),'econ','vector'); % time x vox (excluding those containing other vessels)
-        Uresp = permute(U,[2 1]).*S;
-        Vresp = zeros([size(S,1) size(respIm,[2 3 4])]);
-        Vresp(:,tMask|d2Mask) = permute(V,[2 1]).*S;
+        svdMask = tMask|d2Mask;
+        [U,S,V] = svd(respIm(:,svdMask),'econ','vector'); % time x vox (excluding those containing other vessels)
+        svdResp = vessel.im.base;
+        svdResp.fName   = '';
+        svdResp.im      = [];
+        svdResp.maskSVD = svdMask;
+        svdResp.sv      = S;
+        svdResp.svSpace = permute(V,[2 1]).*S;
+        svdResp.svTime  = permute(U,[2 1]).*S;
+        svdResp.info   = 'component x vox/time';
+        svdResp.info2 = ['sv:      singular values' newline 'svSpace: spatial singular vectors scaled by singular values' newline 'svTime:  temporal singular vectors scaled by singular values'];
         
         % Area/velocity transform
         base = permute(mean(cat(3,vessel.im.basePolyRun.im{:}),3),[4 1 2 3]);
         respIm = respIm + base;
-        wVal = respIm(:,wMask);
-        zVal = respIm(:,zMask);
-        tVal = respIm(:,tMask);
-        AreaResp = ( size(wVal,2).*mean(wVal-mean(tVal,2),2) + size(zVal,2).*mean(zVal-mean(tVal,2),2) ) ./ mean(wVal-mean(tVal,2),2);
-        AreaResp = permute(AreaResp,[2 1 3 4]);
-        VelResp  = permute(mean(wVal,2),[2 1 3 4]);
-
-        % Peak voxel
-        respIm = permute(vessel.im.resp.im,[4 1 2 3]);
-        pMask = vessel.polyMask{ismember(vessel.polyLabel,'peakVox')};
-        PeakVoxResp = permute(respIm(:,pMask),[2 1]);
+        wVal = mean(respIm(:,wMask),2); wN = nnz(wMask);
+        zVal = mean(respIm(:,zMask),2); zN = nnz(zMask);
+        tVal = mean(respIm(:,tMask),2); tN = nnz(tMask);
+        % tVal = mean(tVal,1); % assume stable tissue signal to avoid noise
+        AreaResp = ( wN.*(wVal-tVal) + zN.*(zVal-tVal) ) ./ (wVal-tVal);
+        respArea = vessel.im.resp;
+        respArea.fName = '';
+        respArea.maskResp.wMask = wMask;
+        respArea.maskResp.zMask = zMask;
+        respArea.maskResp.tMask = tMask;
+        respArea.im = [];
+        respArea.im2vec = [];
+        respArea.vec = permute(AreaResp,[2 1]);
+        respArea.info = 'vox x time';
+        respArea.info2 = ['(Nw*(Sw-St)+Nz*(Sz-St)) / (Sw-St)' newline...
+                                   'Nw: number of intravascular voxels' newline...
+                                   'Nz: number of surrounding voxels' newline...
+                                   'Sw: mean signal in intravascular voxels' newline...
+                                   'Sz: mean signal in surrounding voxels' newline...
+                                   'St: mean signal in tissue voxels'   ];
         
-        % Surround voxels
-        respIm = permute(vessel.im.resp.im,[4 1 2 3]);
+        respVel = vessel.im.resp;
+        respVel.fName = '';
+        respVel.maskResp.wMask = wMask;
+        respVel.maskResp.zMask = zMask;
+        respVel.maskResp.tMask = tMask;
+        respVel.im = [];
+        respVel.im2vec = wMask;
+        respVel.vec = permute(mean(wVal,2),[2 1 3 4]);
+        respVel.info = 'vox x time';
+        respVel.info2 = 'Sw: mean over intravascular voxels (actually just the peak voxel for now)';
+        
+        % Peak/surround voxel
+        respPeakVox = vessel.im.resp;
+        respPeakVox.fName = '';
+        respPeakVox.maskResp = vessel.polyMask{ismember(vessel.polyLabel,'peakVox')};
+        respPeakVox.im = [];
+        respPeakVox.im2vec = respPeakVox.maskResp;
+        respPeakVox.vec = permute(respIm(:,respPeakVox.im2vec),[2 1]);
+        respPeakVox.info = 'vox x time';
+        respPeakVox.info2 = 'peak signal intravascular voxel';
+        
+        respSurVox = vessel.im.resp;
+        respSurVox.fName = '';
         sMask = vessel.polyMask{ismember(vessel.polyLabel,'dilate1')};
         sMask(vessel.polyMask{ismember(vessel.polyLabel,'original')}) = false;
-        SurrVoxResp = permute(respIm(:,sMask),[2 1]);
-        
-        % Package output
-        % vessel.resp.sv          = S;
-        % vessel.resp.timeResp    = Uresp;
-        % vessel.resp.spaceResp   = Vresp;
-        % vessel.resp.areaResp    = AreaResp;
-        % vessel.resp.velResp     = VelResp;
-        % vessel.resp.peakVoxResp = PeakVoxResp;
-        % vessel.resp.surrVoxResp = SurrVoxResp;
-        % vessel.resp.info = 'conponent/vox x time';
-        % % clear resp
-        resp.sv          = S;
-        resp.timeResp    = Uresp;
-        resp.spaceResp   = Vresp;
-        resp.areaResp    = AreaResp;
-        resp.velResp     = VelResp;
-        resp.peakVoxResp = PeakVoxResp;
-        resp.surrVoxResp = SurrVoxResp;
-        resp.info = 'conponent/vox x time';
+        respSurVox.maskResp = sMask;
+        respSurVox.im = [];
+        respSurVox.im2vec = respSurVox.maskResp;
+        respSurVox.vec = permute(respIm(:,respSurVox.im2vec),[2 1]);
+        respSurVox.info = 'vox x time';
+        respSurVox.info2 = 'surround voxels';

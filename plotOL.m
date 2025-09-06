@@ -45,11 +45,23 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
             hold(hAO(i),'on');
             if length(metric)>1; dbstack; error('accept only one metric, code that'); end
             for m = 1:length(metric)
-                switch metric{m}
-                    case 'coef'
+                metric1 = strsplit(metric{m},'_');
+                if length(metric1)>1; metric2 = metric1{2}; else metric2 = ''; end; metric1 = metric1{1};
+                switch metric1
+                    case {'coef' 'svSpace'}
                         x  = roi(i).im.act.x;
                         y  = roi(i).im.act.y;
-                        im = roi(i).im.act.im(:,:,:,1);
+                        switch metric1
+                            case {'svSpace'}
+                                comp = 1;
+                                if ~isempty(metric2) && all(ismember(metric2,'0123456789'))
+                                    comp = str2double(metric2);
+                                end
+                                im = zeros(size(roi(i).svdResp.maskSVD));
+                                im(roi(i).svdResp.maskSVD) = roi(i).svdResp.svSpace(comp,:);
+                            otherwise
+                                im = roi(i).im.act.im(:,:,:,1);
+                        end
 
                         % figure('WindowStyle','docked');
                         % imagesc(x,y,roi(i).im.act.im(:,:,:,1));
@@ -109,9 +121,12 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
 
 
     %% Set transparency
+    
     for i = 1:length(hAO)
         hIO(i).UserData.roi = roi(i);
-        threshOL(hIO(i),'actQ_crop',0);
+        if strcmp(metric1,'coef') && ~strcmp(metric2,'flat')
+            threshOL(hIO(i),'actQ_crop',0);
+        end
     end
     
 
@@ -121,13 +136,18 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
 
 
     %% Adujst colormap
-    maxClrCtrst = 0.75;
-    minClrCtrst = 0.3;
-    cMap = flip(multigradient(...
-    [1 1-maxClrCtrst 1-maxClrCtrst; 1 1-minClrCtrst 1-minClrCtrst; 0.5 0.5 0.5; 1-minClrCtrst 1-minClrCtrst 1; 1-maxClrCtrst 1-maxClrCtrst 1],'pts',...
-    [                            0                        0.5-eps          0.5                         0.5+eps                             1]));
-    set(hAO,'Colormap',cMap)
-    set(hAO,'CLim',[-1 1].*max([cLim{:}]))
+    if strcmp(metric1,'coef') && ~strcmp(metric2,'flat')
+        maxClrCtrst = 0.75;
+        minClrCtrst = 0.3;
+        cMap = flip(multigradient(...
+        [1 1-maxClrCtrst 1-maxClrCtrst; 1 1-minClrCtrst 1-minClrCtrst; 0.5 0.5 0.5; 1-minClrCtrst 1-minClrCtrst 1; 1-maxClrCtrst 1-maxClrCtrst 1],'pts',...
+        [                            0                        0.5-eps          0.5                         0.5+eps                             1]));
+        set(hAO,'Colormap',cMap)
+        set(hAO,'CLim',[-1 1].*max([cLim{:}]))
+    else
+        colormap turbo
+    end
+    
     
     
     

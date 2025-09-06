@@ -1,4 +1,4 @@
-function roi = plotResp(rCond,metric,roi,H)
+function [roi,hF,hA,hTs] = plotResp(rCond,metric,roi,H)
     if ~exist('roi','var');           roi = struct; end    
     if ~exist('H','var');               H = []    ; end
     if ~exist('metric','var');     metric = {}; end
@@ -48,7 +48,77 @@ function roi = plotResp(rCond,metric,roi,H)
                 hold(hA(i),'on');
             end
             for m = 1:length(metric)
-                switch metric{m}
+                metric1 = strsplit(metric{m},'_');
+                if length(metric1)>1; metric2 = metric1{2}; else metric2 = ''; end; metric1 = metric1{1};
+                switch metric1
+                    case {'respSurVox' 'respPeakVox'}
+                        % response within the surrounding voxel ROI
+                        ts = mean(permute(roi(i).im.(metric{m}).vec,[2 1]),2);
+                        t  = (0:size(ts,1)-1).*roi(i).im.resp.dt;
+                        nVox = size(roi(i).im.(metric{m}).vec,1);
+                        
+                        roi(i).ts{m}.vec     = ts;
+                        roi(i).ts{m}.nVox    = nVox;
+                        roi(i).ts{m}.nVoxRoi = nVox;
+                        roi(i).ts{m}.t       = t;
+                        roi(i).ts{m}.label   = {};
+                        roi(i).ts{m}.metric  = metric{m};
+
+                        if ~isempty(H)
+                            hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec,'Color',lineColor{1},'LineStyle',lineStyle{1});
+                        end
+                    case 'svTime'
+                        % temporal singular vector from SVD transform
+                        comp = 1;
+                        if ~isempty(metric2) && all(ismember(metric2,'0123456789'))
+                            comp = str2double(metric2);
+                        end
+                        ts = roi(i).svdResp.svTime(comp,:)';
+                        t  = (0:size(ts,1)-1).*roi(i).im.resp.dt;
+                        
+                        roi(i).ts{m}.vec     = ts;
+                        roi(i).ts{m}.nVox    = nnz(roi(i).svdResp.maskSVD);
+                        roi(i).ts{m}.nVoxRoi = nnz(roi(i).svdResp.maskSVD);
+                        roi(i).ts{m}.t       = t;
+                        roi(i).ts{m}.label   = {};
+                        roi(i).ts{m}.metric  = metric{m};
+
+                        if ~isempty(H)
+                            hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec,'Color',lineColor{2},'LineStyle',lineStyle{2});
+                        end
+                    case 'respArea'
+                        % area change response
+                        ts = permute(roi(i).im.respArea.vec,[2 1]);
+                        t  = (0:size(ts,1)-1).*roi(i).im.resp.dt;
+                        nVox = nnz(roi(i).im.respArea.maskResp.wMask|roi(i).im.respArea.maskResp.zMask);
+                        
+                        roi(i).ts{m}.vec     = ts;
+                        roi(i).ts{m}.nVox    = nVox;
+                        roi(i).ts{m}.nVoxRoi = nVox;
+                        roi(i).ts{m}.t       = t;
+                        roi(i).ts{m}.label   = {};
+                        roi(i).ts{m}.metric  = metric{m};
+
+                        if ~isempty(H)
+                            hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec,'Color',lineColor{1},'LineStyle',lineStyle{1});
+                        end
+                    case 'respVel'
+                        % velocity change response (just the peak voxel for now)
+                        ts = permute(roi(i).im.respVel.vec,[2 1 3 4]);
+                        t  = (0:size(ts,1)-1).*roi(i).im.resp.dt;
+                        nVox = nnz(roi(i).im.respVel.im2vec);
+
+                        roi(i).ts{m}.vec     = ts;
+                        roi(i).ts{m}.nVox    = nVox;
+                        roi(i).ts{m}.nVoxRoi = nVox;
+                        roi(i).ts{m}.t       = t;
+                        roi(i).ts{m}.label   = {};
+                        roi(i).ts{m}.metric  = metric{m};
+
+                        if ~isempty(H)
+                            hTs{i,m} = plot(hA(i),roi(i).ts{m}.t,roi(i).ts{m}.vec,'Color',lineColor{1},'LineStyle',lineStyle{1});
+                        end
+
                     case 'resp_dilate1_actQ_actSgn'
                         % response within the vessel ROI dilated by 1 voxel,
                         % including only active voxels based on SPMG2 activation detection,
@@ -118,26 +188,28 @@ function roi = plotResp(rCond,metric,roi,H)
         drawnow;
 
         m = length(metric);
-        for i = 1:length(roi)
-            % Add text annotations for voxel counts
-            % Bottom left corner - total ROI voxel count
-            text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.01, min(hA(i).YLim)+range(hA(i).YLim)*0.01, ...
-                [num2str(roi(i).ts{m}.nVoxRoi) 'vox'], ...
-                'HorizontalAlignment', 'left', ...
-                'VerticalAlignment', 'bottom', ...
-                'FontSize', 8);
-            % Top right corner - positive and significant voxel count
-            text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.99, min(hA(i).YLim)+range(hA(i).YLim)*0.99, ...
-                [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'pos'))) 'posVox'], ...
-                'HorizontalAlignment', 'right', ...
-                'VerticalAlignment', 'top', ...
-                'FontSize', 8);
-            % Bottom right corner - negative and significant voxel count
-            text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.99, min(hA(i).YLim)+range(hA(i).YLim)*0.01, ...
-                [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'neg'))) 'negVox'], ...
-                'HorizontalAlignment', 'right', ...
-                'VerticalAlignment', 'bottom', ...
-                'FontSize', 8);
+        if ~strcmp(metric{m},'respSurVox') && ~strcmp(metric{m},'respPeakVox')
+            for i = 1:length(roi)
+                % Add text annotations for voxel counts
+                % Bottom left corner - total ROI voxel count
+                text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.01, min(hA(i).YLim)+range(hA(i).YLim)*0.01, ...
+                    [num2str(roi(i).ts{m}.nVoxRoi) 'vox'], ...
+                    'HorizontalAlignment', 'left', ...
+                    'VerticalAlignment', 'bottom', ...
+                    'FontSize', 8);
+                % Top right corner - positive and significant voxel count
+                text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.99, min(hA(i).YLim)+range(hA(i).YLim)*0.99, ...
+                    [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'pos'))) 'posVox'], ...
+                    'HorizontalAlignment', 'right', ...
+                    'VerticalAlignment', 'top', ...
+                    'FontSize', 8);
+                % Bottom right corner - negative and significant voxel count
+                text(hA(i), min(hA(i).XLim)+range(hA(i).XLim)*0.99, min(hA(i).YLim)+range(hA(i).YLim)*0.01, ...
+                    [num2str(roi(i).ts{m}.nVox(ismember(roi(i).ts{m}.label,'neg'))) 'negVox'], ...
+                    'HorizontalAlignment', 'right', ...
+                    'VerticalAlignment', 'bottom', ...
+                    'FontSize', 8);
+            end
         end
 
     end
