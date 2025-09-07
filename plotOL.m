@@ -48,10 +48,12 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
                 metric1 = strsplit(metric{m},'_');
                 if length(metric1)>1; metric2 = metric1{2}; else metric2 = ''; end; metric1 = metric1{1};
                 switch metric1
-                    case {'coef' 'svSpace'}
+                    case {'coef' 'svSpace' 'roi'}
                         x  = roi(i).im.act.x;
                         y  = roi(i).im.act.y;
                         switch metric1
+                            case 'roi'
+                                im = roi(i).polyMask{ismember(roi(i).polyLabel,metric2)};
                             case {'svSpace'}
                                 comp = 1;
                                 if ~isempty(metric2) && all(ismember(metric2,'0123456789'))
@@ -77,6 +79,17 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
                         error('metric not found');
                 end
                 cLim{m}(end+1) = max(abs(im(:)));
+
+                % figure('WindowStyle','docked');
+                % imagesc(x,y,im,[-1 1].*cLim{m}(end)); hold on
+                % colormap gray
+                % ax = gca;
+                % set(ax,'YDir','reverse','YTick',[],'XTick',[],'XLim',x+[-1.5 1.5],'YLim',y+[-1.5 1.5],'DataAspectRatio',[1 1 1]);
+                % ii = 6;
+                % roi(i).polyLabel(ii)
+                % plot(roi(i).poly(ii))
+                % % imagesc(x,y,roi(i).polyMask{ii},[-1 1])
+
                 hIO{i} = imagesc(hAO(i),x,y,im,[-1 1].*cLim{m}(end));
                 set(hAO(i),'YDir','reverse','YTick',[],'XTick',[],'XLim',x+[-0.5 0.5],'YLim',y+[-0.5 0.5],'DataAspectRatio',[1 1 1]);
             end
@@ -136,16 +149,62 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
 
 
     %% Adujst colormap
-    if strcmp(metric1,'coef') && ~strcmp(metric2,'flat')
-        maxClrCtrst = 0.75;
-        minClrCtrst = 0.3;
-        cMap = flip(multigradient(...
-        [1 1-maxClrCtrst 1-maxClrCtrst; 1 1-minClrCtrst 1-minClrCtrst; 0.5 0.5 0.5; 1-minClrCtrst 1-minClrCtrst 1; 1-maxClrCtrst 1-maxClrCtrst 1],'pts',...
-        [                            0                        0.5-eps          0.5                         0.5+eps                             1]));
-        set(hAO,'Colormap',cMap)
-        set(hAO,'CLim',[-1 1].*max([cLim{:}]))
-    else
-        colormap turbo
+    switch metric1
+        case {'coef' 'svSpace'}
+            switch metric2
+                case ''
+                    maxClrCtrst = 0.75;
+                    minClrCtrst = 0.3;
+                    cMap = flip(multigradient(...
+                    [1 1-maxClrCtrst 1-maxClrCtrst; 1 1-minClrCtrst 1-minClrCtrst; 0.5 0.5 0.5; 1-minClrCtrst 1-minClrCtrst 1; 1-maxClrCtrst 1-maxClrCtrst 1],'pts',...
+                    [                            0                        0.5-eps          0.5                         0.5+eps                             1]));
+                    set(hAO,'Colormap',cMap)
+                    set(hAO,'CLim',[-1 1].*max([cLim{:}]))
+                case {'flat' '1' '2' '3' '4' '5' '6' '7'}
+                    % same color range within vessel type, different between vessel types
+                    % ismember({roi.class},'artery');
+                    
+                    % arteries
+                    cMax = -inf; cMin = +inf;
+                    iiiList = find(ismember({roi.class},'artery'));
+                    for iii = 1:length(iiiList)
+                        curIm = hIO(iiiList(iii)).CData;
+                        curMask = roi(iiiList(iii)).polyMask{ismember(roi(iiiList(iii)).polyLabel,'dilate2')};
+                        cMax = max([cMax; curIm(curMask)]);
+                        cMin = min([cMin; curIm(curMask)]);
+                    end
+                    if cMin<0 && cMax>0
+                        curCLim = max(abs([cMin cMax]));
+                    else
+                        error('code that');
+                    end
+                    cLimArt = [-1 1].*curCLim;
+                    set(hAO(ismember({roi.class},'artery')),'CLim',cLimArt)
+
+                    % veins
+                    cMax = -inf; cMin = +inf;
+                    iiiList = find(ismember({roi.class},'vein'));
+                    for iii = 1:length(iiiList)
+                        curIm = hIO(iiiList(iii)).CData;
+                        curMask = roi(iiiList(iii)).polyMask{ismember(roi(iiiList(iii)).polyLabel,'dilate2')};
+                        cMax = max([cMax; curIm(curMask)]);
+                        cMin = min([cMin; curIm(curMask)]);
+                    end
+                    if cMin<0 && cMax>0
+                        curCLim = max(abs([cMin cMax]));
+                    else
+                        error('code that');
+                    end
+                    cLimVein = [-1 1].*curCLim;
+                    set(hAO(ismember({roi.class},'vein')),'CLim',cLimVein)
+                otherwise
+                    error('code that');
+            end
+        case 'roi'
+            set(hAO,'Colormap',gray)
+            set(hAO,'CLim',[-1 1])
+        otherwise
+            error('code that');
     end
     
     
@@ -169,7 +228,12 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
         end
         
         % add roi contour
-        hOtln(i,1) = plot(hAO(i),roi(i).poly(1),'FaceColor','none','EdgeColor',c);
+        switch metric1
+            case 'roi'
+                hOtln(i,1) = plot(hAO(i),roi(i).poly(ismember(roi(i).polyLabel,metric2)),'FaceColor','none','EdgeColor',c);
+            otherwise
+                hOtln(i,1) = plot(hAO(i),roi(i).poly(1),'FaceColor','none','EdgeColor',c);
+        end
 
         % axes outline
         hAO(i).XAxis.Color = c;     hAO(i).YAxis.Color     = hAO(i).XAxis.Color;

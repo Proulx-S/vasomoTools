@@ -212,6 +212,17 @@ function [roi,hF,hA,hTs] = plotResp(rCond,metric,roi,H)
             end
         end
 
+
+        %% Adjust line color based on desktop theme
+        drawnow;
+        for i = 1:length(roi)
+            hLine = findobj(hA(i).Children,'Type','Line');
+            if isempty(hLine); continue; end
+            if all(hA(i).Color ~= [1 1 1]) && length(hLine)==1
+                hLine.Color = 'w';
+            end
+        end
+
     end
     
 
