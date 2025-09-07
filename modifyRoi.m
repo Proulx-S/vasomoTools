@@ -49,6 +49,12 @@ function roi = doIt(roi,mod,roiBaseInd)
             roi.polyMask{end}(roi.im.base.mask) = ind;
             roi.poly(end+1) = getMaskOutline(roi.polyMask{end},10);
             roi.polyLabel{end+1} = mod;
+        case 'tissue'
+            [bckgrndMask,f] = getRoiBckgrndMask(roi.im.base.im,0);
+            roi.polyMask{end+1} = bckgrndMask;
+            roi.poly(end+1) = getMaskOutline(roi.polyMask{end},10);
+            roi.poly(end).Vertices = roi.poly(end).Vertices - [1 1] + [roi.cropXlim(1) roi.cropYlim(1)];
+            roi.polyLabel{end+1} = mod;
         otherwise
             error('Unknown modification: %s',mod);
     end
