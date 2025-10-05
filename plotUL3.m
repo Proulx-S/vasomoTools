@@ -34,7 +34,12 @@ function tiling = plotUL3(roi,ULlabel,cLim,numRow)
     tiling.sub.right.row0 = 1;
     tiling.sub.right.col0 = 1 + tiling.sub.left.gridSize(2);
 
-    tiling.main.hF = figure('WindowStyle','docked');
+
+    if usejava('desktop')
+        tiling.main.hF = figure('WindowStyle','docked');
+    else
+        tiling.main.hF = figure('MenuBar','none','ToolBar','none');
+    end
     tiling.main.hT = tiledlayout(tiling.main.gridSize(1),tiling.main.gridSize(2)); tiling.main.hT.Padding = 'tight'; tiling.main.hT.TileSpacing = 'tight';
 
 

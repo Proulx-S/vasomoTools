@@ -18,6 +18,11 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
     if length(roi) ~= length(Hbase); dbstack; error('roi and H must have the same dimensions'); end
 
     %% Setup figure
+    if usejava('desktop')
+        tiling.main.hF = figure('WindowStyle','docked');
+    else
+        tiling.main.hF = figure('MenuBar','none','ToolBar','none');
+    end
     hF = figure('WindowStyle','docked');
     if isempty(roi)
     else

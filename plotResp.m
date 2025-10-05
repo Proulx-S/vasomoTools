@@ -20,7 +20,12 @@ function [roi,hF,hA,hTs] = plotResp(rCond,metric,roi,H)
         if length(roi) ~= length(H); dbstack; error('roi and H must have the same dimensions'); end
 
         %% Setup figure
-        hF = figure('WindowStyle','docked');
+        if usejava('desktop')
+            hF = figure('WindowStyle','docked');
+        else
+            hF = figure('MenuBar','none','ToolBar','none');
+        end
+        
         if isempty(roi)
         else
             hA = cell(size(H));
