@@ -129,6 +129,8 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
                 c = 'y';
             case 'phys'
                 c = 'k';
+            case 'vesselRegion'
+                c = 'g';
             otherwise
                 error('Unknown roi class');
         end
@@ -136,13 +138,13 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
         tilingSub.hA{end}{end}.YAxis.Color = c; tilingSub.hA{end}{end}.YTick = []; tilingSub.hA{end}{end}.YAxis.LineWidth = 1;
 
         switch roi(rc).class
-            case {'artery','vein','unknown'}
+            case {'artery','vein','unknown','vesselRegion'}
                 % add roi contours
                 plot(tilingSub.hA{end}{end},roi(rc).poly(1),'FaceColor','none','EdgeColor',c);
                 if ~isempty(tilingSubExtra)
                     plot(tilingSubExtra.hA,roi(rc).poly(1),'FaceColor','none','EdgeColor',c);
                 end
-                if ~iscell(roi(rc).com)
+                if ~iscell(roi(rc).com) && ~isnan(roi(rc).com)
                     % add roi center of mass
                     xline(tilingSub.hA{end}{end},roi(rc).com(1),'w');
                     yline(tilingSub.hA{end}{end},roi(rc).com(2),'w');

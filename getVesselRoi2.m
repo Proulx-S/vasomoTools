@@ -1,8 +1,9 @@
-function roi = getVesselRoi2(label,imField,im,cropSz)
+function [roi,roiRegion] = getVesselRoi2(label,imField,im,cropSz)
 
     %% Massage input
     if ~iscell(imField); imField = {imField}; end
     if ~iscell(im); im = {im}; end
+    if length(cropSz)==2; cropSz2 = cropSz(2); cropSz = cropSz(1); else cropSz2 = []; end
     % % read mask when specified as a filename
     % if ischar(mask) || iscell(mask); mask = MRIread(char(mask)); end
     % if isstruct(mask); mask = mask.vol; end
@@ -69,6 +70,33 @@ function roi = getVesselRoi2(label,imField,im,cropSz)
     roi(cellfun('isempty',{roi.label})) = [];
 
 
+    %% Get crop region including all vessel rois
+    if exist('cropSz2','var') && ~isempty(cropSz2)
+        % find limits of the rectangular region including all rois
+        Xlim = [min(cat(2,roi.cropXlim)), max(cat(2,roi.cropXlim))];
+        Ylim = [min(cat(2,roi.cropYlim)), max(cat(2,roi.cropYlim))];
+        % create mask of the rectangular region including all rois
+        crop = false(size(roi(1).cropMask));
+        crop(Ylim(1):Ylim(2),Xlim(1):Xlim(2)) = true;
+        % hF = figure('MenuBar','none','ToolBar','none'); hTabGroup = uitabgroup(hF);
+        % hTab1 = uitab(hTabGroup, 'Title', 'CropMask'); axes('Parent', hTab1);
+        % imagesc(crop); axis image off; title('Crop Mask');
+        % hTab2 = uitab(hTabGroup, 'Title', 'Vessel Masks'); axes('Parent', hTab2);
+        % imagesc(any(cat(4,roi.cropMask),4)); axis image off; title('Vessel Masks');
+        roiRegion = doIt(crop,'vesselRegion',imField,im,fIm,0);
+        roiRegion.com = {roi.com};
+    else
+        roiRegion = [];
+    end
+
+    
+
+
+
+
+
+
+
 
 
 
@@ -99,32 +127,45 @@ roi = repmat(struct,size(P));
 for p = 1:length(P)
     roi(p).class = label;
     roi(p).id    = p;
-    roi(p).label = [label num2str(p,'%02i')];
-    
-    %center of mass
-    maskRoi  = poly2mask(P(p).Vertices(:,1),P(p).Vertices(:,2),size(mask,1),size(mask,2));
-    [rows, cols] = ndgrid(1:size(maskRoi, 1), 1:size(maskRoi, 2));
-    baseInd = ismember(imField,'base');
-    if any(baseInd)
-        %of the masked baseline image
-        imCom = im{baseInd};
+    if length(P)>1
+        roi(p).label = [label num2str(p,'%02i')];
     else
-        %of the mask
-        imCom = maskRoi;
+        roi(p).label = label;
     end
-    com(1) = sum( cols(maskRoi) .* imCom(maskRoi) ) / sum(imCom(maskRoi));
-    com(2) = sum( rows(maskRoi) .* imCom(maskRoi) ) / sum(imCom(maskRoi));
-    x = round( com(1) + [-1 1].*cropSz/2 );
-    y = round( com(2) + [-1 1].*cropSz/2 );
-
-    % get cropping mask
-    cropMask = false(size(maskRoi));
-    cropMask(y(1):y(2),x(1):x(2)) = true;
     
-    %check if the cropped image includes all of the roi
-    if any(maskRoi(~cropMask))
-        warning(['cropped image does not include all of ' roi(p).label newline 'consider increasing cropSz'])
+    if cropSz
+        % grow a rectangular roi around the masked image center of mass
+        %center of mass
+        maskRoi  = poly2mask(P(p).Vertices(:,1),P(p).Vertices(:,2),size(mask,1),size(mask,2));
+        [rows, cols] = ndgrid(1:size(maskRoi, 1), 1:size(maskRoi, 2));
+        baseInd = ismember(imField,'base');
+        if any(baseInd)
+            %of the masked baseline image
+            imCom = im{baseInd};
+        else
+            %of the mask
+            imCom = maskRoi;
+        end
+        com(1) = sum( cols(maskRoi) .* imCom(maskRoi) ) / sum(imCom(maskRoi));
+        com(2) = sum( rows(maskRoi) .* imCom(maskRoi) ) / sum(imCom(maskRoi));
+        x = round( com(1) + [-1 1].*cropSz/2 );
+        y = round( com(2) + [-1 1].*cropSz/2 );
+        %get cropping mask
+        cropMask = false(size(maskRoi));
+        cropMask(y(1):y(2),x(1):x(2)) = true;
+        %check if the cropped image includes all of the roi
+        if any(maskRoi(~cropMask))
+            warning(['cropped image does not include all of ' roi(p).label newline 'consider increasing cropSz'])
+        end
+    else
+        % just use the mask as is
+        cropMask = mask;
+        x = [find(any(mask,1),1,'first') find(any(mask,1),1,'last')];
+        y = [find(any(mask,2),1,'first') find(any(mask,2),1,'last')];
+        com = nan;
     end
+
+    
 
     %store some info
     roi(p).cropMask = cropMask;
@@ -134,14 +175,23 @@ for p = 1:length(P)
     roi(p).com      = com;
 
     roi(p).poly = P(p);
-    roi(p).polyMask    = {false(cropSz+[1 1])};
-    roi(p).polyMask{1}(:) = maskRoi(cropMask);
-    roi(p).polyLabel = {'original'};
+    if cropSz
+        roi(p).polyMask    = {false(cropSz+[1 1])};
+        roi(p).polyMask{1}(:) = maskRoi(cropMask);
+        roi(p).polyLabel = {'original'};
+    else
+        roi(p).polyMask  = {};
+        roi(p).polyLabel = {};
+    end
     for i = 1:length(imField)
         roi(p).im.(imField{i}).fName = fIm{i};
         roi(p).im.(imField{i}).x     = x;
         roi(p).im.(imField{i}).y     = y;
-        roi(p).im.(imField{i}).mask  = roi(p).polyMask{1};
+        if cropSz
+            roi(p).im.(imField{i}).mask  = roi(p).polyMask{1};
+        else
+            roi(p).im.(imField{i}).mask = [];
+        end
         roi(p).im.(imField{i}).im = [];
         if ~isempty(im{i})
             if iscell(im{i})
