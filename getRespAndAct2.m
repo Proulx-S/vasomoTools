@@ -560,33 +560,42 @@ function fRes = runAfni(fList,rR,param,fMask,fCnsr,force,verbose,passDown)
             system(strjoin([{srcAfni} cmdTmpTmp],newline))
         end
 
+        cmdRxv = cmdTmp;
         switch param.model
             case {'TENTzero' 'TENT'}
                 if force || anyDontExist([fResp(:)' fRespStd(:)' [char(fStat) '+orig.BRIK']])
                     cmdTmp = [cmdTmp cmdTmpTmp];
                     cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fResp)   ,' ')];
                     cmdTmp{end+1} = ['echo ''   ''' strjoin(cellstr(fRespStd),' ')];
+                else
+                    cmdRxv = [cmdRxv cmdTmpTmp];
                 end
             case {'SPMG2' 'SPMG3'}
                 if force || ~exist([char(fStat) '+orig.BRIK'],'file')
                     cmdTmp = [cmdTmp cmdTmpTmp];
+                else
+                    cmdRxv = [cmdRxv cmdTmpTmp];
                 end
             otherwise
                 dbstack; error('figure that out')
         end
         cmdTmp{end+1} = ['echo ''   '''                [char(fStat) '+orig']         ];
+        cmdRxv{end+1} = ['echo ''   '''                [char(fStat) '+orig']         ];
         cmdTmp{end+1} = ['echo ''   '''                 char(fMat)          ];
+        cmdRxv{end+1} = ['echo ''   '''                 char(fMat)          ];
         if ~force && ~anyDontExist([fResp(:)' fRespStd(:)' [fStat '+orig.BRIK']])
             cmdTmp{end+1} = 'echo ''   ''already done, skipping';
+            cmdRxv{end+1} = 'echo ''   ''already done, skipping';
         end
 
         fRes(1,E).param = param;
-        fRes(1,E).cmd =  strjoin(cmdTmp,newline);
-
+        % fRes(1,E).cmd =  strjoin(cmdTmp,newline);
+        fRes(1,E).cmd =  cmdRxv;
         cmd = [cmd cmdTmp];
     end
 
     %% Run afni command
+    % if force || ~exist([char(fStat) '+orig.BRIK'],'file')
     [status,cmdout] = system(strjoin(cmd,newline),'-echo'); if status || isempty(cmdout) || contains(cmdout,{'ERROR','Program Death'},'IgnoreCase',false); dbstack; error(cmdout); end
 
 
