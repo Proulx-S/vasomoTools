@@ -3,7 +3,7 @@ function tiling = plotUL3(roi,ULlabel,cLim,numRow)
     if ~exist('UL','var')  ;         UL = [     ]  ; end
     if ~exist('cLim','var');       cLim = [     ]  ; end
     if ~exist('numRow','var');   numRow = [     ]  ; end
-    if ~exist('ULlabel','var'); ULlabel = 'base'   ; end
+    if ~exist('ULlabel','var') || isempty(ULlabel); ULlabel = 'base'   ; end
     if isempty(cLim)
         switch ULlabel
             case 'base'
