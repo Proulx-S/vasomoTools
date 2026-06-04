@@ -144,7 +144,7 @@ function [tilingSub,tilingSubExtra] = plotRoiRow(tilingMain,tilingSub,tilingSubE
                 if ~isempty(tilingSubExtra)
                     plot(tilingSubExtra.hA,roi(rc).poly(1),'FaceColor','none','EdgeColor',c);
                 end
-                if ~iscell(roi(rc).com) && ~isnan(roi(rc).com)
+                if ~iscell(roi(rc).com) && all(~isnan(roi(rc).com))
                     % add roi center of mass
                     xline(tilingSub.hA{end}{end},roi(rc).com(1),'w');
                     yline(tilingSub.hA{end}{end},roi(rc).com(2),'w');
