@@ -36,8 +36,11 @@ function vessel = getVesselResp(vessel)
         wVal = mean(respIm(:,wMask),2); wN = nnz(wMask);
         zVal = mean(respIm(:,zMask),2); zN = nnz(zMask);
         tVal = mean(respIm(:,tMask),2); tN = nnz(tMask);
-        % tVal = mean(tVal,1); % assume stable tissue signal to avoid noise
-        AreaResp = ( wN.*(wVal-tVal) + zN.*(zVal-tVal) ) ./ (wVal-tVal);
+        tVal = mean(tVal,1); % assume stable tissue signal to avoid noise
+        f = (zVal-tVal)./(wVal-tVal);
+        f = min(max(f,0),1); % bound f from 0 to 1.
+        AreaResp = wN + zN.*f;    
+        % AreaResp = ( wN.*(wVal-tVal) + zN.*(zVal-tVal) ) ./ (wVal-tVal);
         respArea = vessel.im.resp;
         respArea.fName = '';
         respArea.maskResp.wMask = wMask;
