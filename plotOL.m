@@ -159,15 +159,19 @@ function [hF,hAO,hIO] = plotOL(rCond,metric,roi,Hbase)
     switch metric1
         case {'coef' 'svSpace'}
             switch metric2
-                case ''
-                    maxClrCtrst = 0.75;
-                    minClrCtrst = 0.3;
-                    cMap = flip(multigradient(...
-                    [1 1-maxClrCtrst 1-maxClrCtrst; 1 1-minClrCtrst 1-minClrCtrst; 0.5 0.5 0.5; 1-minClrCtrst 1-minClrCtrst 1; 1-maxClrCtrst 1-maxClrCtrst 1],'pts',...
-                    [                            0                        0.5-eps          0.5                         0.5+eps                             1]));
+                case {'' '1' '2' '3' '4' '5' '6' '7'}
+
+                    wNeutral = 0; wTransition = 0.1; lNeutral = 0; cOuter = 0.4; N = 2^10;
+                    cMap = colormap_blueNeutralRed(wNeutral, wTransition, lNeutral, cOuter, N, true);
+                
+                    % maxClrCtrst = 0.75;
+                    % minClrCtrst = 0.3;
+                    % cMap = flip(multigradient(...
+                    % [1 1-maxClrCtrst 1-maxClrCtrst; 1 1-minClrCtrst 1-minClrCtrst; 0.5 0.5 0.5; 1-minClrCtrst 1-minClrCtrst 1; 1-maxClrCtrst 1-maxClrCtrst 1],'pts',...
+                    % [                            0                        0.5-eps          0.5                         0.5+eps                             1]));
                     set(hAO,'Colormap',cMap)
                     set(hAO,'CLim',[-1 1].*max([cLim{:}]))
-                case {'flat' '1' '2' '3' '4' '5' '6' '7'}
+                case {'flat'}
                     % same color range within vessel type, different between vessel types
                     % ismember({roi.class},'artery');
                     
