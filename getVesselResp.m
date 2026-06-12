@@ -20,6 +20,12 @@ function vessel = getVesselResp(vessel)
         % SVD transform
         svdMask = tMask|d2Mask;
         [U,S,V] = svd(respIm(:,svdMask),'econ','vector'); % time x vox (excluding those containing other vessels)
+        % rectify singular vectors for a positive maximum deflection of the temporal singular vector
+        [~,b] = max(abs(U),[],1);
+        flp = sign(U(sub2ind(size(U),b,1:size(U,2))));
+        U = U.*flp;
+        V = V.*flp;
+        % output
         svdResp = vessel.im.base;
         svdResp.fName   = '';
         svdResp.im      = [];
